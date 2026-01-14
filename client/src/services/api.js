@@ -1,9 +1,11 @@
 import axios from 'axios';
 import { getToken } from './authService.js';
 
+// Use environment variable for production, fallback to localhost for development
+const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
+
 const api = axios.create({
-  // Use current hostname to allow access from other devices on the network
-  baseURL: `http://${window.location.hostname}:5000/api`,
+  baseURL: API_URL,
 });
 
 api.interceptors.request.use((config) => {

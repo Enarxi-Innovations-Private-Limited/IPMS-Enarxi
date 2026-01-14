@@ -15,7 +15,31 @@ const { User, Project, Task, Activity, Product, Supplier, PurchaseOrder, IssuedI
 const scraperService = require('./services/scraperService');
 
 const app = express();
-app.use(cors());
+// CORS Configuration - Allow Production & Development
+const allowedOrigins = [
+    'https://ipms-enarxi.vercel.app',
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.log('CORS blocked origin:', origin);
+            callback(null, true); // Allow all for now, log blocked ones
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 app.use(express.json());
 
 // Test Endpoint for DB Connection
