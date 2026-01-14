@@ -28,6 +28,32 @@ export default function SuperUserTeamsPage() {
     const [editError, setEditError] = useState('');
     const [nextEmployeeId, setNextEmployeeId] = useState('');
 
+    // Performance Analysis State
+    const [userPerformance, setUserPerformance] = useState(null);
+    const [userTasks, setUserTasks] = useState([]);
+    const [loadingTasks, setLoadingTasks] = useState(false);
+
+    const getRoleBadgeColor = (role) => {
+        switch (role) {
+            case 'EMPLOYEE': return 'bg-blue-500/20 text-blue-400';
+            case 'INTERN': return 'bg-purple-500/20 text-purple-400';
+            default: return 'bg-gray-500/20 text-gray-400';
+        }
+    };
+
+    const loadUserPerformance = async (userId) => {
+        try {
+            setLoadingTasks(true);
+            const res = await api.get(`/users/${userId}/performance`);
+            setUserPerformance(res.data);
+            setUserTasks(res.data.tasks || []);
+        } catch (err) {
+            console.error('Failed to load user performance:', err);
+        } finally {
+            setLoadingTasks(false);
+        }
+    };
+
     // Create form state
     const [createForm, setCreateForm] = useState({
         name: '',
@@ -105,7 +131,12 @@ export default function SuperUserTeamsPage() {
     const handleViewDetails = async (user) => {
         setSelectedUser(user);
         setShowDetailsModal(true);
-        await loadUserDetails(user.id);
+        setUserPerformance(null);
+        setUserTasks([]);
+        await Promise.all([
+            loadUserDetails(user.id),
+            loadUserPerformance(user.id)
+        ]);
     };
 
     const handleOpenEditModal = (user) => {
@@ -605,6 +636,41 @@ export default function SuperUserTeamsPage() {
                                         </div>
                                     </div>
                                     <div>
+                                        {/* Performance Summary */}
+                                        {userPerformance?.stats && (
+                                            <div className="bg-background-dark/50 border border-border-dark rounded-xl p-4 mb-6">
+                                                <h4 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-4 flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-base">insights</span>
+                                                    Performance Summary
+                                                </h4>
+                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                    <div className="text-center">
+                                                        <p className="text-2xl font-bold text-white">
+                                                            {userPerformance.stats.averagePerformance ? `${userPerformance.stats.averagePerformance}%` : '-'}
+                                                        </p>
+                                                        <p className="text-xs text-text-secondary">Avg Performance</p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="text-2xl font-bold text-green-400">{userPerformance.stats.excellentCount}</p>
+                                                        <p className="text-xs text-text-secondary">🚀 Excellent (≥150%)</p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="text-2xl font-bold text-blue-400">{userPerformance.stats.onTimeCount}</p>
+                                                        <p className="text-xs text-text-secondary">✅ On Time (90-149%)</p>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="text-2xl font-bold text-yellow-400">{userPerformance.stats.lateCount}</p>
+                                                        <p className="text-xs text-text-secondary">⚠️ Late (&lt;90%)</p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-4 pt-4 border-t border-border-dark/50 flex justify-between text-sm">
+                                                    <span className="text-text-secondary">Total Tasks: <span className="text-white">{userPerformance.stats.totalTasks}</span></span>
+                                                    <span className="text-text-secondary">Completed: <span className="text-green-400">{userPerformance.stats.completedTasks}</span></span>
+                                                    <span className="text-text-secondary">Pending: <span className="text-yellow-400">{userPerformance.stats.pendingTasks}</span></span>
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <h4 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
                                             <span className="material-symbols-outlined text-base">folder</span>
                                             Assigned Projects ({userDetails.projects?.length || 0})
@@ -623,19 +689,54 @@ export default function SuperUserTeamsPage() {
                                     <div>
                                         <h4 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
                                             <span className="material-symbols-outlined text-base">task_alt</span>
-                                            Assigned Tasks ({userDetails.tasks?.length || 0})
+                                            Task History ({userTasks.length})
                                         </h4>
-                                        {userDetails.tasks?.length > 0 ? (
-                                            <div className="space-y-2">
-                                                {userDetails.tasks.map((task) => (
-                                                    <div key={task.id} className="bg-background-dark/50 border border-border-dark rounded-lg px-4 py-3">
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="text-white font-medium">{task.title}</span>
-                                                            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${task.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' : task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'}`}>{task.status.replace('_', ' ')}</span>
-                                                        </div>
-                                                        <p className="text-text-secondary text-xs mt-1">Project: {task.projectName}</p>
-                                                    </div>
-                                                ))}
+                                        {loadingTasks ? (
+                                            <p className="text-text-secondary text-sm">Loading tasks...</p>
+                                        ) : userTasks.length > 0 ? (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm">
+                                                    <thead>
+                                                        <tr className="text-text-secondary text-left border-b border-border-dark">
+                                                            <th className="pb-2 font-medium">Task</th>
+                                                            <th className="pb-2 font-medium">Allocated</th>
+                                                            <th className="pb-2 font-medium">Actual</th>
+                                                            <th className="pb-2 font-medium text-right">Performance</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-border-dark/50">
+                                                        {userTasks.map((task) => {
+                                                            const getPerformanceBadge = (score) => {
+                                                                if (!score && score !== 0) return { emoji: '⏳', color: 'text-gray-400', label: 'Pending' };
+                                                                if (score >= 150) return { emoji: '🚀', color: 'text-green-400', label: `${score}%` };
+                                                                if (score >= 90) return { emoji: '✅', color: 'text-blue-400', label: `${score}%` };
+                                                                if (score >= 50) return { emoji: '⚠️', color: 'text-yellow-400', label: `${score}%` };
+                                                                return { emoji: '❌', color: 'text-red-400', label: `${score}%` };
+                                                            };
+                                                            const badge = getPerformanceBadge(task.performanceScore);
+
+                                                            return (
+                                                                <tr key={task.id} className="hover:bg-background-dark/30">
+                                                                    <td className="py-2">
+                                                                        <div className="text-white font-medium">{task.title}</div>
+                                                                        <div className="text-xs text-text-secondary">{task.projectCode}</div>
+                                                                    </td>
+                                                                    <td className="py-2 text-text-secondary">
+                                                                        {task.allocatedFormatted || '-'}
+                                                                    </td>
+                                                                    <td className="py-2 text-text-secondary">
+                                                                        {task.actualFormatted || (task.status === 'COMPLETED' ? '-' : '⏳')}
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        <span className={`font-semibold ${badge.color}`}>
+                                                                            {badge.emoji} {badge.label}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         ) : <p className="text-text-secondary text-sm">No tasks assigned.</p>}
                                     </div>

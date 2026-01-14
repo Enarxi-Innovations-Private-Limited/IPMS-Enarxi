@@ -22,6 +22,7 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:3000'
+
 ];
 
 app.use(cors({
@@ -29,7 +30,7 @@ app.use(cors({
         // Allow requests with no origin (mobile apps, curl, etc.)
         if (!origin) return callback(null, true);
 
-        if (allowedOrigins.includes(origin)) {
+        if (allowedOrigins.includes(origin) || (origin && (origin.startsWith('http://19') || origin.startsWith('http://10')))) {
             callback(null, true);
         } else {
             console.log('CORS blocked origin:', origin);
@@ -705,7 +706,8 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
             department: p.department || 'SOFTWARE',
             status: p.status,
             startDate: p.startDate,
-            endDate: p.endDate,
+            endDate: p.deadline,
+            deadline: p.deadline,
             budget: p.budget,
             managerId: p.managerId?._id,
             managerName: p.managerId?.name,
@@ -801,7 +803,8 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
         department: project.department || 'SOFTWARE',
         status: project.status,
         startDate: project.startDate,
-        endDate: project.endDate,
+        endDate: project.deadline,
+        deadline: project.deadline,
         budget: project.budget,
         managerId: project.managerId?._id,
         managerName: project.managerId?.name,
@@ -813,7 +816,7 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
 
 app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
     try {
-        const { name, description, department, managerId, startDate, endDate, budget, templateName, teamIds } = req.body;
+        const { name, description, department, managerId, startDate, deadline, endDate, budget, templateName, teamIds } = req.body;
         if (!name) return res.status(400).json({ message: 'Project name is required' });
 
         const project = await Project.create({
@@ -823,7 +826,7 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
             status: 'PLANNING',
             managerId: managerId || null,
             startDate: startDate || '',
-            endDate: endDate || '',
+            deadline: deadline || endDate,
             budget: budget || 0,
             templateUsed: templateName || '',
             teamIds: teamIds || [],
@@ -872,7 +875,8 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
             department: project.department,
             status: project.status,
             startDate: project.startDate,
-            endDate: project.endDate,
+            endDate: project.deadline,
+            deadline: project.deadline,
             budget: project.budget,
             managerId: project.managerId,
             templateUsed: project.templateUsed,
@@ -894,7 +898,7 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        const { name, description, department, status, deadline, teamIds } = req.body;
+        const { name, description, department, status, deadline, endDate, teamIds } = req.body;
         console.log('Updating project:', projectId);
         console.log('Request body:', { name, description, department, status, deadline, teamIds });
         console.log('Current project status:', project.status);
@@ -906,7 +910,11 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
             console.log('Changing status from', project.status, 'to', status);
             project.status = status;
         }
-        if (deadline !== undefined) project.deadline = deadline;
+        if (deadline !== undefined) {
+            project.deadline = deadline;
+        } else if (endDate !== undefined) {
+            project.deadline = endDate;
+        }
 
         // Handle Team Changes and Task Reassignment
         if (teamIds !== undefined) {

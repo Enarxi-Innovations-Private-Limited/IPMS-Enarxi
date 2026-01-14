@@ -107,6 +107,29 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
         }
     };
 
+    const handleCompleteTask = async () => {
+        const taskId = activeTask._id || activeTask.id;
+        if (!taskId) return;
+        if (!window.confirm("Are you sure you want to mark this task as completed?")) return;
+
+        try {
+            setLoading(true);
+            const res = await api.put(`/tasks/${taskId}`, { status: 'COMPLETED' });
+
+            const updatedTask = res.data;
+            setCurrentTask(updatedTask);
+            if (onUpdate) onUpdate(updatedTask);
+        } catch (err) {
+            console.error(err);
+            setError(err.response?.data?.message || 'Failed to complete task');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const isAssignee = currentUser && (currentUser.id === (activeTask.assigneeId?._id || activeTask.assigneeId));
+    const showCompleteButton = activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
+
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
             <div
@@ -198,9 +221,9 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                 <div className="mt-3 flex items-center gap-4 text-sm">
                                     <span className="text-text-secondary">Performance:</span>
                                     <span className={`font-bold ${activeTask.performanceScore >= 150 ? 'text-green-400' :
-                                            activeTask.performanceScore >= 90 ? 'text-blue-400' :
-                                                activeTask.performanceScore >= 50 ? 'text-yellow-400' :
-                                                    'text-red-400'
+                                        activeTask.performanceScore >= 90 ? 'text-blue-400' :
+                                            activeTask.performanceScore >= 50 ? 'text-yellow-400' :
+                                                'text-red-400'
                                         }`}>
                                         {activeTask.performanceScore >= 150 ? '🚀' :
                                             activeTask.performanceScore >= 90 ? '✅' :
@@ -326,7 +349,18 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                     </div>
                 </div>
 
-                <div className="px-6 py-4 border-t border-border-dark flex justify-end bg-surface-dark shrink-0">
+                <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3 bg-surface-dark shrink-0">
+                    {showCompleteButton && (
+                        <button
+                            type="button"
+                            onClick={handleCompleteTask}
+                            disabled={loading}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                            <span className="material-symbols-outlined text-lg">check_circle</span>
+                            Mark as Completed
+                        </button>
+                    )}
                     <button
                         type="button"
                         onClick={onClose}
