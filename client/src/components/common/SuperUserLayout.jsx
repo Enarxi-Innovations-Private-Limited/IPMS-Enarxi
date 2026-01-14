@@ -9,6 +9,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
   const user = getCurrentUser();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
@@ -102,12 +103,70 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
         </div>
       </aside>
 
+      {/* Mobile Sidebar Overlay */}
+      <div
+        className={`mobile-sidebar-overlay ${showMobileSidebar ? 'active' : ''}`}
+        onClick={() => setShowMobileSidebar(false)}
+      ></div>
+
+      {/* Mobile Sidebar */}
+      <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
+        <div className="flex flex-col gap-6 p-4">
+          <div className="flex items-center justify-between px-2 mt-2">
+            <div className="flex gap-3">
+              <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-primary flex items-center justify-center">
+                <span className="text-white font-bold text-lg">IP</span>
+              </div>
+              <div className="flex flex-col justify-center">
+                <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Super User</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowMobileSidebar(false)}
+              className="text-text-secondary hover:text-white"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+          <nav className="flex flex-col gap-2">
+            {navItems.map((item) => (
+              <a
+                key={item.id}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${currentPage === item.id
+                  ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
+                  : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                  }`}
+                href={item.path}
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate(item.path);
+                  setShowMobileSidebar(false);
+                }}
+              >
+                <span
+                  className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-primary' : 'group-hover:text-primary'
+                    }`}
+                  style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                >
+                  {item.icon}
+                </span>
+                <span className="text-sm font-medium">{item.label}</span>
+              </a>
+            ))}
+          </nav>
+        </div>
+      </aside>
+
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background-dark">
         {/* Header */}
         <header className="flex items-center justify-between border-b border-border-dark bg-background-dark/95 backdrop-blur-sm px-6 py-4 z-10 sticky top-0">
           <div className="flex items-center gap-4 lg:hidden">
-            <button className="text-text-secondary hover:text-white">
+            <button
+              className="text-text-secondary hover:text-white"
+              onClick={() => setShowMobileSidebar(true)}
+            >
               <span className="material-symbols-outlined">menu</span>
             </button>
             <span className="text-white font-bold text-lg">IPMS</span>
@@ -300,6 +359,29 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
           </div>
         </div>
       )}
+
+      {/* Bottom Navigation (Mobile) */}
+      <nav className="bottom-nav">
+        {navItems.map((item) => (
+          <a
+            key={item.id}
+            href={item.path}
+            onClick={(e) => {
+              e.preventDefault();
+              navigate(item.path);
+            }}
+            className={`bottom-nav-item ${currentPage === item.id ? 'active' : ''}`}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+            >
+              {item.icon}
+            </span>
+            <span className="label">{item.label}</span>
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }

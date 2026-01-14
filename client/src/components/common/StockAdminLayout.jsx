@@ -12,6 +12,7 @@ export default function StockAdminLayout({ children, currentPage = 'dashboard' }
     const [passwordError, setPasswordError] = useState('');
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
 
     const handleLogout = () => {
         clearAuth();
@@ -63,7 +64,7 @@ export default function StockAdminLayout({ children, currentPage = 'dashboard' }
     return (
         <div className="flex h-screen bg-background-dark text-white overflow-hidden">
             {/* Sidebar */}
-            <aside className="w-64 bg-surface-dark border-r border-border-dark flex flex-col">
+            <aside className="hidden lg:flex w-64 bg-surface-dark border-r border-border-dark flex-col shrink-0">
                 {/* Logo */}
                 <div className="p-6 border-b border-border-dark">
                     <div className="flex items-center gap-3">
@@ -139,9 +140,67 @@ export default function StockAdminLayout({ children, currentPage = 'dashboard' }
                 </div>
             </aside>
 
+            {/* Mobile Sidebar Overlay */}
+            <div
+                className={`mobile-sidebar-overlay ${showMobileSidebar ? 'active' : ''}`}
+                onClick={() => setShowMobileSidebar(false)}
+            ></div>
+
+            {/* Mobile Sidebar */}
+            <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
+                <div className="flex flex-col h-full bg-surface-dark">
+                    {/* Logo */}
+                    <div className="p-6 border-b border-border-dark flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                                <span className="material-symbols-outlined text-2xl">warehouse</span>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold text-white">IPMS</h1>
+                                <p className="text-xs text-text-secondary">Stock Management</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setShowMobileSidebar(false)} className="text-text-secondary">
+                            <span className="material-symbols-outlined">close</span>
+                        </button>
+                    </div>
+
+                    {/* Navigation */}
+                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                        {menuItems.map((item) => (
+                            <button
+                                key={item.id}
+                                onClick={() => { navigate(item.path); setShowMobileSidebar(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${currentPage === item.id
+                                    ? 'bg-primary/20 text-primary border border-primary/30'
+                                    : 'text-text-secondary hover:bg-surface-light hover:text-white'
+                                    }`}
+                            >
+                                <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                                <span className="font-medium">{item.name}</span>
+                            </button>
+                        ))}
+                    </nav>
+                </div>
+            </aside>
+
             {/* Main Content */}
-            <main className="flex-1 overflow-auto">
-                {children}
+            <main className="flex-1 overflow-hidden flex flex-col h-full">
+                {/* Mobile Header */}
+                <header className="lg:hidden flex items-center justify-between px-4 py-3 border-b border-border-dark bg-surface-dark shrink-0">
+                    <div className="flex items-center gap-3">
+                        <button onClick={() => setShowMobileSidebar(true)} className="text-white hover:text-primary transition-colors">
+                            <span className="material-symbols-outlined">menu</span>
+                        </button>
+                        <span className="font-bold text-lg">Stock Admin</span>
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-sm font-bold">
+                        {user?.name?.charAt(0) || 'S'}
+                    </div>
+                </header>
+                <div className="flex-1 overflow-auto p-4 custom-scrollbar bg-background-dark">
+                    {children}
+                </div>
             </main>
 
             {/* Change Password Modal */}
@@ -245,6 +304,29 @@ export default function StockAdminLayout({ children, currentPage = 'dashboard' }
                     </div>
                 </div>
             )}
+
+            {/* Bottom Navigation (Mobile) */}
+            <nav className="bottom-nav bg-surface-dark border-t border-border-dark">
+                {menuItems.slice(0, 4).map((item) => (
+                    <a
+                        key={item.id}
+                        href={item.path}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            navigate(item.path);
+                        }}
+                        className={`bottom-nav-item ${currentPage === item.id ? 'active text-primary' : 'text-text-secondary'}`}
+                    >
+                        <span
+                            className="material-symbols-outlined"
+                            style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                        >
+                            {item.icon}
+                        </span>
+                        <span className="label text-[10px]">{item.name.split(' ')[0]}</span>
+                    </a>
+                ))}
+            </nav>
         </div>
     );
 }

@@ -1,0 +1,379 @@
+/* ==================== RESPONSIVE DESIGN SYSTEM ==================== */
+/* Mobile-first approach with breakpoints: */
+/* sm: 640px | md: 768px | lg: 1024px | xl: 1280px | 2xl: 1536px */
+
+/* ==================== BASE RESPONSIVE UTILITIES ==================== */
+
+/* Safe area for notched phones */
+:root {
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+}
+
+/* Prevent horizontal scroll on mobile */
+html, body {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Touch-friendly targets (minimum 44x44px) */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* ==================== MOBILE SIDEBAR OVERLAY ==================== */
+.mobile-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 40;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.mobile-sidebar-overlay.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.mobile-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 85vw;
+  background: var(--background-dark, #0a0a0b);
+  border-right: 1px solid var(--border-dark, #1e1e2e);
+  z-index: 50;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  padding-bottom: var(--safe-area-inset-bottom);
+}
+
+.mobile-sidebar.active {
+  transform: translateX(0);
+}
+
+/* ==================== RESPONSIVE TABLES ==================== */
+@media (max-width: 768px) {
+  .responsive-table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .responsive-table table {
+    min-width: 600px;
+  }
+
+  /* Card-style tables for mobile */
+  .table-as-cards thead {
+    display: none;
+  }
+
+  .table-as-cards tbody tr {
+    display: block;
+    margin-bottom: 1rem;
+    background: var(--surface-dark, #141418);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--border-dark, #1e1e2e);
+  }
+
+  .table-as-cards tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-dark, #1e1e2e);
+  }
+
+  .table-as-cards tbody td:last-child {
+    border-bottom: none;
+  }
+
+  .table-as-cards tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+  }
+}
+
+/* ==================== RESPONSIVE GRIDS ==================== */
+.responsive-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1280px) {
+  .responsive-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* ==================== RESPONSIVE PADDING ==================== */
+.responsive-padding {
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .responsive-padding {
+    padding: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-padding {
+    padding: 2rem;
+  }
+}
+
+/* ==================== RESPONSIVE TYPOGRAPHY ==================== */
+.responsive-heading {
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+@media (min-width: 640px) {
+  .responsive-heading {
+    font-size: 1.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-heading {
+    font-size: 2rem;
+  }
+}
+
+/* ==================== MOBILE-FRIENDLY MODALS ==================== */
+@media (max-width: 640px) {
+  .modal-container {
+    padding: 0.5rem;
+  }
+
+  .modal-content {
+    max-height: 90vh;
+    border-radius: 1rem 1rem 0 0;
+    margin-top: auto;
+  }
+
+  /* Bottom sheet style for mobile */
+  .modal-bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    max-height: 85vh;
+    border-radius: 1.5rem 1.5rem 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s ease;
+  }
+
+  .modal-bottom-sheet.active {
+    transform: translateY(0);
+  }
+}
+
+/* ==================== HIDE/SHOW UTILITIES ==================== */
+.hide-mobile {
+  display: none !important;
+}
+
+@media (min-width: 768px) {
+  .hide-mobile {
+    display: flex !important;
+  }
+  
+  .hide-desktop {
+    display: none !important;
+  }
+}
+
+.show-mobile {
+  display: flex !important;
+}
+
+@media (min-width: 768px) {
+  .show-mobile {
+    display: none !important;
+  }
+}
+
+/* ==================== SCROLLBARS ==================== */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Hide scrollbar on mobile for cleaner look */
+@media (max-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+}
+
+/* ==================== RESPONSIVE BUTTONS ==================== */
+@media (max-width: 640px) {
+  .btn-responsive {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .btn-group-responsive {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .btn-group-responsive > * {
+    width: 100%;
+  }
+}
+
+/* ==================== RESPONSIVE FORMS ==================== */
+@media (max-width: 640px) {
+  .form-row-responsive {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .form-row-responsive > * {
+    width: 100%;
+  }
+
+  input, select, textarea {
+    font-size: 16px !important; /* Prevent zoom on iOS */
+  }
+}
+
+/* ==================== BOTTOM NAVIGATION (Mobile) ==================== */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--background-dark, #0a0a0b);
+  border-top: 1px solid var(--border-dark, #1e1e2e);
+  padding: 0.5rem;
+  padding-bottom: calc(0.5rem + var(--safe-area-inset-bottom));
+  z-index: 30;
+}
+
+@media (max-width: 1023px) {
+  .bottom-nav {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+  }
+
+  /* Add padding to main content when bottom nav is visible */
+  .main-with-bottom-nav {
+    padding-bottom: calc(70px + var(--safe-area-inset-bottom));
+  }
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.5rem 1rem;
+  color: var(--text-secondary, #6b7280);
+  text-decoration: none;
+  transition: color 0.2s;
+  min-width: 60px;
+}
+
+.bottom-nav-item.active {
+  color: var(--primary, #3b82f6);
+}
+
+.bottom-nav-item span.label {
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
+/* ==================== LANDSCAPE MOBILE ADJUSTMENTS ==================== */
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-sidebar {
+    padding-top: 0.5rem;
+  }
+
+  .bottom-nav {
+    padding: 0.25rem;
+  }
+
+  .modal-content {
+    max-height: 85vh;
+  }
+}
+
+/* ==================== TABLET SPECIFIC ==================== */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .tablet-grid-2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .tablet-sidebar-collapsed {
+    width: 80px;
+  }
+
+  .tablet-sidebar-collapsed .nav-label {
+    display: none;
+  }
+}
+
+/* ==================== PRINT STYLES ==================== */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .sidebar, .bottom-nav, header {
+    display: none !important;
+  }
+
+  main {
+    margin: 0 !important;
+    padding: 1rem !important;
+  }
+}
