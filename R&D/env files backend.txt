@@ -1,0 +1,4 @@
+MONGODB_URI=mongodb+srv://enarximanagementdb:Enarxi+40123@cluster0.06c74n7.mongodb.net/
+
+# Authentication
+JWT_SECRET=QSXo/xXOkGU3bAQmpxVm5IjkyMRfaWL0SQH+YMnuJrE=
