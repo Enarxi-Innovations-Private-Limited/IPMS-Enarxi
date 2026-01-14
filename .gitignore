@@ -1,0 +1,155 @@
+# ====================================
+# IPMS - Internal Project Management System
+# .gitignore
+# ====================================
+
+# ==================== Dependencies ====================
+# Node modules (both client and server)
+node_modules/
+*/node_modules/
+
+# Package lock files (optional - some prefer to commit these)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# ==================== Build Output ====================
+# Client build output
+client/dist/
+client/build/
+
+# Server build (if using TypeScript)
+server/dist/
+
+# ==================== Environment Variables ====================
+# NEVER commit these - contain secrets!
+.env
+.env.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+*.env
+
+# ==================== Uploaded Files ====================
+# User uploaded files - should not be in git
+server/uploads/
+!server/uploads/.gitkeep
+
+# ==================== Logs ====================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==================== IDE & Editors ====================
+# VS Code
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# JetBrains (WebStorm, IntelliJ)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ==================== Operating System ====================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ==================== Temporary Files ====================
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.backup
+
+# ==================== Testing ====================
+coverage/
+.nyc_output/
+*.lcov
+
+# ==================== Database ====================
+# Local database files
+*.sqlite
+*.db
+data/*.json
+
+# MongoDB local data
+mongodb-data/
+
+# ==================== Cache ====================
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Vite cache
+client/.vite/
+
+# ==================== Misc ====================
+# Debug files
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+pids/
+
+# Optional npm cache directory
+.npm/
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# ==================== Secrets & Keys ====================
+# API keys, certificates, etc.
+*.pem
+*.key
+*.crt
+*.p12
+secrets/
+credentials/
+
+# ==================== Project Specific ====================
+# R&D folder (if contains sensitive data)
+# R&D/
+
+# AI/Agent working files
+.agent/workflows/
+!.agent/AI_STOCK_MANAGER_PLAN.md
+
+# ==================== Keep These Folders ====================
+# Create .gitkeep to keep empty folders
+!.gitkeep

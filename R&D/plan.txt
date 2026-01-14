@@ -1,0 +1,7 @@
+can we integrate the ai with this project i have plan for that which like the stock admin want's give the data in any format of the sheet the ai can analyze it can give the data to the project inventory make some if available and give me what can we perform with on this project 
+
+one thing i have can we implement the like if i want order somthing in the deelers website menas i will give the website url already in the database once i search for the prodcut then it have to search for the relevent website for the product and check the price and some detail like the delivery time if i go far large amount of stock means there might be  the  price diffenece in there that's we need display in our website 
+
+
+do plan for the both statement of the project 
+do plan for the both statement of the project 
