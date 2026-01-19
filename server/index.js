@@ -751,10 +751,6 @@ app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRo
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  console.log('Seeded users (Login with Employee ID):');
-  console.log('Super User (CEO): EMP-001 / password123');
-  console.log('Employee      : EMP-002 / password123');
-  console.log('Intern        : EMP-003 / password123');
 });
 
 

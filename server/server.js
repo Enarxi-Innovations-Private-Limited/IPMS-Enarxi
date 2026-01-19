@@ -187,48 +187,90 @@ const getUniqueFilename = (dir, filename) => {
     return finalName;
 };
 
-// Configure multer for project attachments - now uses project-specific folders with readable names
+// Configure multer for project attachments - uses projectCode_projectId folders
 const projectAttachmentStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const projectId = req.params.projectId;
-        const uploadDir = path.join(__dirname, 'uploads', 'projects', projectId);
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
+    destination: async (req, file, cb) => {
+        try {
+            const projectId = req.params.projectId;
+            // Fetch project if not already fetched
+            if (!req.project) {
+                req.project = await Project.findById(projectId);
+            }
+
+            if (!req.project) {
+                // Fallback to projectId if project not found (shouldn't happen if ID valid)
+                const uploadDir = path.join(__dirname, 'uploads', 'projects', projectId);
+                if (!fs.existsSync(uploadDir)) {
+                    fs.mkdirSync(uploadDir, { recursive: true });
+                }
+                return cb(null, uploadDir);
+            }
+
+            // Use format: PRJ-2026-001_<projectId> for clarity and uniqueness
+            const folderName = req.project.projectCode ? `${req.project.projectCode}_${projectId}` : projectId;
+            const uploadDir = path.join(__dirname, 'uploads', 'projects', folderName);
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            cb(null, uploadDir);
+        } catch (error) {
+            console.error('Error in multer destination:', error);
+            cb(error);
         }
-        cb(null, uploadDir);
     },
-    filename: (req, file, cb) => {
-        // Use the custom name if provided, otherwise use original filename
-        let customName = null;
-        if (req.body.name) {
-            customName = req.body.name;
-        } else if (req.body.customNames) {
-            const names = Array.isArray(req.body.customNames) ? req.body.customNames : [req.body.customNames];
-            const fileIndex = req.files ? req.files.length : 0;
-            customName = names[fileIndex];
+    filename: async (req, file, cb) => {
+        try {
+            // Use the custom name if provided, otherwise use original filename
+            let customName = null;
+            if (req.body.name) {
+                customName = req.body.name;
+            } else if (req.body.customNames) {
+                const names = Array.isArray(req.body.customNames) ? req.body.customNames : [req.body.customNames];
+                const fileIndex = req.files ? req.files.length : 0;
+                customName = names[fileIndex];
+            }
+
+            // Use custom name or original filename
+            const baseName = customName || file.originalname;
+            const ext = path.extname(file.originalname);
+
+            // If custom name doesn't have extension, add the original extension
+            let finalName = baseName;
+            if (!path.extname(baseName)) {
+                finalName = baseName + ext;
+            }
+
+            // Sanitize the filename
+            finalName = sanitizeFilename(finalName);
+
+            // Get the destination directory (Recalculate or trust previous execution context)
+            // Since destination runs first, req.project SHOULD look populated.
+            // But relying on side-effects in 'req' across multer functions is tricky if they run in parallel?
+            // Actually destination runs, then filename.
+
+            const projectId = req.params.projectId;
+            if (!req.project) {
+                req.project = await Project.findById(projectId);
+            }
+
+            // Use format: PRJ-2026-001_<projectId> for clarity and uniqueness
+            const folderName = req.project?.projectCode ? `${req.project.projectCode}_${projectId}` : projectId;
+            const uploadDir = path.join(__dirname, 'uploads', 'projects', folderName);
+
+            // Ensure unique filename
+            // Note: This relies on uploadDir existing, which destination ensures.
+            // But if async race conditions occur, we might double check.
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+
+            finalName = getUniqueFilename(uploadDir, finalName);
+
+            cb(null, finalName);
+        } catch (error) {
+            console.error('Error in multer filename:', error);
+            cb(error);
         }
-
-        // Use custom name or original filename
-        const baseName = customName || file.originalname;
-        const ext = path.extname(file.originalname);
-
-        // If custom name doesn't have extension, add the original extension
-        let finalName = baseName;
-        if (!path.extname(baseName)) {
-            finalName = baseName + ext;
-        }
-
-        // Sanitize the filename
-        finalName = sanitizeFilename(finalName);
-
-        // Get the destination directory
-        const projectId = req.params.projectId;
-        const uploadDir = path.join(__dirname, 'uploads', 'projects', projectId);
-
-        // Ensure unique filename
-        finalName = getUniqueFilename(uploadDir, finalName);
-
-        cb(null, finalName);
     }
 });
 
@@ -339,8 +381,8 @@ app.get('/api/notifications', authMiddleware, async (req, res) => {
             .limit(50);
         res.json(notifications);
     } catch (err) {
-        console.error('Error fetching notifications:', err);
-        res.status(500).json({ message: 'Failed to fetch notifications' });
+        console.error('❌ [Fetch Notifications]: Error:', err);
+        res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
     }
 });
 
@@ -353,7 +395,8 @@ app.put('/api/notifications/:id/read', authMiddleware, async (req, res) => {
         );
         res.json(notification);
     } catch (err) {
-        res.status(500).json({ message: 'Failed to update notification' });
+        console.error('❌ [Update Notification]: Error:', err);
+        res.status(500).json({ message: 'Failed to update notification', error: err.message });
     }
 });
 
@@ -365,7 +408,8 @@ app.put('/api/notifications/read-all', authMiddleware, async (req, res) => {
         );
         res.json({ message: 'All notifications marked as read' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to mark all as read' });
+        console.error('❌ [Mark All Read]: Error:', err);
+        res.status(500).json({ message: 'Failed to mark all as read', error: err.message });
     }
 });
 
@@ -438,7 +482,8 @@ app.get('/api/users/next-id', authMiddleware, requireRole(roles.SUPER_USER), asy
         const nextId = `EMP-${String(nextNumber).padStart(3, '0')}`;
         res.json({ nextEmployeeId: nextId });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to get next ID' });
+        console.error('❌ [Get Next ID]: Error:', err);
+        res.status(500).json({ message: 'Failed to get next ID', error: err.message });
     }
 });
 
@@ -533,8 +578,8 @@ app.get('/api/users/:userId/performance', authMiddleware, requireRole(roles.SUPE
             }),
         });
     } catch (err) {
-        console.error('Error fetching user performance:', err);
-        res.status(500).json({ message: 'Failed to fetch user performance' });
+        console.error('❌ [User Performance]: Error:', err);
+        res.status(500).json({ message: 'Failed to fetch user performance', error: err.message });
     }
 });
 
@@ -860,8 +905,9 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
             console.log(`✅ Created ${templateTasks.length} tasks from template "${templateName}"`);
         }
 
-        // Create dedicated folder for project attachments
-        const projectUploadDir = path.join(__dirname, 'uploads', 'projects', project._id.toString());
+        // Create dedicated folder for project attachments using projectCode_projectId format
+        const folderName = project.projectCode ? `${project.projectCode}_${project._id.toString()}` : project._id.toString();
+        const projectUploadDir = path.join(__dirname, 'uploads', 'projects', folderName);
         if (!fs.existsSync(projectUploadDir)) {
             fs.mkdirSync(projectUploadDir, { recursive: true });
             console.log(`📁 Created attachment folder for project ${project.projectCode}: ${projectUploadDir}`);
@@ -974,7 +1020,7 @@ app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(rol
 
             return {
                 name: attachmentName,
-                url: `/uploads/projects/${projectId}/${file.filename}`,
+                url: `/uploads/projects/${project.projectCode ? `${project.projectCode}_${projectId}` : projectId}/${file.filename}`,
                 uploadedAt: new Date()
             };
         });
@@ -1014,10 +1060,22 @@ app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, req
         const attachment = project.attachments[attachmentIndex];
 
         // Move file to backup instead of deleting permanently
-        // Check both old path (uploads/projects/filename) and new path (uploads/projects/projectId/filename)
-        let filePath = path.join(__dirname, 'uploads', 'projects', projectId, filename);
+        // Check new path (uploads/projects/projectCode_projectId/filename), then legacy paths
+        const folderName = project.projectCode ? `${project.projectCode}_${projectId}` : projectId;
+        let filePath = path.join(__dirname, 'uploads', 'projects', folderName, filename);
+
         if (!fs.existsSync(filePath)) {
-            // Try old path structure
+            // Try legacy path (using projectCode only)
+            filePath = path.join(__dirname, 'uploads', 'projects', project.projectCode || projectId, filename);
+        }
+
+        if (!fs.existsSync(filePath)) {
+            // Try legacy path (using projectId only)
+            filePath = path.join(__dirname, 'uploads', 'projects', projectId, filename);
+        }
+
+        if (!fs.existsSync(filePath)) {
+            // Try oldest path structure (flat in projects folder)
             filePath = path.join(__dirname, 'uploads', 'projects', filename);
         }
 
@@ -1059,7 +1117,19 @@ app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_U
 
         // Move all project attachments to backup before deletion
         const backupBaseDir = path.join(__dirname, 'uploads', 'backup');
-        const projectBackupDir = path.join(backupBaseDir, `${project.projectCode || projectId}`);
+
+        // Determine unique backup directory name
+        let backupName = project.projectCode || projectId;
+        let projectBackupDir = path.join(backupBaseDir, backupName);
+
+        // Check for duplicate names and append counter if needed
+        if (fs.existsSync(projectBackupDir)) {
+            let counter = 1;
+            while (fs.existsSync(path.join(backupBaseDir, `${backupName}(${counter})`))) {
+                counter++;
+            }
+            projectBackupDir = path.join(backupBaseDir, `${backupName}(${counter})`);
+        }
 
         // Create backup directory
         if (!fs.existsSync(projectBackupDir)) {
@@ -1084,15 +1154,28 @@ app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_U
             }
         }
 
-        // Also move entire project folder if it exists
-        const projectFolder = path.join(__dirname, 'uploads', 'projects', projectId);
+        // Move entire project folder if it exists
+        // Try new naming convention first (projectCode_projectId), then legacy paths
+        const folderName = project.projectCode ? `${project.projectCode}_${projectId}` : projectId;
+        let projectFolder = path.join(__dirname, 'uploads', 'projects', folderName);
+
+        // Fallback to legacy paths if new format doesn't exist
+        if (!fs.existsSync(projectFolder)) {
+            projectFolder = path.join(__dirname, 'uploads', 'projects', project.projectCode || projectId);
+        }
+        if (!fs.existsSync(projectFolder)) {
+            projectFolder = path.join(__dirname, 'uploads', 'projects', projectId);
+        }
         if (fs.existsSync(projectFolder)) {
             // Move remaining files
             const files = fs.readdirSync(projectFolder);
             for (const file of files) {
                 const srcPath = path.join(projectFolder, file);
                 const destPath = path.join(projectBackupDir, file);
-                fs.copyFileSync(srcPath, destPath);
+                // Only copy if not already there (avoid error if file was in attachments loop AND folder)
+                if (!fs.existsSync(destPath)) {
+                    fs.copyFileSync(srcPath, destPath);
+                }
                 fs.unlinkSync(srcPath);
             }
             // Remove the now-empty project folder
@@ -1127,7 +1210,7 @@ app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_U
         console.log(`✅ Project ${project.projectCode} deleted, files backed up to ${projectBackupDir}`);
         res.json({ message: 'Project deleted successfully. Files have been backed up.' });
     } catch (err) {
-        console.error('Error deleting project:', err);
+        console.error('❌ [Delete Project]: Error:', err);
         res.status(500).json({ message: 'Failed to delete project', error: err.message });
     }
 });
@@ -1189,8 +1272,8 @@ app.get('/api/backups', authMiddleware, requireRole(roles.SUPER_USER), async (re
 
         res.json(backups);
     } catch (err) {
-        console.error('Error fetching backups:', err);
-        res.status(500).json({ message: 'Failed to fetch backups' });
+        console.error('❌ [Fetch Backups]: Error:', err);
+        res.status(500).json({ message: 'Failed to fetch backups', error: err.message });
     }
 });
 
@@ -1240,8 +1323,8 @@ app.get('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER
             deletedBy: metadata.deletedBy
         });
     } catch (err) {
-        console.error('Error fetching backup details:', err);
-        res.status(500).json({ message: 'Failed to fetch backup details' });
+        console.error('❌ [Fetch Backup Details]: Error:', err);
+        res.status(500).json({ message: 'Failed to fetch backup details', error: err.message });
     }
 });
 
@@ -1257,8 +1340,8 @@ app.get('/api/backups/:folderName/download/:filename', authMiddleware, requireRo
 
         res.download(filePath, filename);
     } catch (err) {
-        console.error('Error downloading backup file:', err);
-        res.status(500).json({ message: 'Failed to download file' });
+        console.error('❌ [Download Backup]: Error:', err);
+        res.status(500).json({ message: 'Failed to download file', error: err.message });
     }
 });
 
@@ -1290,8 +1373,8 @@ app.delete('/api/backups/:folderName/files/:filename', authMiddleware, requireRo
         console.log(`✅ Permanently deleted ${filename} from backup ${folderName} by ${req.user.name}`);
         res.json({ message: 'File permanently deleted' });
     } catch (err) {
-        console.error('Error deleting backup file:', err);
-        res.status(500).json({ message: 'Failed to delete file' });
+        console.error('❌ [Delete Backup File]: Error:', err);
+        res.status(500).json({ message: 'Failed to delete file', error: err.message });
     }
 });
 
@@ -1317,8 +1400,8 @@ app.delete('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_U
         console.log(`✅ Permanently deleted backup folder ${folderName} by ${req.user.name}`);
         res.json({ message: 'Backup folder permanently deleted' });
     } catch (err) {
-        console.error('Error deleting backup folder:', err);
-        res.status(500).json({ message: 'Failed to delete backup folder' });
+        console.error('❌ [Delete Backup Folder]: Error:', err);
+        res.status(500).json({ message: 'Failed to delete backup folder', error: err.message });
     }
 });
 
@@ -1385,7 +1468,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
         }
 
     } catch (err) {
-        console.error('Error updating project status:', err);
+        console.error('❌ [Update Project Status]: Error:', err);
         res.status(500).json({ message: 'Failed to update project status', error: err.message });
     }
 });
@@ -1408,7 +1491,7 @@ app.get('/api/projects/:projectId/tasks', authMiddleware, async (req, res) => {
             assigneeName: t.assigneeId?.name,
         })));
     } catch (err) {
-        console.error('Error loading tasks:', err);
+        console.error('❌ [Load Tasks]: Error:', err);
         res.status(500).json({ message: 'Failed to load tasks', error: err.message });
     }
 });
@@ -1547,8 +1630,8 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         res.json(taskObj);
     } catch (err) {
-        console.error('Error fetching task:', err);
-        res.status(500).json({ message: 'Failed to fetch task' });
+        console.error('❌ [Fetch Task]: Error:', err);
+        res.status(500).json({ message: 'Failed to fetch task', error: err.message });
     }
 });
 
@@ -1721,7 +1804,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         res.json({ id: task._id, title: task.title, description: task.description, status: task.status, projectId: task.projectId, assigneeId: task.assigneeId });
     } catch (err) {
-        console.error('Error updating task:', err);
+        console.error('❌ [Update Task]: Error:', err);
         res.status(500).json({ message: 'Failed to update task', error: err.message });
     }
 });
@@ -1874,7 +1957,7 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
 
         res.json({ id: task._id, status: task.status, projectStatus });
     } catch (err) {
-        console.error('Error updating task status:', err);
+        console.error('❌ [Update Task Status]: Error:', err);
         res.status(500).json({ message: 'Failed to update task status', error: err.message });
     }
 });
@@ -1911,7 +1994,7 @@ app.post('/api/tasks/:taskId/transfer', authMiddleware, requireRole(roles.EMPLOY
         await logActivity('TASK_TRANSFERRED', `Task "${task.title}" transferred to ${newAssignee.name}`, req.user._id, req.user.name, task._id, task.title);
         res.json({ message: 'Task transferred successfully' });
     } catch (err) {
-        console.error('Error transferring task:', err);
+        console.error('❌ [Transfer Task]: Error:', err);
         res.status(500).json({ message: 'Failed to transfer task', error: err.message });
     }
 });
@@ -1951,8 +2034,8 @@ app.post('/api/tasks/:taskId/comments', authMiddleware, async (req, res) => {
 
         res.status(201).json(task.comments[task.comments.length - 1]);
     } catch (err) {
-        console.error('Error adding comment:', err);
-        res.status(500).json({ message: 'Failed to add comment' });
+        console.error('❌ [Add Comment]: Error:', err);
+        res.status(500).json({ message: 'Failed to add comment', error: err.message });
     }
 });
 
@@ -1990,8 +2073,8 @@ app.post('/api/tasks/:taskId/queries', authMiddleware, async (req, res) => {
 
         res.status(201).json(task.queries[task.queries.length - 1]);
     } catch (err) {
-        console.error('Error raising query:', err);
-        res.status(500).json({ message: 'Failed to raise query' });
+        console.error('❌ [Raise Query]: Error:', err);
+        res.status(500).json({ message: 'Failed to raise query', error: err.message });
     }
 });
 
@@ -2029,8 +2112,8 @@ app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRo
 
         res.json(query);
     } catch (err) {
-        console.error('Error responding to query:', err);
-        res.status(500).json({ message: 'Failed to respond to query' });
+        console.error('❌ [Respond Query]: Error:', err);
+        res.status(500).json({ message: 'Failed to respond to query', error: err.message });
     }
 });
 
@@ -2054,8 +2137,8 @@ app.put('/api/projects/:projectId/status', authMiddleware, requireRole(roles.SUP
 
         res.json({ id: project._id, status: project.status });
     } catch (err) {
-        console.error('Error updating project status:', err);
-        res.status(500).json({ message: 'Failed to update status' });
+        console.error('❌ [Update Project Status]: Error:', err);
+        res.status(500).json({ message: 'Failed to update status', error: err.message });
     }
 });
 
@@ -2072,8 +2155,8 @@ app.get('/api/activity-logs', authMiddleware, requireRole(roles.SUPER_USER), asy
             createdAt: a.timestamp,
         })));
     } catch (err) {
-        console.error('Error loading activity logs:', err);
-        res.status(500).json({ message: 'Failed to load activity logs' });
+        console.error('❌ [Load Activity Logs]: Error:', err);
+        res.status(500).json({ message: 'Failed to load activity logs', error: err.message });
     }
 });
 
@@ -2093,8 +2176,8 @@ app.get('/api/activities', authMiddleware, async (req, res) => {
             createdAt: a.timestamp,
         })));
     } catch (err) {
-        console.error('Error loading activities:', err);
-        res.status(500).json({ message: 'Failed to load activities' });
+        console.error('❌ [Load Activities]: Error:', err);
+        res.status(500).json({ message: 'Failed to load activities', error: err.message });
     }
 });
 
@@ -2146,7 +2229,7 @@ app.get('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN), a
             updatedAt: p.updatedAt,
         })));
     } catch (err) {
-        console.error('Error loading products:', err);
+        console.error('❌ [Load Products]: Error:', err);
         res.status(500).json({ message: 'Failed to load products', error: err.message });
     }
 });
@@ -2177,8 +2260,8 @@ app.get('/api/stock/products/stats', authMiddleware, requireRole(roles.STOCK_ADM
             issuedItems,
         });
     } catch (err) {
-        console.error('Error loading stats:', err);
-        res.status(500).json({ message: 'Failed to load statistics' });
+        console.error('❌ [Load Stats]: Error:', err);
+        res.status(500).json({ message: 'Failed to load statistics', error: err.message });
     }
 });
 
@@ -2221,7 +2304,7 @@ app.post('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN), 
             message: 'Product created successfully',
         });
     } catch (err) {
-        console.error('Error creating product:', err);
+        console.error('❌ [Create Product]: Error:', err);
         res.status(500).json({ message: 'Failed to create product', error: err.message });
     }
 });
@@ -2258,7 +2341,7 @@ app.put('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_ADMIN
         await product.save();
         res.json({ message: 'Product updated successfully', id: product._id });
     } catch (err) {
-        console.error('Error updating product:', err);
+        console.error('❌ [Update Product]: Error:', err);
         res.status(500).json({ message: 'Failed to update product', error: err.message });
     }
 });
@@ -2284,7 +2367,7 @@ app.delete('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_AD
         await Product.deleteOne({ _id: product._id });
         res.json({ message: 'Product deleted successfully' });
     } catch (err) {
-        console.error('Error deleting product:', err);
+        console.error('❌ [Delete Product]: Error:', err);
         res.status(500).json({ message: 'Failed to delete product', error: err.message });
     }
 });
@@ -2310,8 +2393,8 @@ app.get('/api/stock/suppliers', authMiddleware, requireRole(roles.STOCK_ADMIN), 
             notes: s.notes,
         })));
     } catch (err) {
-        console.error('Error loading suppliers:', err);
-        res.status(500).json({ message: 'Failed to load suppliers' });
+        console.error('❌ [Load Suppliers]: Error:', err);
+        res.status(500).json({ message: 'Failed to load suppliers', error: err.message });
     }
 });
 
@@ -2341,7 +2424,7 @@ app.post('/api/stock/suppliers', authMiddleware, requireRole(roles.STOCK_ADMIN),
 
         res.status(201).json({ id: supplier._id, name: supplier.name, message: 'Supplier created successfully' });
     } catch (err) {
-        console.error('Error creating supplier:', err);
+        console.error('❌ [Create Supplier]: Error:', err);
         res.status(500).json({ message: 'Failed to create supplier', error: err.message });
     }
 });
@@ -2376,7 +2459,7 @@ app.put('/api/stock/suppliers/:id', authMiddleware, requireRole(roles.STOCK_ADMI
         await supplier.save();
         res.json({ message: 'Supplier updated successfully' });
     } catch (err) {
-        console.error('Error updating supplier:', err);
+        console.error('❌ [Update Supplier]: Error:', err);
         res.status(500).json({ message: 'Failed to update supplier', error: err.message });
     }
 });
@@ -2402,7 +2485,7 @@ app.delete('/api/stock/suppliers/:id', authMiddleware, requireRole(roles.STOCK_A
         await Supplier.deleteOne({ _id: supplier._id });
         res.json({ message: 'Supplier deleted successfully' });
     } catch (err) {
-        console.error('Error deleting supplier:', err);
+        console.error('❌ [Delete Supplier]: Error:', err);
         res.status(500).json({ message: 'Failed to delete supplier', error: err.message });
     }
 });
@@ -2453,7 +2536,7 @@ app.post('/api/stock/issue', authMiddleware, requireRole(roles.STOCK_ADMIN), asy
 
         res.status(201).json({ message: 'Product issued successfully', id: issuedItem._id });
     } catch (err) {
-        console.error('Error issuing product:', err);
+        console.error('❌ [Issue Product]: Error:', err);
         res.status(500).json({ message: 'Failed to issue product', error: err.message });
     }
 });
@@ -2500,8 +2583,8 @@ app.get('/api/stock/issued', authMiddleware, requireRole(roles.STOCK_ADMIN), asy
             returnNotes: item.returnNotes,
         })));
     } catch (err) {
-        console.error('Error loading issued items:', err);
-        res.status(500).json({ message: 'Failed to load issued items' });
+        console.error('❌ [Load Issued Items]: Error:', err);
+        res.status(500).json({ message: 'Failed to load issued items', error: err.message });
     }
 });
 
@@ -2550,7 +2633,7 @@ app.post('/api/stock/return/:id', authMiddleware, requireRole(roles.STOCK_ADMIN)
 
         res.json({ message: 'Product returned successfully' });
     } catch (err) {
-        console.error('Error returning product:', err);
+        console.error('❌ [Return Product]: Error:', err);
         res.status(500).json({ message: 'Failed to return product', error: err.message });
     }
 });
@@ -2586,8 +2669,8 @@ app.get('/api/stock/purchase-orders', authMiddleware, requireRole(roles.STOCK_AD
             createdAt: po.createdAt,
         })));
     } catch (err) {
-        console.error('Error loading purchase orders:', err);
-        res.status(500).json({ message: 'Failed to load purchase orders' });
+        console.error('❌ [Load Purchase Orders]: Error:', err);
+        res.status(500).json({ message: 'Failed to load purchase orders', error: err.message });
     }
 });
 
@@ -2642,7 +2725,7 @@ app.post('/api/stock/purchase-orders', authMiddleware, requireRole(roles.STOCK_A
 
         res.status(201).json({ message: 'Purchase order created successfully', id: purchaseOrder._id, poNumber: purchaseOrder.poNumber });
     } catch (err) {
-        console.error('Error creating purchase order:', err);
+        console.error('❌ [Create Purchase Order]: Error:', err);
         res.status(500).json({ message: 'Failed to create purchase order', error: err.message });
     }
 });
@@ -2677,7 +2760,7 @@ app.put('/api/stock/purchase-orders/:id', authMiddleware, requireRole(roles.STOC
         await purchaseOrder.save();
         res.json({ message: 'Purchase order updated successfully' });
     } catch (err) {
-        console.error('Error updating purchase order:', err);
+        console.error('❌ [Update Purchase Order]: Error:', err);
         res.status(500).json({ message: 'Failed to update purchase order', error: err.message });
     }
 });
@@ -2716,7 +2799,7 @@ app.post('/api/stock/purchase-orders/:id/receive', authMiddleware, requireRole(r
 
         res.json({ message: 'Purchase order received and stock updated successfully' });
     } catch (err) {
-        console.error('Error receiving purchase order:', err);
+        console.error('❌ [Receive Purchase Order]: Error:', err);
         res.status(500).json({ message: 'Failed to receive purchase order', error: err.message });
     }
 });
@@ -2812,7 +2895,7 @@ app.post('/api/stock/import/excel', authMiddleware, requireRole(roles.STOCK_ADMI
             results,
         });
     } catch (err) {
-        console.error('Error importing Excel:', err);
+        console.error('❌ [Import Excel]: Error:', err);
         if (req.file && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
@@ -2856,8 +2939,8 @@ app.get('/api/stock/import/template', authMiddleware, requireRole(roles.STOCK_AD
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.send(buffer);
     } catch (err) {
-        console.error('Error generating template:', err);
-        res.status(500).json({ message: 'Failed to generate template' });
+        console.error('❌ [Generate Template]: Error:', err);
+        res.status(500).json({ message: 'Failed to generate template', error: err.message });
     }
 });
 
@@ -2928,8 +3011,8 @@ app.post('/api/stock/ai/recommendations', authMiddleware, requireRole(roles.STOC
             totalEstimatedCost: recommendations.reduce((sum, r) => sum + r.estimatedCost, 0),
         });
     } catch (err) {
-        console.error('Error generating recommendations:', err);
-        res.status(500).json({ message: 'Failed to generate recommendations' });
+        console.error('❌ [Generate Recommendations]: Error:', err);
+        res.status(500).json({ message: 'Failed to generate recommendations', error: err.message });
     }
 });
 
@@ -2989,8 +3072,8 @@ app.get('/api/stock/ai/insights', authMiddleware, requireRole(roles.STOCK_ADMIN)
             ],
         });
     } catch (err) {
-        console.error('Error generating insights:', err);
-        res.status(500).json({ message: 'Failed to generate insights' });
+        console.error('❌ [Generate Insights]: Error:', err);
+        res.status(500).json({ message: 'Failed to generate insights', error: err.message });
     }
 });
 
@@ -3006,7 +3089,7 @@ app.post('/api/stock/price-comparison', authMiddleware, requireRole(roles.STOCK_
         const results = await scraperService.comparePrices(query);
         res.json({ results });
     } catch (error) {
-        console.error('Price comparison error:', error);
+        console.error('❌ [Price Comparison]: Error:', error);
         res.status(500).json({ message: 'Failed to fetch prices', error: error.message });
     }
 });
@@ -3019,13 +3102,9 @@ const startServer = async () => {
         await connectDB();
         app.listen(PORT, () => {
             console.log(`\n🚀 Server running on http://localhost:${PORT}`);
-            console.log('\n📋 Login credentials:');
-            console.log('   Super User: EMP-001 / password123');
-            console.log('   Employee:   EMP-002 / password123');
-            console.log('   Intern:     EMP-003 / password123');
         });
     } catch (error) {
-        console.error('Failed to start server:', error);
+        console.error('❌ [Start Server]: Failed to start server:', error);
         process.exit(1);
     }
 };

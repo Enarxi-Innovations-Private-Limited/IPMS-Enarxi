@@ -584,7 +584,7 @@ export default function SuperUserProjectsPage() {
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">End Date</label>
                                     <input
                                         type="date"
-                                        min={new Date().toISOString().split('T')[0]}
+                                        min={createForm.startDate || new Date().toISOString().split('T')[0]}
                                         className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.endDate}
                                         onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })}
@@ -677,7 +677,7 @@ export default function SuperUserProjectsPage() {
                                 <span className="material-symbols-outlined text-amber-400">edit</span>Edit Project
                             </h2>
                         </div>
-                        <form onSubmit={handleEditProject} className="p-6 space-y-4">
+                        <form onSubmit={handleEditProject} className="p-6 space-y-4 overflow-y-auto max-h-[80vh]">
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Name *</label>
                                 <input type="text" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
