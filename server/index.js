@@ -18,38 +18,9 @@ const roles = {
   INTERN: 'INTERN',
 };
 
-// Seed users (password: password123)
-const passwordHash = bcrypt.hashSync('password123', 10);
 
-const users = [
-  {
-    id: 'u1',
-    name: 'CEO User',
-    email: 'ceo@company.com',
-    employeeId: 'EMP-001',
-    passwordHash,
-    role: roles.SUPER_USER,
-    department: null, // Super users don't belong to a department
-  },
-  {
-    id: 'u2',
-    name: 'Employee User',
-    email: 'employee@company.com',
-    employeeId: 'EMP-002',
-    passwordHash,
-    role: roles.EMPLOYEE,
-    department: 'SOFTWARE',
-  },
-  {
-    id: 'u3',
-    name: 'Intern User',
-    email: 'intern@company.com',
-    employeeId: 'EMP-003',
-    passwordHash,
-    role: roles.INTERN,
-    department: 'HARDWARE',
-  },
-];
+// In-memory users array (empty - add users via API)
+const users = [];
 
 // Projects and tasks in-memory
 const projects = [];

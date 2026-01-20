@@ -63,119 +63,96 @@ export default function LoginPage() {
 
       {/* Main Content */}
       <main className="relative z-10 flex-grow flex items-center justify-center p-4">
-        <div className="layout-content-container flex flex-col max-w-[1000px] w-full flex-1">
-          <div className="grid lg:grid-cols-2 gap-8 items-center">
-            {/* Left Side - Image/Visualization (hidden on mobile) */}
-            <div className="hidden lg:flex flex-col gap-6 pr-8">
-              <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden shadow-2xl border border-white/5 group">
-                <div className="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" style={{ backgroundImage: 'url("https://lh3.googleusercontent.com/aida-public/AB6AXuCIqqCzohJ3p2p9NYVW0FEmzZxPINNAzMsp-HF9lQUApmpEX2dTMV56FD_Jd8VURjYGx-Jh7m_IyMKSAbvmF1uSu0ZhtPQ-wINOnx_2JVNr9-zDgc8UcpBQBkOc-sQqrqpS1Nvx-3X20QM7ifBWZvEUtSHnaX23oWF_yA39CkIuYl0vw2cGHuam9RxiAEbdk1UlKHDlBfD0SfDUeXVJAXSz-55FkqXMi0cNWOOHYJmCkxh2qLUXe2sj7Rm7D_77xAxODq00eMSYIQ")' }}></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-background-dark/90 via-background-dark/40 to-transparent"></div>
-                <div className="absolute bottom-0 left-0 p-8">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/20 border border-primary/30 text-primary text-xs font-bold uppercase tracking-wider mb-3">
-                    <span className="size-2 rounded-full bg-primary animate-pulse"></span>
-                    System Operational
-                  </div>
-                  <h3 className="text-2xl font-bold text-white mb-2">Secure Gateway</h3>
-                  <p className="text-slate-400 text-sm leading-relaxed max-w-sm">
-                    Access the centralized dashboard for hardware tracking, ticket management, and IT resource allocation.
-                  </p>
-                </div>
+        <div className="flex items-center justify-center w-full">
+          {/* Centered Login Form */}
+          <div className="w-full max-w-[480px] glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
+            <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-2 mb-2">
+                <h1 className="text-white text-3xl font-black leading-tight tracking-tight">Welcome Back</h1>
+                <p className="text-[#92a4c9] text-base font-normal">Please sign in to your IPMS account</p>
               </div>
-            </div>
 
-            {/* Right Side - Login Form */}
-            <div className="flex justify-center w-full">
-              <div className="w-full max-w-[480px] glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-col gap-2 mb-2">
-                    <h1 className="text-white text-3xl font-black leading-tight tracking-tight">Welcome Back</h1>
-                    <p className="text-[#92a4c9] text-base font-normal">Please sign in to your IPMS account</p>
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2">
+                  <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>id_card</span>
+                    Employee ID
+                  </label>
+                  <input
+                    className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
+                    placeholder="e.g. EMP-001"
+                    type="text"
+                    value={employeeId}
+                    onChange={(e) => setEmployeeId(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>lock</span>
+                      Password
+                    </label>
                   </div>
-
-                  {error && (
-                    <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>id_card</span>
-                        Employee ID
-                      </label>
-                      <input
-                        className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
-                        placeholder="e.g. EMP-001"
-                        type="text"
-                        value={employeeId}
-                        onChange={(e) => setEmployeeId(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
-                          <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>lock</span>
-                          Password
-                        </label>
-                      </div>
-                      <div className="relative">
-                        <input
-                          className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 pr-12 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
-                          placeholder="••••••••"
-                          type={showPassword ? 'text' : 'password'}
-                          value={password}
-                          onChange={(e) => setPassword(e.target.value)}
-                          required
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute inset-y-0 right-0 flex items-center px-4 text-[#92a4c9] hover:text-white cursor-pointer transition-colors focus:outline-none"
-                        >
-                          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
-                            {showPassword ? 'visibility' : 'visibility_off'}
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between mt-1">
-                      <label className="flex items-center gap-2 cursor-pointer group">
-                        <div className="relative flex items-center">
-                          <input
-                            className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-[#324467] bg-[#192233] checked:border-primary checked:bg-primary transition-all"
-                            type="checkbox"
-                            checked={rememberMe}
-                            onChange={(e) => setRememberMe(e.target.checked)}
-                          />
-                          <span className="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[12px] text-white opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
-                        </div>
-                        <span className="text-sm text-[#92a4c9] group-hover:text-white transition-colors">Remember me</span>
-                      </label>
-                      <a className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors" href="#">
-                        Forgot Password?
-                      </a>
-                    </div>
-
+                  <div className="relative">
+                    <input
+                      className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 pr-12 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
+                      placeholder="••••••••"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
                     <button
-                      type="submit"
-                      disabled={loading}
-                      className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-base tracking-wide shadow-[0_4px_14px_0_rgba(19,91,236,0.39)] transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 flex items-center px-4 text-[#92a4c9] hover:text-white cursor-pointer transition-colors focus:outline-none"
                     >
-                      <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
-                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
+                      <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+                        {showPassword ? 'visibility' : 'visibility_off'}
+                      </span>
                     </button>
-                  </form>
-
-                  <div className="mt-8 pt-6 border-t border-[#324467]/50 flex items-center justify-between text-xs text-[#92a4c9]">
-                    <p>© 2024 IPMS Inc.</p>
-                    <p>v2.4.0 (Stable)</p>
                   </div>
                 </div>
+
+                <div className="flex items-center justify-between mt-1">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <div className="relative flex items-center">
+                      <input
+                        className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-[#324467] bg-[#192233] checked:border-primary checked:bg-primary transition-all"
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                      />
+                      <span className="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[12px] text-white opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
+                    </div>
+                    <span className="text-sm text-[#92a4c9] group-hover:text-white transition-colors">Remember me</span>
+                  </label>
+                  <a className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors" href="#">
+                    Forgot Password?
+                  </a>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-base tracking-wide shadow-[0_4px_14px_0_rgba(19,91,236,0.39)] transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
+                  <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
+                </button>
+              </form>
+
+              <div className="mt-8 pt-6 border-t border-[#324467]/50 flex items-center justify-between text-xs text-[#92a4c9]">
+
               </div>
             </div>
           </div>

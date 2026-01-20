@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import api from '../../services/api.js';
+import { getCurrentUser } from '../../services/authService.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
 import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
 
@@ -298,6 +299,38 @@ const DroppableTeamMember = ({ member, isAssigned, onRemove, assignedTasks, onUn
     );
 };
 
+// Droppable Completed Zone
+const DroppableCompletedZone = () => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: 'COMPLETED_ZONE',
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`rounded-lg border-2 border-dashed transition-all mb-4 ${isOver
+                ? 'bg-green-500/20 border-green-500 shadow-[0_0_15px_rgba(34,197,94,0.3)] scale-[1.02]'
+                : 'bg-background-dark/30 border-border-dark hover:border-green-500/50'
+                }`}
+        >
+            <div className="p-4 flex flex-col items-center justify-center text-center gap-2">
+                <div className={`size-10 rounded-full flex items-center justify-center transition-colors ${isOver ? 'bg-green-500 text-white animate-bounce' : 'bg-green-500/10 text-green-500'
+                    }`}>
+                    <span className="material-symbols-outlined text-xl">check_circle</span>
+                </div>
+                <div>
+                    <p className={`text-sm font-bold ${isOver ? 'text-green-400' : 'text-text-secondary'}`}>
+                        Mark as Completed
+                    </p>
+                    <p className="text-[10px] text-text-secondary/70">
+                        Drag here to complete & assign to yourself
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export default function ManagerProjectsPage() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -331,6 +364,7 @@ export default function ManagerProjectsPage() {
 
     // Collapsible & Attachments State
     const [isTasksExpanded, setIsTasksExpanded] = useState(true);
+    const [isCompletedExpanded, setIsCompletedExpanded] = useState(false);
     const [isAttachmentsExpanded, setIsAttachmentsExpanded] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [attachmentName, setAttachmentName] = useState('');
@@ -534,7 +568,35 @@ export default function ManagerProjectsPage() {
     const handleDragEnd = async (event) => {
         const { active, over } = event;
 
-        if (over && active.id !== over.id) {
+        if (!over) return;
+
+        // Handle Drop to Completed Zone
+        if (over.id === 'COMPLETED_ZONE') {
+            const taskId = active.id;
+            const currentUser = getCurrentUser(); // Get logged in manager
+
+            if (window.confirm('Mark this task as COMPLETED and assign to yourself?')) {
+                try {
+                    // Optimistic UI Update
+                    setTasks(prev => prev.map(t =>
+                        t.id === taskId ? { ...t, status: 'COMPLETED', assigneeId: currentUser.id } : t
+                    ));
+
+                    await api.put(`/tasks/${taskId}`, {
+                        status: 'COMPLETED',
+                        assigneeId: currentUser.id, // Assign to manager
+                    });
+                } catch (err) {
+                    console.error("Failed to complete task", err);
+                    alert("Failed to complete task");
+                    loadData(); // Revert
+                }
+            }
+            return;
+        }
+
+        if (active.id !== over.id) {
+            // Task Assignment Logic
             // Active.id is Task ID
             // Over.id is User ID (Assignee ID)
             const taskId = active.id;
@@ -980,9 +1042,65 @@ export default function ManagerProjectsPage() {
                                     )}
 
                                     <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                                        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs text-primary mb-4 text-center">
+                                        <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-xs text-primary mb-2 text-center">
                                             <span className="material-symbols-outlined text-lg block mb-1">drag_indicator</span>
                                             Drag a task to a team member to assign it.
+                                        </div>
+
+                                        {/* Completed Drop Zone */}
+                                        <DroppableCompletedZone />
+
+                                        {/* Completed Tasks List (Sidebar) */}
+                                        <div className="mb-4 bg-black/20 rounded-lg overflow-hidden border border-border-dark/50">
+                                            <button
+                                                onClick={() => setIsCompletedExpanded(!isCompletedExpanded)}
+                                                className="w-full px-3 py-2 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-green-400 hover:bg-white/5 transition-colors"
+                                            >
+                                                <span className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                    Completed ({tasks.filter(t => t.projectId === selectedProject.id && t.status === 'COMPLETED').length})
+                                                </span>
+                                                <span className={`material-symbols-outlined text-sm transition-transform ${isCompletedExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                                            </button>
+
+                                            {isCompletedExpanded && (
+                                                <div className="border-t border-border-dark/30 max-h-60 overflow-y-auto custom-scrollbar">
+                                                    {tasks.filter(t => t.projectId === selectedProject.id && t.status === 'COMPLETED').length > 0 ? (
+                                                        <div className="divide-y divide-border-dark/30">
+                                                            {tasks
+                                                                .filter(t => t.projectId === selectedProject.id && t.status === 'COMPLETED')
+                                                                .map((task) => (
+                                                                    <div
+                                                                        key={task.id}
+                                                                        onClick={() => openTaskDetail(task)}
+                                                                        className="p-2 hover:bg-white/5 transition-colors cursor-pointer group"
+                                                                    >
+                                                                        <p className="text-white text-xs font-medium line-clamp-2 mb-1">{task.title}</p>
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <span className="text-[10px] text-text-secondary truncate">
+                                                                                By: {users.find(u => u.id === task.assigneeId)?.name || 'Unknown'}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (window.confirm('Reopen this task?')) {
+                                                                                        handleTaskApproval(task.id, 'IN_PROGRESS');
+                                                                                    }
+                                                                                }}
+                                                                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-dark text-text-secondary hover:text-white transition-all"
+                                                                                title="Reopen"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-sm">undo</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[10px] text-text-secondary italic text-center py-2">No completed tasks.</p>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {getTeamMembers(selectedProject).length > 0 ? (

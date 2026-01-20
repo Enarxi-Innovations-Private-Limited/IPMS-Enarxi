@@ -838,6 +838,29 @@ export default function SuperUserProjectsPage() {
                                 </div>
                             </div>
 
+                            {/* Assigned Manager */}
+                            <div className="mb-6">
+                                <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-base">person_outline</span>Assigned Manager
+                                </h3>
+                                {selectedProject.managerName ? (
+                                    <div className="flex items-center gap-3 bg-background-dark/50 px-4 py-3 rounded-lg border border-border-dark inline-flex min-w-[200px]">
+                                        <div className="size-10 rounded-full bg-gradient-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
+                                            <span className="text-white text-sm font-bold">{selectedProject.managerName.charAt(0)}</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-white text-base font-bold">{selectedProject.managerName}</p>
+                                            <p className="text-primary text-xs font-medium uppercase tracking-wide">Project Manager</p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-border-dark bg-background-dark/30 text-text-secondary/70">
+                                        <span className="material-symbols-outlined text-lg">person_off</span>
+                                        <span className="text-sm italic">No manager assigned yet</span>
+                                    </div>
+                                )}
+                            </div>
+
                             {/* Team Members */}
                             <div className="mb-6">
                                 <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
