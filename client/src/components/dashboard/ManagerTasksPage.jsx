@@ -87,6 +87,14 @@ export default function ManagerTasksPage() {
 
     // Respond to a query
     const handleRespondToQuery = async (queryId) => {
+        console.log('📝 Manager responding to query:', { queryId, hasResponse: !!responseText.trim(), taskId: detailTask?.id });
+
+        if (!queryId) {
+            console.error('❌ Query ID is missing!');
+            setError('Query ID is missing. Please refresh and try again.');
+            return;
+        }
+
         if (!responseText.trim() || !detailTask) return;
         try {
             setSubmittingResponse(true);
@@ -395,71 +403,74 @@ export default function ManagerTasksPage() {
                                 </h3>
                                 {detailTask.queries && detailTask.queries.length > 0 ? (
                                     <div className="space-y-4">
-                                        {detailTask.queries.map((q, idx) => (
-                                            <div key={q.id || idx} className={`border rounded-lg p-4 ${q.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <p className="text-white text-sm font-medium">{q.question}</p>
-                                                        <p className="text-text-secondary text-xs mt-1">
-                                                            From: {q.userName || 'Unknown'} • {new Date(q.createdAt).toLocaleString()}
-                                                        </p>
+                                        {detailTask.queries.map((q, idx) => {
+                                            const qId = q._id ? String(q._id) : (q.id ? String(q.id) : null);
+                                            return (
+                                                <div key={qId || idx} className={`border rounded-lg p-4 ${q.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
+                                                    <div className="flex items-start justify-between gap-4">
+                                                        <div className="flex-1">
+                                                            <p className="text-white text-sm font-medium">{q.question}</p>
+                                                            <p className="text-text-secondary text-xs mt-1">
+                                                                From: {q.userName || 'Unknown'} • {new Date(q.createdAt).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${q.status === 'PENDING' ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
+                                                            {q.status}
+                                                        </span>
                                                     </div>
-                                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${q.status === 'PENDING' ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
-                                                        {q.status}
-                                                    </span>
-                                                </div>
 
-                                                {q.status === 'RESOLVED' && q.response && (
-                                                    <div className="mt-3 pt-3 border-t border-border-dark">
-                                                        <p className="text-green-400 text-sm">
-                                                            <span className="font-medium">Response:</span> {q.response}
-                                                        </p>
-                                                        <p className="text-text-secondary text-xs mt-1">
-                                                            By: {q.respondedByName || 'Manager'} • {new Date(q.respondedAt).toLocaleString()}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                    {q.status === 'RESOLVED' && q.response && (
+                                                        <div className="mt-3 pt-3 border-t border-border-dark">
+                                                            <p className="text-green-400 text-sm">
+                                                                <span className="font-medium">Response:</span> {q.response}
+                                                            </p>
+                                                            <p className="text-text-secondary text-xs mt-1">
+                                                                By: {q.respondedByName || 'Manager'} • {new Date(q.respondedAt).toLocaleString()}
+                                                            </p>
+                                                        </div>
+                                                    )}
 
-                                                {q.status === 'PENDING' && (
-                                                    <div className="mt-3 pt-3 border-t border-border-dark">
-                                                        {respondingToQuery === q.id ? (
-                                                            <div className="space-y-2">
-                                                                <textarea
-                                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
-                                                                    placeholder="Type your response..."
-                                                                    rows={2}
-                                                                    value={responseText}
-                                                                    onChange={(e) => setResponseText(e.target.value)}
-                                                                ></textarea>
-                                                                <div className="flex gap-2">
-                                                                    <button
-                                                                        onClick={() => handleRespondToQuery(q.id)}
-                                                                        disabled={!responseText.trim() || submittingResponse}
-                                                                        className="px-4 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                                                                    >
-                                                                        {submittingResponse ? 'Sending...' : 'Send Response'}
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => { setRespondingToQuery(null); setResponseText(''); }}
-                                                                        className="px-4 py-1.5 rounded-lg border border-border-dark text-white text-sm font-medium hover:bg-background-dark transition-colors"
-                                                                    >
-                                                                        Cancel
-                                                                    </button>
+                                                    {q.status === 'PENDING' && (
+                                                        <div className="mt-3 pt-3 border-t border-border-dark">
+                                                            {respondingToQuery === qId ? (
+                                                                <div className="space-y-2">
+                                                                    <textarea
+                                                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
+                                                                        placeholder="Type your response..."
+                                                                        rows={2}
+                                                                        value={responseText}
+                                                                        onChange={(e) => setResponseText(e.target.value)}
+                                                                    ></textarea>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => handleRespondToQuery(qId)}
+                                                                            disabled={!responseText.trim() || submittingResponse}
+                                                                            className="px-4 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50"
+                                                                        >
+                                                                            {submittingResponse ? 'Sending...' : 'Send Response'}
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => { setRespondingToQuery(null); setResponseText(''); }}
+                                                                            className="px-4 py-1.5 rounded-lg border border-border-dark text-white text-sm font-medium hover:bg-background-dark transition-colors"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => setRespondingToQuery(q.id)}
-                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-base">reply</span>
-                                                                Respond
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ))}
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => setRespondingToQuery(qId)}
+                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-base">reply</span>
+                                                                    Respond
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <p className="text-text-secondary text-sm">No queries raised.</p>

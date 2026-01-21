@@ -1533,6 +1533,61 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
     })));
 });
 
+// Get single task by ID
+app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
+    try {
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({ message: 'Invalid task ID' });
+        }
+
+        const task = await Task.findById(req.params.id).populate('projectId', 'name projectCode');
+        if (!task) {
+            return res.status(404).json({ message: 'Task not found' });
+        }
+
+        // Check permissions
+        const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
+        const isManager = req.user.role === roles.MANAGER;
+        const isSuperUser = req.user.role === roles.SUPER_USER;
+
+        // Employees/Interns can only view their own tasks
+        if (isEmployeeOrIntern && task.assigneeId && task.assigneeId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to view this task' });
+        }
+
+        // Managers can only view tasks in their department projects
+        if (isManager && task.projectId) {
+            const project = await Project.findById(task.projectId);
+            if (project && project.department !== req.user.department) {
+                return res.status(403).json({ message: 'Not authorized to view this task' });
+            }
+        }
+
+        res.json({
+            id: task._id,
+            _id: task._id,
+            title: task.title,
+            description: task.description,
+            status: task.status,
+            projectId: task.projectId?._id,
+            projectName: isEmployeeOrIntern ? null : (task.projectId?.name || 'Unknown'),
+            projectCode: task.projectId?.projectCode || null,
+            assigneeId: task.assigneeId,
+            assignedAt: task.assignedAt,
+            deadline: task.deadline,
+            completedAt: task.completedAt,
+            allocatedMinutes: task.allocatedMinutes,
+            actualMinutes: task.actualMinutes,
+            performanceScore: task.performanceScore,
+            comments: task.comments,
+            queries: task.queries, // This preserves the MongoDB _id for each query
+        });
+    } catch (err) {
+        console.error('❌ [Get Task]: Error:', err);
+        res.status(500).json({ message: 'Failed to load task', error: err.message });
+    }
+});
+
 app.post('/api/tasks', authMiddleware, async (req, res) => {
     try {
         const { title, description, projectId, assigneeId, deadline } = req.body;
@@ -2095,7 +2150,9 @@ app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRo
 
         query.response = response;
         query.responseBy = req.user._id;
+        query.responseByName = req.user.name;
         query.status = 'RESOLVED';
+        query.respondedAt = new Date();
         query.resolvedAt = new Date();
 
         await task.save();

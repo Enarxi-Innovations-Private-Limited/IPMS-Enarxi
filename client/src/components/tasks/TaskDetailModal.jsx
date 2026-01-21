@@ -72,6 +72,14 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
     // Respond to a query
     const handleRespondToQuery = async (queryId) => {
         const taskId = activeTask._id || activeTask.id;
+        console.log('📝 Responding to query:', { queryId, taskId, hasResponse: !!responseText.trim() });
+
+        if (!queryId) {
+            console.error('❌ Query ID is missing!');
+            setError('Query ID is missing. Please refresh and try again.');
+            return;
+        }
+
         if (!responseText.trim() || !taskId) return;
         try {
             setSubmittingResponse(true);
@@ -274,7 +282,13 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                         {activeTask.queries && activeTask.queries.length > 0 ? (
                             <div className="space-y-4">
                                 {activeTask.queries.map((q, idx) => {
-                                    const qId = q._id || q.id;
+                                    // MongoDB subdocument _id needs to be converted to string
+                                    const qId = q._id ? String(q._id) : (q.id ? String(q.id) : null);
+
+                                    if (!qId) {
+                                        console.warn('⚠️ Query missing ID:', q);
+                                    }
+
                                     return (
                                         <div key={qId || idx} className={`border rounded-lg p-4 transition-colors ${q.status === 'PENDING' ? 'bg-amber-500/5 border-amber-500/30 hover:border-amber-500/50' : 'bg-green-500/5 border-green-500/30'}`}>
                                             <div className="flex items-start justify-between gap-4">

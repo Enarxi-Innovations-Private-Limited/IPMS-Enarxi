@@ -1,8 +1,82 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import api from '../../services/api.js';
 import EmployeeLayout from '../common/EmployeeLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
+
+// Kanban Components
+const KanbanTaskCard = ({ task, onClick }) => {
+    const { attributes, listeners, setNodeRef, transform } = useDraggable({
+        id: task.id,
+        data: { task }
+    });
+
+    const style = transform ? {
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+        zIndex: 1000,
+    } : undefined;
+
+    const getBorderColor = (status) => {
+        switch (status) {
+            case 'NOT_STARTED': return 'border-l-blue-500'; // New
+            case 'IN_PROGRESS': return 'border-l-amber-500'; // In Progress
+            case 'WAITING_APPROVAL': return 'border-l-purple-500'; // Waiting
+            case 'COMPLETED': return 'border-l-green-500'; // Closed
+            default: return 'border-l-gray-500';
+        }
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            {...listeners}
+            {...attributes}
+            onClick={onClick}
+            className={`bg-white dark:bg-surface-dark p-3 rounded shadow-sm border border-border-dark ${getBorderColor(task.status)} border-l-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow mb-3`}
+        >
+            <div className="flex justify-between items-start mb-2">
+                <span className="text-[10px] uppercase font-bold text-text-secondary tracking-wider">TASK</span>
+                <span className="text-[10px] text-text-secondary">#{task.id.slice(-4)}</span>
+            </div>
+            <h4 className="text-white font-medium text-sm mb-3 line-clamp-2">{task.title}</h4>
+            <div className="flex justify-between items-center">
+                {/* Placeholder for Avatar if needed, using user initial or generic */}
+                <div className="size-6 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center text-[10px] text-white font-bold">
+                    ME
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: id,
+        data: { status }
+    });
+
+    return (
+        <div ref={setNodeRef} className={`flex-1 min-w-[280px] bg-background-dark/30 rounded-xl p-4 border border-border-dark/50 flex flex-col ${isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}>
+            <div className={`border-t-4 ${color} pt-3 mb-4 flex justify-between items-center`}>
+                <h3 className="font-bold text-white text-base">{title}</h3>
+                <span className="bg-white/10 text-text-secondary text-xs px-2 py-0.5 rounded-full">{tasks.length}</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2 min-h-[100px]">
+                {tasks.map(task => (
+                    <KanbanTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
+                ))}
+                {tasks.length === 0 && (
+                    <div className="text-center py-8 text-text-secondary text-xs italic">
+                        No tasks
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
 
 export default function EmployeeProjectsPage() {
     const navigate = useNavigate();
@@ -43,7 +117,8 @@ export default function EmployeeProjectsPage() {
 
     const getProjectTasks = (projectId) => {
         // Convert to string for comparison since MongoDB ObjectIds may not match directly
-        return tasks.filter((t) => String(t.projectId) === String(projectId));
+        // Filter by projectId AND assigneeId (only show tasks assigned to current user)
+        return tasks.filter((t) => String(t.projectId) === String(projectId) && String(t.assigneeId) === String(user?.id));
     };
 
     const getProjectStats = (projectId) => {
@@ -301,64 +376,79 @@ export default function EmployeeProjectsPage() {
                             )}
                         </div>
 
-                        {/* Project Tasks */}
-                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
+                        {/* Kanban Board */}
+                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden h-[calc(100vh-200px)] flex flex-col">
                             <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">task_alt</span>
-                                    Project Tasks
+                                    <span className="material-symbols-outlined text-primary">view_kanban</span>
+                                    Project Board
                                 </h2>
                             </div>
-                            <div className="p-6">
-                                {projectTasks.length > 0 ? (
-                                    <div className="space-y-4">
-                                        {projectTasks.map((task) => (
-                                            <div
-                                                key={task.id}
-                                                className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors"
-                                            >
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1">
-                                                        <h4 className="text-white font-medium mb-1">{task.title}</h4>
-                                                        <p className="text-text-secondary text-sm">
-                                                            {task.description || 'No description'}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                {task.assigneeId === user.id ? (
-                                                    task.status === 'WAITING_APPROVAL' ? (
-                                                        <span className="text-yellow-400 text-xs italic">⏳ Pending Manager Approval</span>
-                                                    ) : task.status === 'COMPLETED' ? (
-                                                        <span className="text-green-400 text-xs">✓ Approved & Completed</span>
-                                                    ) : (
-                                                        <select
-                                                            className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-xs font-medium focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                                            value={statusUpdate[task.id] || task.status}
-                                                            onChange={(e) => handleTaskStatusChange(task.id, e.target.value)}
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        >
-                                                            {(statusUpdate[task.id] || task.status) === 'NOT_STARTED' && <option value="NOT_STARTED">Not Started</option>}
-                                                            <option value="IN_PROGRESS">In Progress</option>
-                                                            <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
-                                                        </select>
-                                                    )
-                                                ) : (
-                                                    <span
-                                                        className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${task.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400'
-                                                            : task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400'
-                                                                : task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400'
-                                                                    : 'bg-gray-500/20 text-gray-400'
-                                                            }`}
-                                                    >
-                                                        {task.status.replace('_', ' ')}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        ))}
+
+                            <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
+                                <DndContext onDragEnd={(event) => {
+                                    const { active, over } = event;
+                                    if (!over) return;
+
+                                    const taskId = active.id;
+                                    const newStatus = over.data.current?.status;
+                                    const task = projectTasks.find(t => t.id === taskId); // Changed 'tasks' to 'projectTasks'
+
+                                    if (task && newStatus && task.status !== newStatus) {
+                                        // Logic handling:
+                                        // Employees can move NOT_STARTED -> IN_PROGRESS -> WAITING_APPROVAL
+                                        // They cannot move to COMPLETED directly (Manager does that)
+                                        // They cannot move back from COMPLETED (usually)
+
+                                        if (task.status === 'COMPLETED') {
+                                            if (!window.confirm("This task is already approved and completed. Are you sure you want to reopen it?")) return;
+                                        }
+
+                                        handleTaskStatusChange(taskId, newStatus);
+                                    }
+                                }}>
+                                    <div className="flex gap-6 h-full min-w-[900px]">
+                                        {/* New / Not Started */}
+                                        <KanbanColumn
+                                            id="col-new"
+                                            title="New"
+                                            status="NOT_STARTED"
+                                            color="border-t-blue-500"
+                                            tasks={projectTasks.filter(t => t.status === 'NOT_STARTED')}
+                                            onTaskClick={(t) => { }} // Could open detail
+                                        />
+
+                                        {/* In Progress */}
+                                        <KanbanColumn
+                                            id="col-progress"
+                                            title="In Progress"
+                                            status="IN_PROGRESS"
+                                            color="border-t-amber-500"
+                                            tasks={projectTasks.filter(t => t.status === 'IN_PROGRESS')}
+                                            onTaskClick={(t) => { }}
+                                        />
+
+                                        {/* Ready for Approval / Closed */}
+                                        <KanbanColumn
+                                            id="col-review"
+                                            title="Ready for Review"
+                                            status="WAITING_APPROVAL"
+                                            color="border-t-purple-500"
+                                            tasks={projectTasks.filter(t => t.status === 'WAITING_APPROVAL')}
+                                            onTaskClick={(t) => { }}
+                                        />
+
+                                        {/* Completed (Read Only/Reference) */}
+                                        <KanbanColumn
+                                            id="col-done"
+                                            title="Approved / Closed"
+                                            status="COMPLETED"
+                                            color="border-t-green-500"
+                                            tasks={projectTasks.filter(t => t.status === 'COMPLETED')}
+                                            onTaskClick={(t) => { }}
+                                        />
                                     </div>
-                                ) : (
-                                    <p className="text-text-secondary text-center py-8">No tasks in this project yet.</p>
-                                )}
+                                </DndContext>
                             </div>
                         </div>
                     </div>

@@ -40,8 +40,10 @@ const taskSchema = new mongoose.Schema({
         question: String,
         response: String,
         responseBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        responseByName: String,
         status: { type: String, enum: ['PENDING', 'RESOLVED'], default: 'PENDING' },
         createdAt: { type: Date, default: Date.now },
+        respondedAt: Date,
         resolvedAt: Date
     }],
     // Deadline and Performance Tracking Fields
