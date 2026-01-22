@@ -25,6 +25,7 @@ export default function EmployeeTasksPage() {
     // Filter state
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [projectFilter, setProjectFilter] = useState('ALL');
+    const [searchTerm, setSearchTerm] = useState('');
 
 
 
@@ -101,6 +102,15 @@ export default function EmployeeTasksPage() {
     const filteredTasks = myTasks.filter((t) => {
         if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
         if (projectFilter !== 'ALL' && t.projectId !== projectFilter) return false;
+        // Search filter
+        if (searchTerm) {
+            const search = searchTerm.toLowerCase();
+            const matchesTitle = t.title?.toLowerCase().includes(search);
+            const matchesDescription = t.description?.toLowerCase().includes(search);
+            const projectCode = projects.find(p => p.id === t.projectId)?.projectCode?.toLowerCase();
+            const matchesProject = projectCode?.includes(search);
+            if (!matchesTitle && !matchesDescription && !matchesProject) return false;
+        }
         return true;
     });
 
@@ -188,37 +198,59 @@ export default function EmployeeTasksPage() {
                         </div>
                     </div>
 
-                    {/* Filters */}
-                    <div className="flex flex-wrap gap-4 mb-6">
-                        <div>
-                            <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
-                                Status
-                            </label>
-                            <select
-                                className="bg-surface-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                                <option value="ALL">All Status</option>
-                                <option value="NOT_STARTED">Not Started</option>
-                                <option value="IN_PROGRESS">In Progress</option>
-                                <option value="COMPLETED">Completed</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
-                                Project
-                            </label>
-                            <select
-                                className="bg-surface-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                value={projectFilter}
-                                onChange={(e) => setProjectFilter(e.target.value)}
-                            >
-                                <option value="ALL">All Projects</option>
-                                {projects.map((p) => (
-                                    <option key={p.id} value={p.id}>{p.projectCode || 'No ID'}</option>
-                                ))}
-                            </select>
+                    {/* Search & Filters */}
+                    <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-6">
+                        <div className="flex flex-col md:flex-row gap-4">
+                            {/* Search Input */}
+                            <div className="flex-1">
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                    Search
+                                </label>
+                                <div className="relative">
+                                    <span className="absolute inset-y-0 left-3 flex items-center text-text-secondary">
+                                        <span className="material-symbols-outlined text-xl">search</span>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        placeholder="Search tasks..."
+                                        className="w-full pl-10 pr-4 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            {/* Status Filter */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                    Status
+                                </label>
+                                <select
+                                    className="bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Status</option>
+                                    <option value="NOT_STARTED">Not Started</option>
+                                    <option value="IN_PROGRESS">In Progress</option>
+                                    <option value="COMPLETED">Completed</option>
+                                </select>
+                            </div>
+                            {/* Project Filter */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                    Project
+                                </label>
+                                <select
+                                    className="bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    value={projectFilter}
+                                    onChange={(e) => setProjectFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Projects</option>
+                                    {projects.map((p) => (
+                                        <option key={p.id} value={p.id}>{p.projectCode || 'No ID'}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                     </div>
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getCurrentUser } from '../../services/authService.js';
-import api from '../../services/api.js';
+import api from './../../services/api.js';
 import NotificationBell from './NotificationBell';
+import GlobalSearch from './GlobalSearch';
 
 export default function InternLayout({ children, currentPage = 'dashboard' }) {
   const navigate = useNavigate();
@@ -171,19 +172,7 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
             <span className="text-white font-bold text-lg">IPMS</span>
           </div>
           <div className="hidden md:flex flex-1 max-w-xl mx-auto">
-            <div className="relative w-full group">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-text-secondary group-focus-within:text-primary transition-colors">
-                <span className="material-symbols-outlined">search</span>
-              </div>
-              <input
-                className="block w-full pl-10 pr-3 py-2.5 border-none rounded-xl leading-5 bg-surface-dark text-white placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all sm:text-sm"
-                placeholder="Search projects, tasks..."
-                type="text"
-              />
-              <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                <span className="text-xs text-text-secondary border border-border-dark px-1.5 py-0.5 rounded">⌘K</span>
-              </div>
-            </div>
+            <GlobalSearch placeholder="Search projects, tasks..." />
           </div>
           <div className="flex items-center gap-4 ml-4">
             <NotificationBell />
