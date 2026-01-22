@@ -151,13 +151,6 @@ export default function EmployeeTasksPage() {
                             <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">My Tasks</h1>
                             <p className="text-text-secondary text-lg">View and manage all your assigned tasks.</p>
                         </div>
-                        <button
-                            onClick={() => navigate('/employee')}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
-                        >
-                            <span className="material-symbols-outlined text-lg">add</span>
-                            Create Task
-                        </button>
                     </div>
 
                     {error && (
