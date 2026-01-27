@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
-import { saveAuth } from '../../services/authService.js';
+import { getCurrentUser, getToken, isTokenExpired, saveAuth } from '../../services/authService.js';
 
 const ROLE_ROUTE_MAP = {
   SUPER_USER: '/super',
@@ -17,6 +17,15 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const token = getToken();
+    const user = getCurrentUser();
+    if (token && user && !isTokenExpired(token)) {
+      const path = ROLE_ROUTE_MAP[user.role] || '/';
+      navigate(path, { replace: true });
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();

@@ -1,37 +1,75 @@
 const STORAGE_KEY = 'pms_auth';
 
 export function saveAuth(token, user) {
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      token,
-      user,
-    })
-  );
-}
-
-export function clearAuth() {
-  localStorage.removeItem(STORAGE_KEY);
+  const payload = { token, user };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
 export function getAuth() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
   } catch {
     return null;
   }
 }
 
+export function clearAuth() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
 export function getToken() {
-  const auth = getAuth();
-  return auth?.token || null;
+  return getAuth()?.token || null;
 }
 
 export function getCurrentUser() {
-  const auth = getAuth();
-  return auth?.user || null;
+  return getAuth()?.user || null;
+}
+
+function base64UrlDecode(input) {
+  // Convert base64url -> base64
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  // Pad with '='
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  // Decode
+  return decodeURIComponent(
+    atob(padded)
+      .split('')
+      .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+      .join('')
+  );
+}
+
+export function decodeJwt(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const json = base64UrlDecode(parts[1]);
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns true if token is expired (or malformed).
+ * Adds a small clock-skew buffer to prevent edge-of-expiry race conditions.
+ */
+export function isTokenExpired(token, clockSkewSeconds = 30) {
+  const payload = decodeJwt(token);
+  if (!payload || typeof payload.exp !== 'number') return true;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return payload.exp <= nowSeconds + clockSkewSeconds;
+}
+
+export function hasValidToken() {
+  const token = getToken();
+  if (!token) return false;
+  return !isTokenExpired(token);
 }
 
 

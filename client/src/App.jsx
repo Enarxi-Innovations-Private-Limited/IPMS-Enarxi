@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
 import './App.css';
 import LoginPage from './components/auth/LoginPage.jsx';
+import ProtectedRoute from './components/auth/ProtectedRoute.jsx';
 import SuperUserDashboard from './components/dashboard/SuperUserDashboard.jsx';
 import SuperUserTeamsPage from './components/dashboard/SuperUserTeamsPage.jsx';
 import SuperUserProjectsPage from './components/dashboard/SuperUserProjectsPage.jsx';
@@ -21,7 +21,7 @@ import InventoryPage from './components/stock/InventoryPage.jsx';
 import IssueReturnPage from './components/stock/IssueReturnPage.jsx';
 import PurchaseOrdersPage from './components/stock/PurchaseOrdersPage.jsx';
 import PriceComparisonPage from './components/stock/PriceComparisonPage.jsx';
-import { getCurrentUser } from './services/authService.js';
+import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
   SUPER_USER: '/super',
@@ -30,34 +30,6 @@ const ROLE_ROUTE_MAP = {
   INTERN: '/intern',
   STOCK_ADMIN: '/stock-admin',
 };
-
-function ProtectedRoute({ children, allowedRoles }) {
-  const [state, setState] = useState({ loading: true, user: null });
-
-  useEffect(() => {
-    const user = getCurrentUser();
-    setState({ loading: false, user });
-  }, []);
-
-  if (state.loading) {
-    return (
-      <div className="centered">
-        <div className="card">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!state.user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (allowedRoles && !allowedRoles.includes(state.user.role)) {
-    const redirectTo = ROLE_ROUTE_MAP[state.user.role] || '/login';
-    return <Navigate to={redirectTo} replace />;
-  }
-
-  return children;
-}
 
 function App() {
   return (
@@ -112,6 +84,14 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/employee/tasks"
+        element={
+          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
+            <EmployeeTasksPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/intern"
@@ -126,6 +106,14 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['INTERN']}>
             <InternProjectsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/intern/tasks"
+        element={
+          <ProtectedRoute allowedRoles={['INTERN']}>
+            <InternTasksPage />
           </ProtectedRoute>
         }
       />
@@ -213,8 +201,14 @@ function App() {
 }
 
 function RoleRedirect() {
+  const token = getToken();
+  if (!token || isTokenExpired(token)) {
+    clearAuth();
+    return <Navigate to="/login" replace />;
+  }
   const user = getCurrentUser();
   if (!user) {
+    clearAuth();
     return <Navigate to="/login" replace />;
   }
   const path = ROLE_ROUTE_MAP[user.role] || '/login';
