@@ -1086,15 +1086,15 @@ export default function ManagerProjectsPage() {
                                                             <div className="size-8 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                                                                 <span className="material-symbols-outlined text-lg">description</span>
                                                             </div>
-                                                            <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
+                                                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
                                                                 <p className="text-white text-sm truncate">{file.name}</p>
                                                                 <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
                                                             </a>
                                                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-1" title="Preview">
+                                                                <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-1" title="Preview">
                                                                     <span className="material-symbols-outlined text-lg">visibility</span>
                                                                 </a>
-                                                                <a href={`http://localhost:5000${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-1" title="Download">
+                                                                <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-1" title="Download">
                                                                     <span className="material-symbols-outlined text-lg">download</span>
                                                                 </a>
                                                                 <button

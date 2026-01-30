@@ -617,15 +617,15 @@ export default function EmployeeDashboard() {
                           <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                             <span className="material-symbols-outlined text-xl">description</span>
                           </div>
-                          <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
+                          <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
                             <p className="text-white text-sm font-medium truncate">{file.name}</p>
                             <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
                           </a>
                           <div className="flex items-center gap-1">
-                            <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Preview">
+                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Preview">
                               <span className="material-symbols-outlined">visibility</span>
                             </a>
-                            <a href={`http://localhost:5000${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-2" title="Download">
+                            <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-2" title="Download">
                               <span className="material-symbols-outlined">download</span>
                             </a>
                           </div>

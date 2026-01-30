@@ -759,7 +759,7 @@ export default function SuperUserProjectsPage() {
                                                 <div key={idx} className="flex items-center justify-between bg-green-500/10 border border-green-500/30 px-3 py-2 rounded-lg">
                                                     <div className="flex items-center gap-2">
                                                         <span className="material-symbols-outlined text-green-400 text-base">check_circle</span>
-                                                        <a href={`http://localhost:5001${att.url}`} target="_blank" rel="noopener noreferrer" className="text-white text-sm hover:text-primary truncate max-w-[200px]">{att.name}</a>
+                                                        <a href={`/api${att.url}`} target="_blank" rel="noopener noreferrer" className="text-white text-sm hover:text-primary truncate max-w-[200px]">{att.name}</a>
                                                     </div>
                                                 </div>
                                             ))}
@@ -921,7 +921,7 @@ export default function SuperUserProjectsPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <a
-                                                        href={`http://localhost:5000${file.url}`}
+                                                        href={`/api${file.url}`}
                                                         target="_blank"
                                                         rel="noreferrer"
                                                         className="p-1.5 text-text-secondary hover:text-white hover:bg-white/10 rounded-lg transition-colors"
@@ -930,7 +930,7 @@ export default function SuperUserProjectsPage() {
                                                         <span className="material-symbols-outlined text-lg">visibility</span>
                                                     </a>
                                                     <a
-                                                        href={`http://localhost:5000${file.url}`}
+                                                        href={`/api${file.url}`}
                                                         download
                                                         target="_blank"
                                                         rel="noreferrer"

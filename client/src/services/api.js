@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { clearAuth, getToken, isTokenExpired } from './authService.js';
 
-// Use environment variable for production, fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:5000/api`;
+// Use environment variable for production, fallback to /api for reverse proxy
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_URL,

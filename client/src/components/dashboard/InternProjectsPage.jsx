@@ -319,11 +319,11 @@ export default function InternProjectsPage() {
                                                 <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
                                                     <span className="material-symbols-outlined text-xl">description</span>
                                                 </div>
-                                                <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
+                                                <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
                                                     <p className="text-white text-sm font-medium truncate">{file.name}</p>
                                                     <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
                                                 </a>
-                                                <a href={`http://localhost:5000${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Open">
+                                                <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Open">
                                                     <span className="material-symbols-outlined">open_in_new</span>
                                                 </a>
                                             </div>
