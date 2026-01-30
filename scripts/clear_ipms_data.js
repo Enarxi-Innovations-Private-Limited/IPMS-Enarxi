@@ -15,7 +15,7 @@ try {
 }
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '../server/.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Import Models from the index file
 const {

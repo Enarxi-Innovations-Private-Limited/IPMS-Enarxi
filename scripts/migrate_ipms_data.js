@@ -14,7 +14,7 @@ try {
 }
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '../server/.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const rl = readline.createInterface({
     input: process.stdin,

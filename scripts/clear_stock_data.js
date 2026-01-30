@@ -8,7 +8,7 @@ const mongoose = require('../server/node_modules/mongoose');
 const dotenv = require('../server/node_modules/dotenv');
 
 // Load environment variables
-dotenv.config({ path: path.join(__dirname, '../server/.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Import Models
 // Adjust paths based on your actual structure

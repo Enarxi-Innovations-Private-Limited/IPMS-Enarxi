@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ipms';
+// MongoDB Atlas connection - No local fallback
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI) {
+    console.error('❌ MONGODB_URI environment variable is required!');
+    console.error('   Set it in the root .env file to connect to MongoDB Atlas.');
+    process.exit(1);
+}
 
 const connectDB = async () => {
     try {

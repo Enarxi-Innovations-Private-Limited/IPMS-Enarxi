@@ -1,6 +1,7 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
-require('dotenv').config();
+const pathModule = require('path');
+require('dotenv').config({ path: pathModule.resolve(__dirname, '../.env') });
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');

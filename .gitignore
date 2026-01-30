@@ -23,15 +23,8 @@ server/dist/
 
 # ==================== Environment Variables ====================
 # NEVER commit these - contain secrets!
-.env
-.env.local
-.env.development
-.env.development.local
-.env.test
-.env.test.local
-.env.production
-.env.production.local
-*.env
+!.env
+
 
 # ==================== Uploaded Files ====================
 # User uploaded files - should not be in git
