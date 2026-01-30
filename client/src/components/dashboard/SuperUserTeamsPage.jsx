@@ -466,9 +466,9 @@ export default function SuperUserTeamsPage() {
                                                         <span className="material-symbols-outlined text-base">{getActivityIcon(log.type)}</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-white text-sm">{log.message}</p>
+                                                        <p className="text-white text-sm">{log.action}</p>
                                                         <p className="text-text-secondary text-xs mt-1">
-                                                            by {log.userName} • {formatTimeAgo(log.timestamp)}
+                                                            by {log.userName} • {formatTimeAgo(log.createdAt)}
                                                         </p>
                                                     </div>
                                                 </div>

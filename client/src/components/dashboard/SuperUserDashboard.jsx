@@ -34,7 +34,7 @@ export default function SuperUserDashboard() {
         api.get('/projects/summary'),
         api.get('/activities'),
       ]);
-      setProjects(projRes.data);
+      setProjects(Array.isArray(projRes.data) ? projRes.data : []);
       setSummary(summaryRes.data);
       setActivities(actRes.data.slice(0, 10)); // Show only recent 10
     } catch (err) {

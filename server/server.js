@@ -716,9 +716,12 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
     let query = {};
     if (req.user.role === roles.SUPER_USER || req.user.role === roles.STOCK_ADMIN) {
         // Super users and Stock Admins see all projects
-    } else if (req.user.role === roles.MANAGER && req.user.department) {
-        // Managers see all projects in their department
-        query.department = req.user.department;
+    } else if (req.user.role === roles.MANAGER) {
+        // Managers see projects they manage OR are assigned to
+        query.$or = [
+            { managerId: req.user._id },
+            { teamIds: req.user._id }
+        ];
     } else {
         // Employees/Interns only see projects they're assigned to
         query.teamIds = req.user._id;
