@@ -743,7 +743,7 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
             budget: p.budget,
             managerId: p.managerId?._id,
             managerName: p.managerId?.name,
-            teamIds: p.teamIds,
+            teamIds: p.teamIds.map(member => member._id?.toString() || member.toString()),
             templateUsed: p.templateUsed,
             attachments: p.attachments,
             taskCount,
@@ -840,7 +840,7 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
         budget: project.budget,
         managerId: project.managerId?._id,
         managerName: project.managerId?.name,
-        teamIds: project.teamIds,
+        teamIds: project.teamIds.map(id => id.toString()),
         templateUsed: project.templateUsed,
         attachments: project.attachments,
     });
@@ -975,7 +975,7 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
 
         await project.save();
         console.log('✅ Project updated successfully:', project._id, 'Status:', project.status);
-        res.json({ id: project._id, name: project.name, description: project.description, department: project.department, status: project.status, deadline: project.deadline, teamIds: project.teamIds });
+        res.json({ id: project._id, name: project.name, description: project.description, department: project.department, status: project.status, deadline: project.deadline, teamIds: project.teamIds.map(id => id.toString()) });
     } catch (err) {
         console.error('Error updating project:', err);
         res.status(500).json({ message: 'Failed to update project', error: err.message });

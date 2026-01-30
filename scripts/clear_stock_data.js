@@ -1,3 +1,5 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const path = require('path');
 const readline = require('readline');
 
@@ -12,7 +14,6 @@ dotenv.config({ path: path.join(__dirname, '../server/.env') });
 // Adjust paths based on your actual structure
 const Product = require('../server/models/Product');
 const IssuedItem = require('../server/models/IssuedItem');
-const Supplier = require('../server/models/Supplier');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -27,17 +28,19 @@ const clearData = async () => {
             throw new Error('MONGODB_URI is not defined in .env');
         }
 
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(process.env.MONGODB_URI, {
+            dbName: 'IPMSENARXI'
+        });
         console.log('✅ Connected to MongoDB');
 
         const productCount = await Product.countDocuments();
         const issuedCount = await IssuedItem.countDocuments();
-        const supplierCount = await Supplier.countDocuments();
+
 
         console.log('\n⚠️  WARNING: This will PERMANENTLY DELETE:');
         console.log(`- ${productCount} Products`);
         console.log(`- ${issuedCount} Issued Item Records`);
-        console.log(`- ${supplierCount} Suppliers`);
+
 
         rl.question('\nAre you sure you want to proceed? Type "DELETE" to confirm: ', async (answer) => {
             if (answer === 'DELETE') {
@@ -49,11 +52,7 @@ const clearData = async () => {
                 await IssuedItem.deleteMany({});
                 console.log('✅ All Issued Items deleted');
 
-                // Check if Supplier model exists/is imported correctly before deleting
-                if (Supplier) {
-                    await Supplier.deleteMany({});
-                    console.log('✅ All Suppliers deleted');
-                }
+
 
                 console.log('\n✨ Stock data cleared successfully. You can now start fresh.');
             } else {

@@ -1,3 +1,5 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const path = require('path');
 const readline = require('readline');
 
@@ -22,11 +24,8 @@ const {
     Task,
     Activity,
     Product,
-    Supplier,
-    PurchaseOrder,
     IssuedItem,
-    Notification,
-    PriceComparison
+    Notification
 } = require('../server/models');
 
 const rl = readline.createInterface({
@@ -41,7 +40,9 @@ const clearFullData = async () => {
             throw new Error('MONGODB_URI is not defined in .env');
         }
 
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(process.env.MONGODB_URI, {
+            dbName: 'IPMSENARXI'
+        });
         console.log('✅ Connected to MongoDB');
 
         // Stats before deletion
@@ -52,9 +53,6 @@ const clearFullData = async () => {
             activities: await Activity.countDocuments(),
             products: await Product.countDocuments(),
             issuedItems: await IssuedItem.countDocuments(),
-            suppliers: await Supplier.countDocuments(),
-            purchaseOrders: await PurchaseOrder.countDocuments(),
-            priceComparisons: await PriceComparison.countDocuments(),
             usersToDelete: await User.countDocuments({ role: { $nin: ['SUPER_USER', 'STOCK_ADMIN'] } }),
             usersToKeep: await User.countDocuments({ role: { $in: ['SUPER_USER', 'STOCK_ADMIN'] } })
         };
@@ -66,9 +64,6 @@ const clearFullData = async () => {
         console.log(`- ${stats.activities} Activity Logs`);
         console.log(`- ${stats.products} Stock Products`);
         console.log(`- ${stats.issuedItems} Issued Items`);
-        console.log(`- ${stats.suppliers} Suppliers`);
-        console.log(`- ${stats.purchaseOrders} Purchase Orders`);
-        console.log(`- ${stats.priceComparisons} Price Comparisons`);
         console.log(`- ${stats.usersToDelete} Users (Managers, Employees, Interns)`);
         console.log(`\n✅ WILL KEEP: ${stats.usersToKeep} Admin/Super Admin Users`);
 
@@ -94,15 +89,6 @@ const clearFullData = async () => {
 
                 await IssuedItem.deleteMany({});
                 console.log('✅ Issued Items cleared');
-
-                await Supplier.deleteMany({});
-                console.log('✅ Suppliers cleared');
-
-                await PurchaseOrder.deleteMany({});
-                console.log('✅ Purchase Orders cleared');
-
-                await PriceComparison.deleteMany({});
-                console.log('✅ Price Comparisons cleared');
 
                 // Delete non-admin users
                 await User.deleteMany({ role: { $nin: ['SUPER_USER', 'STOCK_ADMIN'] } });

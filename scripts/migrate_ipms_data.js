@@ -1,3 +1,5 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const path = require('path');
 const readline = require('readline');
 
@@ -35,18 +37,15 @@ const migrateData = async () => {
         try {
             console.log('\n⏳ Initializing connections...');
 
-            // Create separate connections
-            const sourceConn = await mongoose.createConnection(sourceUri).asPromise();
-            const targetConn = await mongoose.createConnection(targetUri).asPromise();
+            // Create separate connections with enforced dbName
+            const sourceConn = await mongoose.createConnection(sourceUri, { dbName: 'IPMSENARXI' }).asPromise();
+            const targetConn = await mongoose.createConnection(targetUri, { dbName: 'IPMSENARXI' }).asPromise();
 
             console.log('✅ Connected to both databases.');
 
             // List of Model Names and their Schemas
-            // We use schemas from existing models or define them if needed. 
-            // In Mongoose, to use across connections, we fetch the schema.
             const modelNames = [
-                'User', 'Project', 'Task', 'Activity', 'Product',
-                'Supplier', 'PurchaseOrder', 'IssuedItem', 'Notification', 'PriceComparison'
+                'User', 'Project', 'Task', 'Activity', 'Product', 'IssuedItem', 'Notification'
             ];
 
             const models = require('../server/models');
@@ -73,9 +72,6 @@ const migrateData = async () => {
                         const documents = await SourceModel.find({}).lean();
 
                         if (documents.length > 0) {
-                            // Clear target collection first or just append? 
-                            // Usually for a full move, appending or using insertMany is common.
-                            // We use insertMany with ordered: false to skip duplicates if any IDs clash
                             try {
                                 await TargetModel.insertMany(documents, { ordered: false });
                                 console.log(`✅ ${documents.length} records moved for ${name}`);
