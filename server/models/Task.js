@@ -52,7 +52,12 @@ const taskSchema = new mongoose.Schema({
     completedAt: { type: Date, default: null },          // When task was marked completed
     allocatedMinutes: { type: Number, default: null },   // Time allocated (deadline - assignedAt) in minutes
     actualMinutes: { type: Number, default: null },      // Time taken (completedAt - assignedAt) in minutes
-    performanceScore: { type: Number, default: null }    // (allocatedMinutes / actualMinutes) * 100
+    performanceScore: { type: Number, default: null },   // (allocatedMinutes / actualMinutes) * 100
+
+    // Self-Assignment Tracking (for Manager Performance)
+    selfAssignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // Manager who self-assigned
+    selfAssignedAt: { type: Date, default: null },       // When manager self-assigned the task
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }     // Who completed the task
 }, {
     timestamps: true, // Automatically adds createdAt and updatedAt
 });

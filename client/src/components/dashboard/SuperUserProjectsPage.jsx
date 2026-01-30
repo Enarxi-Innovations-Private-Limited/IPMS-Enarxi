@@ -49,6 +49,7 @@ export default function SuperUserProjectsPage() {
         status: 'PLANNING',
         startDate: '',
         endDate: '',
+        budget: '',
     });
 
     const formatBudgetDisplay = (val) => {
@@ -242,7 +243,9 @@ export default function SuperUserProjectsPage() {
             description: project.description || '',
             department: project.department || 'SOFTWARE',
             status: project.status,
-            deadline: project.deadline || '',
+            startDate: project.startDate?.split('T')[0] || '',
+            endDate: project.deadline?.split('T')[0] || '',
+            budget: project.budget || '',
         });
         setFormError('');
         setEditFiles([]);
@@ -718,12 +721,29 @@ export default function SuperUserProjectsPage() {
                                     min={new Date().toISOString().split('T')[0]}
                                     disabled={!!selectedProject.deadline}
                                     className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                    value={editForm.deadline}
-                                    onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
+                                    value={editForm.endDate}
+                                    onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
                                 />
                                 {selectedProject.deadline && (
                                     <p className="text-text-secondary text-xs mt-1">⚠️ Deadline cannot be changed once set</p>
                                 )}
+                            </div>
+
+                            {/* Budget */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Budget (₹)</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    placeholder="Enter budget amount"
+                                    value={formatBudgetDisplay(editForm.budget)}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/,/g, '');
+                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                            setEditForm({ ...editForm, budget: val });
+                                        }
+                                    }}
+                                />
                             </div>
 
                             {/* Attachments */}

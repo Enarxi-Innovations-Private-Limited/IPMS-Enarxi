@@ -15,6 +15,16 @@ const productSchema = new mongoose.Schema({
         required: true,
         enum: ['RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'OTHER'],
     },
+    brand: {
+        type: String,
+        default: '',
+        trim: true,
+    },
+    footprint: {
+        type: String,
+        default: '',
+        trim: true,
+    },
     description: {
         type: String,
         default: '',
@@ -30,39 +40,15 @@ const productSchema = new mongoose.Schema({
         default: 0,
         min: 0,
     },
-    minQuantity: {
-        type: Number,
-        required: true,
-        default: 10,
-        min: 0,
-    },
-    maxQuantity: {
-        type: Number,
-        default: 1000,
-        min: 0,
-    },
-    reorderPoint: {
-        type: Number,
-        required: true,
-        default: 20,
-        min: 0,
-    },
+
     unitPrice: {
         type: Number,
         required: true,
         default: 0,
         min: 0,
     },
-    supplier: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Supplier',
-        default: null,
-    },
-    location: {
-        type: String,
-        default: '',
-        trim: true,
-    },
+
+
     lastRestocked: {
         type: Date,
         default: null,
@@ -86,8 +72,6 @@ productSchema.virtual('totalValue').get(function () {
 // Virtual for stock status
 productSchema.virtual('stockStatus').get(function () {
     if (this.quantity === 0) return 'OUT_OF_STOCK';
-    if (this.quantity <= this.minQuantity) return 'LOW_STOCK';
-    if (this.quantity >= this.maxQuantity) return 'OVERSTOCK';
     return 'IN_STOCK';
 });
 

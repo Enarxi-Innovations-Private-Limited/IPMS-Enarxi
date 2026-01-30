@@ -299,11 +299,46 @@ const DroppableTeamMember = ({ member, isAssigned, onRemove, assignedTasks, onUn
     );
 };
 
-// Droppable Completed Zone
-const DroppableCompletedZone = () => {
+// Droppable Self-Assign Zone (Manager assigns task to themselves)
+const DroppableSelfAssignZone = () => {
+    const { setNodeRef, isOver } = useDroppable({
+        id: 'SELF_ASSIGN_ZONE',
+    });
+
+    return (
+        <div
+            ref={setNodeRef}
+            className={`rounded-lg border-2 border-dashed transition-all mb-3 ${isOver
+                ? 'bg-blue-500/20 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)] scale-[1.02]'
+                : 'bg-background-dark/30 border-border-dark hover:border-blue-500/50'
+                }`}
+        >
+            <div className="p-4 flex flex-col items-center justify-center text-center gap-2">
+                <div className={`size-10 rounded-full flex items-center justify-center transition-colors ${isOver ? 'bg-blue-500 text-white animate-bounce' : 'bg-blue-500/10 text-blue-500'
+                    }`}>
+                    <span className="material-symbols-outlined text-xl">person_add</span>
+                </div>
+                <div>
+                    <p className={`text-sm font-bold ${isOver ? 'text-blue-400' : 'text-text-secondary'}`}>
+                        Assign to Yourself
+                    </p>
+                    <p className="text-[10px] text-text-secondary/70">
+                        Drag a task here to take it on
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Droppable Completed Zone (Only for tasks assigned to the manager)
+const DroppableCompletedZone = ({ currentUserId, tasks }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: 'COMPLETED_ZONE',
     });
+
+    // Count of tasks assigned to current manager that can be completed
+    const myTasks = tasks?.filter(t => t.assigneeId === currentUserId && t.status !== 'COMPLETED') || [];
 
     return (
         <div
@@ -323,7 +358,10 @@ const DroppableCompletedZone = () => {
                         Mark as Completed
                     </p>
                     <p className="text-[10px] text-text-secondary/70">
-                        Drag here to complete & assign to yourself
+                        {myTasks.length > 0
+                            ? `Drag YOUR task here (${myTasks.length} available)`
+                            : 'Assign a task to yourself first'
+                        }
                     </p>
                 </div>
             </div>
@@ -570,21 +608,64 @@ export default function ManagerProjectsPage() {
 
         if (!over) return;
 
-        // Handle Drop to Completed Zone
-        if (over.id === 'COMPLETED_ZONE') {
-            const taskId = active.id;
-            const currentUser = getCurrentUser(); // Get logged in manager
+        const currentUser = getCurrentUser(); // Get logged in manager
+        const taskId = active.id;
+        const task = tasks.find(t => t.id === taskId);
 
-            if (window.confirm('Mark this task as COMPLETED and assign to yourself?')) {
+        // Handle Drop to Self-Assign Zone (Assign to Yourself)
+        if (over.id === 'SELF_ASSIGN_ZONE') {
+            if (task?.assigneeId === currentUser.id) {
+                alert('This task is already assigned to you!');
+                return;
+            }
+
+            // Show deadline modal for self-assignment (required for performance tracking)
+            setPendingAssignment({
+                taskId,
+                assigneeId: currentUser.id,
+                task,
+                isSelfAssign: true // Flag to indicate self-assignment
+            });
+            // Pre-fill with task's existing deadline if any
+            if (task?.deadline) {
+                const existingDeadline = new Date(task.deadline);
+                setAssignDeadline(existingDeadline.toISOString().split('T')[0]);
+            } else {
+                setAssignDeadline('');
+            }
+            setShowAssignDeadlineModal(true);
+            return;
+        }
+
+        // Handle Drop to Completed Zone (Mark as Completed)
+        if (over.id === 'COMPLETED_ZONE') {
+            // Only allow if task is assigned to the current manager
+            if (task?.assigneeId !== currentUser.id) {
+                alert('You can only mark tasks assigned to YOU as completed. Assign the task to yourself first!');
+                return;
+            }
+
+            if (task?.status === 'COMPLETED') {
+                alert('This task is already completed!');
+                return;
+            }
+
+            if (window.confirm('Mark this task as COMPLETED?')) {
                 try {
                     // Optimistic UI Update
                     setTasks(prev => prev.map(t =>
-                        t.id === taskId ? { ...t, status: 'COMPLETED', assigneeId: currentUser.id } : t
+                        t.id === taskId ? {
+                            ...t,
+                            status: 'COMPLETED',
+                            completedAt: new Date().toISOString(),
+                            completedBy: currentUser.id
+                        } : t
                     ));
 
                     await api.put(`/tasks/${taskId}`, {
                         status: 'COMPLETED',
-                        assigneeId: currentUser.id, // Assign to manager
+                        completedAt: new Date().toISOString(),
+                        completedBy: currentUser.id
                     });
                 } catch (err) {
                     console.error("Failed to complete task", err);
@@ -617,21 +698,38 @@ export default function ManagerProjectsPage() {
     const handleConfirmAssignment = async () => {
         if (!pendingAssignment) return;
 
-        const { taskId, assigneeId } = pendingAssignment;
+        const { taskId, assigneeId, isSelfAssign } = pendingAssignment;
 
         try {
             // Default time to 23:59:59 if only date is provided
             const deadlineDate = assignDeadline ? new Date(`${assignDeadline}T23:59:59`) : null;
 
-            // Optimistic UI Update
-            setTasks(prev => prev.map(t =>
-                t.id === taskId ? { ...t, assigneeId, deadline: deadlineDate } : t
-            ));
-
-            await api.put(`/tasks/${taskId}`, {
+            // Build update payload
+            const updatePayload = {
                 assigneeId,
                 deadline: deadlineDate ? deadlineDate.toISOString() : null
-            });
+            };
+
+            // Add self-assignment tracking if this is a self-assign
+            if (isSelfAssign) {
+                updatePayload.selfAssignedBy = assigneeId;
+                updatePayload.selfAssignedAt = new Date().toISOString();
+            }
+
+            // Optimistic UI Update
+            setTasks(prev => prev.map(t =>
+                t.id === taskId ? {
+                    ...t,
+                    assigneeId,
+                    deadline: deadlineDate,
+                    ...(isSelfAssign ? {
+                        selfAssignedBy: assigneeId,
+                        selfAssignedAt: new Date().toISOString()
+                    } : {})
+                } : t
+            ));
+
+            await api.put(`/tasks/${taskId}`, updatePayload);
 
             // Close modal
             setShowAssignDeadlineModal(false);
@@ -648,15 +746,38 @@ export default function ManagerProjectsPage() {
     const handleSkipDeadline = async () => {
         if (!pendingAssignment) return;
 
-        const { taskId, assigneeId } = pendingAssignment;
+        const { taskId, assigneeId, isSelfAssign } = pendingAssignment;
+
+        // Warn about performance tracking impact
+        if (isSelfAssign) {
+            if (!window.confirm('Without a deadline, performance metrics cannot be calculated accurately. Continue anyway?')) {
+                return;
+            }
+        }
 
         try {
+            // Build update payload
+            const updatePayload = { assigneeId };
+
+            // Add self-assignment tracking if this is a self-assign
+            if (isSelfAssign) {
+                updatePayload.selfAssignedBy = assigneeId;
+                updatePayload.selfAssignedAt = new Date().toISOString();
+            }
+
             // Optimistic UI Update
             setTasks(prev => prev.map(t =>
-                t.id === taskId ? { ...t, assigneeId } : t
+                t.id === taskId ? {
+                    ...t,
+                    assigneeId,
+                    ...(isSelfAssign ? {
+                        selfAssignedBy: assigneeId,
+                        selfAssignedAt: new Date().toISOString()
+                    } : {})
+                } : t
             ));
 
-            await api.put(`/tasks/${taskId}`, { assigneeId });
+            await api.put(`/tasks/${taskId}`, updatePayload);
 
             // Close modal
             setShowAssignDeadlineModal(false);
@@ -744,6 +865,14 @@ export default function ManagerProjectsPage() {
                                                 </span>
                                             </div>
 
+                                            {/* Budget Display (Manager only section - only shows if assigned by Super) */}
+                                            {p.budget > 0 && (
+                                                <div className="mb-4 flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-emerald-400 text-sm">payments</span>
+                                                    <span className="text-white text-sm font-semibold">₹ {p.budget?.toLocaleString('en-IN')}</span>
+                                                </div>
+                                            )}
+
                                             {/* Progress */}
                                             <div className="mb-4">
                                                 <div className="flex justify-between text-sm mb-2">
@@ -779,7 +908,6 @@ export default function ManagerProjectsPage() {
                                                 >
                                                     <option value="PLANNING">Planning</option>
                                                     <option value="ACTIVE">Active</option>
-                                                    <option value="ON_HOLD">On Hold</option>
                                                     <option value="COMPLETED">Completed</option>
                                                 </select>
                                                 <button
@@ -817,9 +945,10 @@ export default function ManagerProjectsPage() {
                                 </h2>
                                 <div className="flex items-center gap-2">
                                     {selectedProject.budget > 0 && (
-                                        <span className="px-3 py-1 text-xs font-medium rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                            $ {selectedProject.budget.toLocaleString()}
-                                        </span>
+                                        <div className="flex items-center gap-1 bg-surface-light px-3 py-1 rounded-lg border border-border-dark">
+                                            <span className="text-text-secondary text-xs uppercase font-bold">Budget:</span>
+                                            <span className="text-emerald-400 text-sm font-bold ml-1">₹ {selectedProject.budget.toLocaleString('en-IN')}</span>
+                                        </div>
                                     )}
                                     <select
                                         className={`px-3 py-1 text-xs font-medium rounded-full outline-none focus:ring-2 focus:ring-primary border-none cursor-pointer ${getStatusColor(selectedProject.status)}`}
@@ -1047,8 +1176,51 @@ export default function ManagerProjectsPage() {
                                             Drag a task to a team member to assign it.
                                         </div>
 
+                                        {/* Self-Assign Drop Zone */}
+                                        <DroppableSelfAssignZone />
+
                                         {/* Completed Drop Zone */}
-                                        <DroppableCompletedZone />
+                                        <DroppableCompletedZone
+                                            currentUserId={getCurrentUser()?.id}
+                                            tasks={tasks.filter(t => t.projectId === selectedProject.id)}
+                                        />
+
+                                        {/* My Tasks Section - Tasks assigned to the manager */}
+                                        {(() => {
+                                            const currentUser = getCurrentUser();
+                                            const myTasks = tasks.filter(t =>
+                                                t.projectId === selectedProject.id &&
+                                                t.assigneeId === currentUser?.id &&
+                                                t.status !== 'COMPLETED'
+                                            );
+
+                                            if (myTasks.length === 0) return null;
+
+                                            return (
+                                                <div className="mb-4 bg-indigo-500/10 rounded-lg overflow-hidden border border-indigo-500/30">
+                                                    <div className="px-3 py-2 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-indigo-400 border-b border-indigo-500/20">
+                                                        <span className="flex items-center gap-2">
+                                                            <span className="material-symbols-outlined text-sm">person</span>
+                                                            My Tasks ({myTasks.length})
+                                                        </span>
+                                                        <span className="text-[10px] font-normal normal-case text-indigo-300">
+                                                            Drag to complete ↓
+                                                        </span>
+                                                    </div>
+                                                    <div className="p-2 space-y-1 max-h-40 overflow-y-auto">
+                                                        {myTasks.map(task => (
+                                                            <DraggableAssignedTask
+                                                                key={task.id}
+                                                                task={task}
+                                                                onUnassign={handleUnassignTask}
+                                                                onApprove={handleTaskApproval}
+                                                                onClick={(e) => { e.stopPropagation(); openTaskDetail(task); }}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
 
                                         {/* Completed Tasks List (Sidebar) */}
                                         <div className="mb-4 bg-black/20 rounded-lg overflow-hidden border border-border-dark/50">
@@ -1078,7 +1250,16 @@ export default function ManagerProjectsPage() {
                                                                         <p className="text-white text-xs font-medium line-clamp-2 mb-1">{task.title}</p>
                                                                         <div className="flex items-center justify-between gap-2">
                                                                             <span className="text-[10px] text-text-secondary truncate">
-                                                                                By: {users.find(u => u.id === task.assigneeId)?.name || 'Unknown'}
+                                                                                By: {(() => {
+                                                                                    const currentUser = getCurrentUser();
+                                                                                    // Check if it's the current user (self-assigned/completed)
+                                                                                    if (task.assigneeId === currentUser?.id || task.completedBy === currentUser?.id) {
+                                                                                        return <span className="text-indigo-400 font-medium">You</span>;
+                                                                                    }
+                                                                                    // Otherwise look up in users list
+                                                                                    const assignee = users.find(u => u.id === task.assigneeId);
+                                                                                    return assignee?.name || 'Team Member';
+                                                                                })()}
                                                                             </span>
                                                                             <button
                                                                                 onClick={(e) => {
@@ -1149,10 +1330,12 @@ export default function ManagerProjectsPage() {
                         setAssignDeadline('');
                     }}></div>
                     <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
+                        <div className={`px-6 py-4 border-b border-border-dark ${pendingAssignment.isSelfAssign ? 'bg-gradient-to-r from-indigo-900/50 to-purple-900/50' : 'bg-gradient-surface'}`}>
                             <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary">schedule</span>
-                                Set Deadline for Assignment
+                                <span className={`material-symbols-outlined ${pendingAssignment.isSelfAssign ? 'text-indigo-400' : 'text-primary'}`}>
+                                    {pendingAssignment.isSelfAssign ? 'person_add' : 'schedule'}
+                                </span>
+                                {pendingAssignment.isSelfAssign ? 'Assign to Yourself' : 'Set Deadline for Assignment'}
                             </h2>
                         </div>
                         <div className="p-6 space-y-4">
@@ -1160,7 +1343,10 @@ export default function ManagerProjectsPage() {
                             <div className="bg-background-dark/50 rounded-lg p-4 border border-border-dark">
                                 <p className="text-white font-medium">{pendingAssignment.task?.title}</p>
                                 <p className="text-text-secondary text-sm mt-1">
-                                    Assigning to: <span className="text-white">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span>
+                                    {pendingAssignment.isSelfAssign
+                                        ? <span className="text-indigo-400 font-medium">Taking this task for yourself</span>
+                                        : <>Assigning to: <span className="text-white">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span></>
+                                    }
                                 </p>
                             </div>
 
@@ -1203,9 +1389,12 @@ export default function ManagerProjectsPage() {
                             <button
                                 onClick={handleConfirmAssignment}
                                 disabled={!assignDeadline}
-                                className="px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${pendingAssignment.isSelfAssign
+                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                    : 'bg-primary hover:bg-primary-dark text-white'
+                                    }`}
                             >
-                                Assign with Deadline
+                                {pendingAssignment.isSelfAssign ? 'Take Task with Deadline' : 'Assign with Deadline'}
                             </button>
                         </div>
                     </div>

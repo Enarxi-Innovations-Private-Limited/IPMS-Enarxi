@@ -527,7 +527,6 @@ export default function SuperUserTeamsPage() {
                                         <option value="MANAGER">Manager</option>
                                         <option value="EMPLOYEE">Employee</option>
                                         <option value="INTERN">Intern</option>
-                                        <option value="STOCK_ADMIN">Stock Admin</option>
                                     </select>
                                 </div>
                                 <div>
@@ -586,7 +585,6 @@ export default function SuperUserTeamsPage() {
                                         <option value="MANAGER">Manager</option>
                                         <option value="EMPLOYEE">Employee</option>
                                         <option value="INTERN">Intern</option>
-                                        <option value="STOCK_ADMIN">Stock Admin</option>
                                     </select>
                                 </div>
                                 <div>

@@ -19,8 +19,6 @@ import ManagerTasksPage from './components/dashboard/ManagerTasksPage.jsx';
 import ManagerTeamPage from './components/dashboard/ManagerTeamPage.jsx';
 import InventoryPage from './components/stock/InventoryPage.jsx';
 import IssueReturnPage from './components/stock/IssueReturnPage.jsx';
-import PurchaseOrdersPage from './components/stock/PurchaseOrdersPage.jsx';
-import PriceComparisonPage from './components/stock/PriceComparisonPage.jsx';
 import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
@@ -162,7 +160,7 @@ function App() {
       <Route
         path="/stock-admin/inventory"
         element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN']}>
+          <ProtectedRoute allowedRoles={['STOCK_ADMIN', 'MANAGER']}>
             <InventoryPage />
           </ProtectedRoute>
         }
@@ -175,22 +173,7 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/stock-admin/purchase-orders"
-        element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN']}>
-            <PurchaseOrdersPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/stock-admin/price-comparison"
-        element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN']}>
-            <PriceComparisonPage />
-          </ProtectedRoute>
-        }
-      />
+
 
 
       <Route path="/" element={<RoleRedirect />} />

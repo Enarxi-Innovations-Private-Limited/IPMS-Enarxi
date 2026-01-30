@@ -3,8 +3,6 @@ const Project = require('./Project');
 const Task = require('./Task');
 const Activity = require('./Activity');
 const Product = require('./Product');
-const Supplier = require('./Supplier');
-const PurchaseOrder = require('./PurchaseOrder');
 const IssuedItem = require('./IssuedItem');
 const Notification = require('./Notification');
 
@@ -14,8 +12,6 @@ module.exports = {
     Task,
     Activity,
     Product,
-    Supplier,
-    PurchaseOrder,
     IssuedItem,
     Notification,
 };

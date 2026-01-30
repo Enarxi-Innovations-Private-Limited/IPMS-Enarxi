@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+
+import { getCurrentUser } from '../../services/authService';
 import StockAdminLayout from '../common/StockAdminLayout';
 import api from '../../services/api';
 
@@ -222,7 +224,285 @@ function ImportExcelModal({ isOpen, onClose, onSuccess }) {
     );
 }
 
+// Product Details Modal Component
+function ProductDetailsModal({ isOpen, onClose, product }) {
+    if (!isOpen || !product) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-surface-dark border border-border-dark rounded-xl w-full max-w-2xl mx-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div className="flex items-center justify-between p-6 border-b border-border-dark">
+                    <h2 className="text-xl font-bold text-white">Product Details</h2>
+                    <button onClick={onClose} className="p-2 text-text-secondary hover:text-white hover:bg-surface-light rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+                <div className="p-6 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Name</label>
+                            <p className="text-white font-medium text-lg">{product.name}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Part Number</label>
+                            <p className="text-white font-mono">{product.partNumber || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Brand</label>
+                            <p className="text-white">{product.brand || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Footprint</label>
+                            <p className="text-white">{product.footprint || 'N/A'}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Category</label>
+                            <p className="text-white">{product.category.replace('_', ' ')}</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Current Stock</label>
+                            <div className="flex items-center gap-2">
+                                <span className="text-white font-bold text-xl">{product.quantity}</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Unit Price</label>
+                            <p className="text-white">₹{product.unitPrice.toFixed(2)}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Total Value</label>
+                            <p className="text-white font-medium">₹{(product.quantity * product.unitPrice).toFixed(2)}</p>
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-1">Stock Status</label>
+                            <p className="text-white">{product.stockStatus.replace('_', ' ')}</p>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm text-text-secondary mb-1">Description</label>
+                        <p className="text-white p-3 bg-surface-light rounded-lg">
+                            {product.description || 'No description provided.'}
+                        </p>
+                    </div>
+
+
+                </div>
+                <div className="flex justify-end p-6 border-t border-border-dark">
+                    <button onClick={onClose} className="px-4 py-2 bg-surface-light border border-border-dark text-white rounded-lg hover:bg-surface-dark transition-colors">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// Product Form Modal Component (Add/Edit)
+function ProductFormModal({ isOpen, onClose, onSuccess, product = null }) {
+    const [formData, setFormData] = useState({
+        name: '',
+        partNumber: '',
+        brand: '',
+        footprint: '',
+        category: 'OTHER',
+        description: '',
+        quantity: 0,
+        unitPrice: 0,
+    });
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const categories = ['RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'OTHER'];
+
+    useEffect(() => {
+        if (product) {
+            setFormData({
+                name: product.name,
+                partNumber: product.partNumber || '',
+                brand: product.brand || '',
+                footprint: product.footprint || '',
+                category: product.category,
+                description: product.description || '',
+                quantity: product.quantity,
+                unitPrice: product.unitPrice,
+            });
+        } else {
+            setFormData({
+                name: '',
+                partNumber: '',
+                brand: '',
+                footprint: '',
+                category: 'OTHER',
+                description: '',
+                quantity: 0,
+                unitPrice: 0,
+            });
+        }
+        setError('');
+    }, [product, isOpen]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+
+        try {
+            if (product) {
+                await api.put(`/stock/products/${product.id}`, formData);
+            } else {
+                await api.post('/stock/products', formData);
+            }
+            onSuccess();
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to save product');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-surface-dark border border-border-dark rounded-xl w-full max-w-2xl mx-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div className="flex items-center justify-between p-6 border-b border-border-dark">
+                    <h2 className="text-xl font-bold text-white">{product ? 'Edit Product' : 'Add New Product'}</h2>
+                    <button onClick={onClose} className="p-2 text-text-secondary hover:text-white hover:bg-surface-light rounded-lg transition-colors">
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                    {error && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">
+                            {error}
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm text-text-secondary mb-2">Name *</label>
+                            <input
+                                type="text"
+                                required
+                                value={formData.name}
+                                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm text-text-secondary mb-2">Part Number</label>
+                            <input
+                                type="text"
+                                required
+                                value={formData.partNumber}
+                                onChange={e => setFormData({ ...formData, partNumber: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm text-text-secondary mb-2">Brand</label>
+                            <input
+                                type="text"
+                                value={formData.brand}
+                                onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div className="col-span-2 md:col-span-1">
+                            <label className="block text-sm text-text-secondary mb-2">Category *</label>
+                            <select
+                                value={formData.category}
+                                onChange={e => setFormData({ ...formData, category: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            >
+                                {categories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-sm text-text-secondary mb-2">Description</label>
+                            <textarea
+                                value={formData.description}
+                                onChange={e => setFormData({ ...formData, description: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary h-24 resize-none"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-2">Quantity *</label>
+                            <input
+                                type="number"
+                                required
+                                min="0"
+                                value={formData.quantity}
+                                onChange={e => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-2">Unit Price (₹) *</label>
+                            <input
+                                type="number"
+                                required
+                                min="0"
+                                step="0.01"
+                                value={formData.unitPrice}
+                                onChange={e => setFormData({ ...formData, unitPrice: parseFloat(e.target.value) || 0 })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm text-text-secondary mb-2">Footprint</label>
+                            <input
+                                type="text"
+                                value={formData.footprint}
+                                onChange={e => setFormData({ ...formData, footprint: e.target.value })}
+                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                            />
+                        </div>
+
+
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-6 border-t border-border-dark">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="px-4 py-2 bg-surface-light border border-border-dark text-white rounded-lg hover:bg-surface-dark transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <span className="material-symbols-outlined text-sm">save</span>
+                                    Save Product
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 export default function InventoryPage() {
+    const user = getCurrentUser();
     const [searchParams] = useSearchParams();
     const [products, setProducts] = useState([]);
     const [filteredProducts, setFilteredProducts] = useState([]);
@@ -345,20 +625,24 @@ export default function InventoryPage() {
                         <p className="text-text-secondary">{filteredProducts.length} products found</p>
                     </div>
                     <div className="flex gap-3">
-                        <button
-                            onClick={() => setShowImportModal(true)}
-                            className="px-4 py-2 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-surface-light transition-colors flex items-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">upload_file</span>
-                            Import Excel
-                        </button>
-                        <button
-                            onClick={() => { setSelectedProduct(null); setShowAddModal(true); }}
-                            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors flex items-center gap-2"
-                        >
-                            <span className="material-symbols-outlined">add</span>
-                            Add Product
-                        </button>
+                        {user?.role !== 'MANAGER' && (
+                            <>
+                                <button
+                                    onClick={() => setShowImportModal(true)}
+                                    className="px-4 py-2 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-surface-light transition-colors flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined">upload_file</span>
+                                    Import Excel
+                                </button>
+                                <button
+                                    onClick={() => { setSelectedProduct(null); setShowAddModal(true); }}
+                                    className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined">add</span>
+                                    Add Product
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -456,20 +740,24 @@ export default function InventoryPage() {
                                                     >
                                                         <span className="material-symbols-outlined text-sm">visibility</span>
                                                     </button>
-                                                    <button
-                                                        onClick={() => { setSelectedProduct(product); setShowEditModal(true); }}
-                                                        className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-                                                        title="Edit"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">edit</span>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDelete(product.id)}
-                                                        className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                                                        title="Delete"
-                                                    >
-                                                        <span className="material-symbols-outlined text-sm">delete</span>
-                                                    </button>
+                                                    {user?.role !== 'MANAGER' && (
+                                                        <button
+                                                            onClick={() => { setSelectedProduct(product); setShowEditModal(true); }}
+                                                            className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
+                                                            title="Edit"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">edit</span>
+                                                        </button>
+                                                    )}
+                                                    {user && user.role === 'SUPER_USER' && (
+                                                        <button
+                                                            onClick={() => handleDelete(product.id)}
+                                                            className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                                            title="Delete"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">delete</span>
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -487,6 +775,28 @@ export default function InventoryPage() {
                 onClose={() => setShowImportModal(false)}
                 onSuccess={loadProducts}
             />
-        </StockAdminLayout>
+
+            {/* Product Form Modal (Add/Edit) */}
+            <ProductFormModal
+                isOpen={showAddModal || showEditModal}
+                onClose={() => {
+                    setShowAddModal(false);
+                    setShowEditModal(false);
+                    setSelectedProduct(null);
+                }}
+                onSuccess={loadProducts}
+                product={showEditModal ? selectedProduct : null}
+            />
+
+            {/* Product Details Modal */}
+            <ProductDetailsModal
+                isOpen={showDetailsModal}
+                onClose={() => {
+                    setShowDetailsModal(false);
+                    setSelectedProduct(null);
+                }}
+                product={selectedProduct}
+            />
+        </StockAdminLayout >
     );
 }

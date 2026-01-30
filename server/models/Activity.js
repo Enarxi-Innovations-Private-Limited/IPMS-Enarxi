@@ -6,7 +6,8 @@ const activitySchema = new mongoose.Schema({
         required: true,
         enum: ['LOGIN', 'USER_CREATED', 'USER_UPDATED', 'USER_DELETED',
             'PROJECT_CREATED', 'PROJECT_UPDATED', 'PROJECT_DELETED',
-            'TASK_CREATED', 'TASK_UPDATED', 'TASK_DELETED', 'TASK_TRANSFERRED'],
+            'TASK_CREATED', 'TASK_UPDATED', 'TASK_DELETED', 'TASK_TRANSFERRED',
+            'STOCK_ISSUED', 'STOCK_RETURNED'],
     },
     message: {
         type: String,

@@ -1,22 +1,23 @@
 import { useState, useEffect } from 'react';
 import StockAdminLayout from '../common/StockAdminLayout';
 import api from '../../services/api';
+import SearchableProductSelect from '../common/SearchableProductSelect';
 
 export default function IssueReturnPage() {
     const [activeTab, setActiveTab] = useState('issue'); // 'issue' or 'issued'
+    const [projects, setProjects] = useState([]);
     const [products, setProducts] = useState([]);
-    const [employees, setEmployees] = useState([]);
     const [issuedItems, setIssuedItems] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
 
-    // Issue form
-    const [issueForm, setIssueForm] = useState({
-        productId: '',
-        quantity: '',
-        employeeId: '',
-        purpose: '',
-        expectedReturnDate: '',
-    });
+    // Issue Form State
+    const [selectedProject, setSelectedProject] = useState('');
+    const [selectedMember, setSelectedMember] = useState('');
+    const [projectMembers, setProjectMembers] = useState([]);
+    const [items, setItems] = useState([{ productId: '', quantity: 1 }]);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
         loadData();
@@ -24,56 +25,129 @@ export default function IssueReturnPage() {
 
     const loadData = async () => {
         setLoading(true);
+        setError('');
         try {
             if (activeTab === 'issue') {
-                const [productsRes, employeesRes] = await Promise.all([
-                    api.get('/stock/products'),
-                    api.get('/users'),
+                const [projectsRes, productsRes] = await Promise.all([
+                    api.get('/projects'),
+                    api.get('/stock/products')
                 ]);
+                setProjects(projectsRes.data);
                 setProducts(productsRes.data);
-                setEmployees(employeesRes.data);
             } else {
                 const issuedRes = await api.get('/stock/issued');
                 setIssuedItems(issuedRes.data);
             }
         } catch (err) {
             console.error('Error loading data:', err);
+            setError('Failed to load data. Please try again.');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleIssue = async (e) => {
+    // --- Issue Form Logic ---
+    const handleAddItem = () => {
+        setItems([...items, { productId: '', quantity: 1 }]);
+    };
+
+    const handleRemoveItem = (index) => {
+        if (items.length === 1) return;
+        const newItems = [...items];
+        newItems.splice(index, 1);
+        setItems(newItems);
+    };
+
+    const handleItemChange = (index, field, value) => {
+        const newItems = [...items];
+
+        if (field === 'quantity') {
+            const productId = newItems[index].productId;
+            if (productId) {
+                const max = getMaxQuantity(productId);
+                if (value > max) {
+                    value = max;
+                    // Optional: You could set an error state here, or just clamp
+                }
+            }
+        }
+
+        newItems[index][field] = value;
+        setItems(newItems);
+    };
+
+    const getMaxQuantity = (productId) => {
+        const prod = products.find(p => p.id === productId);
+        return prod ? prod.quantity : 0;
+    };
+
+    const handleIssueSubmit = async (e) => {
         e.preventDefault();
+        setSubmitting(true);
+        setError('');
+        setSuccessMsg('');
+
         try {
-            await api.post('/stock/issue', issueForm);
-            alert('Product issued successfully');
-            setIssueForm({ productId: '', quantity: '', employeeId: '', purpose: '', expectedReturnDate: '' });
-            loadData();
+            if (!selectedProject) throw new Error("Please select a project");
+            if (!selectedMember) throw new Error("Please select a team member");
+
+            const validItems = items.filter(i => i.productId && i.quantity > 0);
+            if (validItems.length === 0) throw new Error("Please add at least one product");
+
+            // Validate quantities
+            for (const item of validItems) {
+                const max = getMaxQuantity(item.productId);
+                if (item.quantity > max) {
+                    const prodName = products.find(p => p.id === item.productId)?.name;
+                    throw new Error(`Quantity for ${prodName} exceeds available stock (${max})`);
+                }
+            }
+
+            await api.post('/stock/issue', {
+                projectId: selectedProject,
+                items: validItems,
+                issuedTo: selectedMember
+            });
+
+            setSuccessMsg('Products issued successfully!');
+            // Reset form
+            setItems([{ productId: '', quantity: 1 }]);
+            setSelectedProject('');
+            setSelectedMember('');
+            setProjectMembers([]);
+
+            // Reload products to update stock
+            const productsRes = await api.get('/stock/products');
+            setProducts(productsRes.data);
+
+            setTimeout(() => setSuccessMsg(''), 3000);
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to issue product');
+            setError(err.response?.data?.message || err.message || 'Failed to issue items');
+        } finally {
+            setSubmitting(false);
         }
     };
 
-    const handleReturn = async (issuedItemId) => {
-        if (!confirm('Mark this item as returned?')) return;
-        try {
-            await api.post(`/stock/return/${issuedItemId}`, { condition: 'GOOD' });
-            alert('Product returned successfully');
-            loadData();
-        } catch (err) {
-            alert(err.response?.data?.message || 'Failed to return product');
-        }
-    };
+
 
     const getStatusBadge = (status) => {
         const badges = {
             'ISSUED': <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-500/20 text-blue-400">Issued</span>,
             'RETURNED': <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400">Returned</span>,
-            'OVERDUE': <span className="px-3 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400">Overdue</span>,
+            'CONSUMED': <span className="px-3 py-1 rounded-full text-xs font-medium bg-gray-500/20 text-gray-400">Consumed</span>,
         };
         return badges[status] || status;
     };
+
+    if (loading && !projects.length && !issuedItems.length) {
+        return (
+            <StockAdminLayout currentPage="issue-return">
+                <div className="flex items-center justify-center h-full">
+                    <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                </div>
+            </StockAdminLayout>
+        );
+    }
 
     return (
         <StockAdminLayout currentPage="issue-return">
@@ -81,7 +155,7 @@ export default function IssueReturnPage() {
                 {/* Header */}
                 <div className="mb-8">
                     <h1 className="text-3xl font-bold text-white mb-2">Issue & Return Management</h1>
-                    <p className="text-text-secondary">Track product assignments to employees</p>
+                    <p className="text-text-secondary">Track product assignments to projects</p>
                 </div>
 
                 {/* Tabs */}
@@ -89,8 +163,8 @@ export default function IssueReturnPage() {
                     <button
                         onClick={() => setActiveTab('issue')}
                         className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'issue'
-                                ? 'bg-primary text-white'
-                                : 'bg-surface-dark text-text-secondary hover:bg-surface-light'
+                            ? 'bg-primary text-white'
+                            : 'bg-surface-dark text-text-secondary hover:bg-surface-light'
                             }`}
                     >
                         Issue Products
@@ -98,94 +172,131 @@ export default function IssueReturnPage() {
                     <button
                         onClick={() => setActiveTab('issued')}
                         className={`px-6 py-3 rounded-lg font-medium transition-colors ${activeTab === 'issued'
-                                ? 'bg-primary text-white'
-                                : 'bg-surface-dark text-text-secondary hover:bg-surface-light'
+                            ? 'bg-primary text-white'
+                            : 'bg-surface-dark text-text-secondary hover:bg-surface-light'
                             }`}
                     >
                         Issued Items
                     </button>
                 </div>
 
+                {/* Messages */}
+                {error && <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400">{error}</div>}
+                {successMsg && <div className="mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg text-green-400">{successMsg}</div>}
+
                 {/* Issue Form */}
                 {activeTab === 'issue' && (
-                    <div className="bg-surface-dark border border-border-dark rounded-xl p-6">
-                        <h2 className="text-xl font-bold text-white mb-6">Issue Product to Employee</h2>
-                        <form onSubmit={handleIssue} className="space-y-4">
+                    <div className="bg-surface-dark border border-border-dark rounded-xl p-6 max-w-4xl">
+                        <h2 className="text-xl font-bold text-white mb-6">Issue Product to Project</h2>
+                        <form onSubmit={handleIssueSubmit} className="space-y-6">
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {/* Project Selection */}
                                 <div>
-                                    <label className="block text-sm text-text-secondary mb-2">Product *</label>
+                                    <label className="block text-sm text-text-secondary mb-2">Project *</label>
                                     <select
-                                        required
-                                        value={issueForm.productId}
-                                        onChange={(e) => setIssueForm({ ...issueForm, productId: e.target.value })}
+                                        value={selectedProject}
+                                        onChange={e => {
+                                            const pid = e.target.value;
+                                            setSelectedProject(pid);
+                                            const proj = projects.find(p => (p._id || p.id) === pid);
+                                            // Ensure teamIds is treated as an array of objects
+                                            setProjectMembers(proj?.teamIds || []);
+                                            setSelectedMember('');
+                                        }}
                                         className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                                        required
                                     >
-                                        <option value="">Select Product</option>
-                                        {products.filter(p => p.quantity > 0).map(product => (
-                                            <option key={product.id} value={product.id}>
-                                                {product.partNumber} - {product.name} (Stock: {product.quantity})
-                                            </option>
+                                        <option value="">Select Project</option>
+                                        {projects.map(p => (
+                                            <option key={p._id || p.id} value={p._id || p.id}>{p.name} ({p.projectCode})</option>
                                         ))}
                                     </select>
                                 </div>
 
+                                {/* Team Member Selection */}
                                 <div>
-                                    <label className="block text-sm text-text-secondary mb-2">Quantity *</label>
-                                    <input
-                                        type="number"
-                                        required
-                                        min="1"
-                                        value={issueForm.quantity}
-                                        onChange={(e) => setIssueForm({ ...issueForm, quantity: e.target.value })}
-                                        className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm text-text-secondary mb-2">Employee *</label>
+                                    <label className="block text-sm text-text-secondary mb-2">Team Member (Issued To) *</label>
                                     <select
-                                        required
-                                        value={issueForm.employeeId}
-                                        onChange={(e) => setIssueForm({ ...issueForm, employeeId: e.target.value })}
+                                        value={selectedMember}
+                                        onChange={e => setSelectedMember(e.target.value)}
                                         className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                                        required
+                                        disabled={!selectedProject}
                                     >
-                                        <option value="">Select Employee</option>
-                                        {employees.map(emp => (
-                                            <option key={emp.id} value={emp.id}>
-                                                {emp.name} ({emp.employeeId})
-                                            </option>
+                                        <option value="">{selectedProject ? 'Select Team Member' : 'Select Project First'}</option>
+                                        {projectMembers.map(m => (
+                                            <option key={m._id || m.id} value={m._id || m.id}>{m.name} ({m.employeeId})</option>
                                         ))}
                                     </select>
                                 </div>
+                            </div>
 
-                                <div>
-                                    <label className="block text-sm text-text-secondary mb-2">Expected Return Date</label>
-                                    <input
-                                        type="date"
-                                        value={issueForm.expectedReturnDate}
-                                        onChange={(e) => setIssueForm({ ...issueForm, expectedReturnDate: e.target.value })}
-                                        className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
-                                    />
+                            {/* Products List */}
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <label className="block text-sm text-text-secondary">Products *</label>
+                                    <button type="button" onClick={handleAddItem} className="text-primary hover:text-primary-hover text-sm font-medium flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-sm">add</span> Add Product
+                                    </button>
                                 </div>
+
+                                {items.map((item, index) => (
+                                    <div key={index} className="flex flex-col md:flex-row gap-4 items-start bg-surface-light/50 p-4 rounded-lg border border-border-dark/50">
+                                        <div className="flex-1 w-full">
+                                            <div className="flex justify-between mb-1">
+                                                <label className="block text-xs text-text-secondary">Product</label>
+                                                {item.productId && (
+                                                    <span className="text-xs text-text-secondary">
+                                                        Stock: {products.find(p => p.id === item.productId)?.quantity || 0}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <SearchableProductSelect
+                                                products={products}
+                                                value={item.productId}
+                                                onChange={(id) => handleItemChange(index, 'productId', id)}
+                                                required
+                                                placeholder="Search product by name, part #..."
+                                            />
+                                        </div>
+                                        <div className="w-full md:w-32">
+                                            <label className="block text-xs text-text-secondary mb-1">Quantity</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                max={item.productId ? getMaxQuantity(item.productId) : undefined}
+                                                value={item.quantity}
+                                                onChange={e => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
+                                                className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                                                placeholder="Qty"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="pt-6">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveItem(index)}
+                                                className={`p-2 rounded-lg transition-colors ${items.length > 1 ? 'text-red-400 hover:bg-red-500/20' : 'text-gray-600 cursor-not-allowed'}`}
+                                                disabled={items.length === 1}
+                                            >
+                                                <span className="material-symbols-outlined">delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
 
-                            <div>
-                                <label className="block text-sm text-text-secondary mb-2">Purpose</label>
-                                <textarea
-                                    value={issueForm.purpose}
-                                    onChange={(e) => setIssueForm({ ...issueForm, purpose: e.target.value })}
-                                    rows="3"
-                                    className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
-                                    placeholder="Reason for issuing this product..."
-                                ></textarea>
+                            <div className="pt-4 border-t border-border-dark">
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {submitting && <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>}
+                                    {submitting ? 'Issuing...' : 'Issue Products'}
+                                </button>
                             </div>
-
-                            <button
-                                type="submit"
-                                className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
-                            >
-                                Issue Product
-                            </button>
                         </form>
                     </div>
                 )}
@@ -196,14 +307,14 @@ export default function IssueReturnPage() {
                         <div className="overflow-x-auto">
                             <table className="w-full">
                                 <thead>
-                                    <tr className="border-b border-border-dark">
-                                        <th className="text-left p-4 text-text-secondary font-medium">Product</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Quantity</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Employee</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Issue Date</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Expected Return</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Status</th>
-                                        <th className="text-left p-4 text-text-secondary font-medium">Actions</th>
+                                    <tr className="border-b border-border-dark bg-surface-light/30">
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Project</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Product</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Quantity</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Issued To</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Issued By</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Date</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -215,25 +326,20 @@ export default function IssueReturnPage() {
                                         </tr>
                                     ) : (
                                         issuedItems.map(item => (
-                                            <tr key={item.id} className="border-b border-border-dark hover:bg-surface-light transition-colors">
-                                                <td className="p-4 text-white">{item.product.name}</td>
+                                            <tr key={item.id || item._id} className="border-b border-border-dark hover:bg-surface-light/50 transition-colors">
+                                                <td className="p-4 text-white font-medium">
+                                                    {item.project?.name || 'Unknown Project'}
+                                                    <div className="text-xs text-text-secondary">{item.project?.projectCode}</div>
+                                                </td>
+                                                <td className="p-4 text-white">
+                                                    {item.product?.name || 'Unknown Product'}
+                                                    <div className="text-xs text-text-secondary">{item.product?.partNumber}</div>
+                                                </td>
                                                 <td className="p-4 text-white">{item.quantity}</td>
-                                                <td className="p-4 text-white">{item.employee.name}</td>
-                                                <td className="p-4 text-text-secondary">{new Date(item.issueDate).toLocaleDateString()}</td>
-                                                <td className="p-4 text-text-secondary">
-                                                    {item.expectedReturnDate ? new Date(item.expectedReturnDate).toLocaleDateString() : 'N/A'}
-                                                </td>
+                                                <td className="p-4 text-text-secondary text-sm">{item.issuedTo?.name || 'N/A'}</td>
+                                                <td className="p-4 text-text-secondary text-sm">{item.issuedBy?.name}</td>
+                                                <td className="p-4 text-text-secondary text-sm">{new Date(item.issuedAt || item.createdAt).toLocaleDateString()}</td>
                                                 <td className="p-4">{getStatusBadge(item.status)}</td>
-                                                <td className="p-4">
-                                                    {item.status === 'ISSUED' && (
-                                                        <button
-                                                            onClick={() => handleReturn(item.id)}
-                                                            className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-colors text-sm"
-                                                        >
-                                                            Mark as Returned
-                                                        </button>
-                                                    )}
-                                                </td>
                                             </tr>
                                         ))
                                     )}

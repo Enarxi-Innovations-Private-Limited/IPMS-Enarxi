@@ -112,7 +112,7 @@ export default function StockAdminDashboard() {
                 </div>
 
                 {/* Quick Actions */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                     <button onClick={() => navigate('/stock-admin/inventory')} className="bg-gradient-to-br from-primary to-primary-hover p-6 rounded-xl text-left hover:shadow-xl hover:scale-[1.02] transition-all">
                         <div className="flex items-center gap-4">
                             <div className="w-14 h-14 rounded-lg bg-white/20 flex items-center justify-center">
@@ -133,18 +133,6 @@ export default function StockAdminDashboard() {
                             <div>
                                 <h3 className="text-lg font-bold text-white mb-1">Issue Product</h3>
                                 <p className="text-white/80 text-sm">Assign items to employees</p>
-                            </div>
-                        </div>
-                    </button>
-
-                    <button onClick={() => navigate('/stock-admin/purchase-orders')} className="bg-gradient-to-br from-green-500 to-green-600 p-6 rounded-xl text-left hover:shadow-xl hover:scale-[1.02] transition-all">
-                        <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-lg bg-white/20 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-3xl text-white">shopping_cart</span>
-                            </div>
-                            <div>
-                                <h3 className="text-lg font-bold text-white mb-1">Purchase Order</h3>
-                                <p className="text-white/80 text-sm">Create new purchase order</p>
                             </div>
                         </div>
                     </button>

@@ -12,6 +12,7 @@ export default function ManagerDashboard() {
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [users, setUsers] = useState([]);
+
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
 
@@ -40,6 +41,7 @@ export default function ManagerDashboard() {
             setProjects(projRes.data);
             setTasks(taskRes.data);
             setUsers(usersRes.data);
+
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load data');
         } finally {

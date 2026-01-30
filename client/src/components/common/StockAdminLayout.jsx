@@ -57,8 +57,6 @@ export default function StockAdminLayout({ children, currentPage = 'dashboard' }
         { id: 'dashboard', name: 'Dashboard', icon: 'dashboard', path: '/stock-admin' },
         { id: 'inventory', name: 'Inventory', icon: 'inventory_2', path: '/stock-admin/inventory' },
         { id: 'issue-return', name: 'Issue/Return', icon: 'swap_horiz', path: '/stock-admin/issue-return' },
-        { id: 'purchase-orders', name: 'Purchase Orders', icon: 'shopping_cart', path: '/stock-admin/purchase-orders' },
-        { id: 'price-comparison', name: 'Price Comparison', icon: 'currency_rupee', path: '/stock-admin/price-comparison' },
     ];
 
     return (
