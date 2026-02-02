@@ -96,7 +96,6 @@ export default function LoginPage() {
                   </label>
                   <input
                     className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
-                    placeholder="e.g. EMP-001"
                     type="text"
                     value={employeeId}
                     onChange={(e) => setEmployeeId(e.target.value)}
@@ -114,7 +113,6 @@ export default function LoginPage() {
                   <div className="relative">
                     <input
                       className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 pr-12 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
-                      placeholder="••••••••"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -145,9 +143,6 @@ export default function LoginPage() {
                     </div>
                     <span className="text-sm text-[#92a4c9] group-hover:text-white transition-colors">Remember me</span>
                   </label>
-                  <a className="text-sm font-semibold text-primary hover:text-primary/80 transition-colors" href="#">
-                    Forgot Password?
-                  </a>
                 </div>
 
                 <button
@@ -165,8 +160,8 @@ export default function LoginPage() {
               </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+        </div >
+      </main >
+    </div >
   );
 }

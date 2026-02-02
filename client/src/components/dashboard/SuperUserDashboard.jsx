@@ -108,31 +108,44 @@ export default function SuperUserDashboard() {
           {!loading && summary && (
             <>
               {/* Stats Grid */}
+              {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/super/projects')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Total Projects</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Total Projects</h3>
                     <span className="material-symbols-outlined text-primary">folder</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{summary.total}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/super/projects?filter=ACTIVE')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-green-500/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Active</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Active</h3>
                     <span className="material-symbols-outlined text-green-500">trending_up</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{summary.active}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/super/projects?filter=COMPLETED')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completed</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Completed</h3>
                     <span className="material-symbols-outlined text-blue-500">check_circle</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{summary.completed}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/super/projects?filter=DELAYED')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-red-500/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Delayed</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Delayed</h3>
                     <span className="material-symbols-outlined text-red-500">warning</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{summary.delayed}</p>

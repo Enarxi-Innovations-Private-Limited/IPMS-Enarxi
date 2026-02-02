@@ -3,6 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 
 import { getCurrentUser } from '../../services/authService';
 import StockAdminLayout from '../common/StockAdminLayout';
+import ManagerLayout from '../common/ManagerLayout';
+import EmployeeLayout from '../common/EmployeeLayout';
+import InternLayout from '../common/InternLayout';
 import api from '../../services/api';
 
 // Import Excel Modal Component
@@ -314,7 +317,7 @@ function ProductFormModal({ isOpen, onClose, onSuccess, product = null }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const categories = ['RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'OTHER'];
+    const categories = ['RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'TOOLS', 'OTHER'];
 
     useEffect(() => {
         if (product) {
@@ -519,7 +522,7 @@ export default function InventoryPage() {
     const [showImportModal, setShowImportModal] = useState(false);
     const [selectedProduct, setSelectedProduct] = useState(null);
 
-    const categories = ['ALL', 'RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'OTHER'];
+    const categories = ['ALL', 'RESISTOR', 'CAPACITOR', 'IC', 'LED', 'TRANSISTOR', 'DIODE', 'SENSOR', 'MODULE', 'CONNECTOR', 'TOOLS', 'OTHER'];
 
     // Handle URL filter parameter
     useEffect(() => {
@@ -582,13 +585,14 @@ export default function InventoryPage() {
     };
 
     const handleDelete = async (productId) => {
-        if (!confirm('Are you sure you want to delete this product?')) return;
-
         try {
+            console.log('Attempting to delete product:', productId);
             await api.delete(`/stock/products/${productId}`);
+            console.log('Product deleted successfully');
             await loadProducts();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to delete product');
+            console.error('Failed to delete product:', err);
+            setError(err.response?.data?.message || 'Failed to delete product');
         }
     };
 
@@ -602,21 +606,29 @@ export default function InventoryPage() {
         return badges[status] || status;
     };
 
+    const getLayout = () => {
+        if (user?.role === 'MANAGER') return ManagerLayout;
+        if (user?.role === 'EMPLOYEE') return EmployeeLayout;
+        if (user?.role === 'INTERN') return InternLayout;
+        return StockAdminLayout;
+    };
+    const Layout = getLayout();
+
     if (loading) {
         return (
-            <StockAdminLayout currentPage="inventory">
+            <Layout currentPage="inventory">
                 <div className="flex items-center justify-center h-full">
                     <div className="text-center">
                         <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                         <p className="text-text-secondary">Loading products...</p>
                     </div>
                 </div>
-            </StockAdminLayout>
+            </Layout>
         );
     }
 
     return (
-        <StockAdminLayout currentPage="inventory">
+        <Layout currentPage="inventory">
             <div className="p-8">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-8">
@@ -625,7 +637,7 @@ export default function InventoryPage() {
                         <p className="text-text-secondary">{filteredProducts.length} products found</p>
                     </div>
                     <div className="flex gap-3">
-                        {user?.role !== 'MANAGER' && (
+                        {user?.role === 'STOCK_ADMIN' && (
                             <>
                                 <button
                                     onClick={() => setShowImportModal(true)}
@@ -740,7 +752,7 @@ export default function InventoryPage() {
                                                     >
                                                         <span className="material-symbols-outlined text-sm">visibility</span>
                                                     </button>
-                                                    {user?.role !== 'MANAGER' && (
+                                                    {user?.role === 'STOCK_ADMIN' && (
                                                         <button
                                                             onClick={() => { setSelectedProduct(product); setShowEditModal(true); }}
                                                             className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
@@ -749,7 +761,7 @@ export default function InventoryPage() {
                                                             <span className="material-symbols-outlined text-sm">edit</span>
                                                         </button>
                                                     )}
-                                                    {user && user.role === 'SUPER_USER' && (
+                                                    {user?.role === 'STOCK_ADMIN' && (
                                                         <button
                                                             onClick={() => handleDelete(product.id)}
                                                             className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
@@ -797,6 +809,6 @@ export default function InventoryPage() {
                 }}
                 product={selectedProduct}
             />
-        </StockAdminLayout >
+        </Layout>
     );
 }

@@ -306,6 +306,17 @@ export default function InternTasksPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
+                                                    {/* Rejection Warning */}
+                                                    {t.rejectionReason && t.status === 'IN_PROGRESS' && (
+                                                        <div className="mb-2 p-2 bg-red-500/10 border border-red-500/30 rounded flex items-start gap-2 max-w-[200px] whitespace-normal">
+                                                            <span className="material-symbols-outlined text-red-400 text-sm mt-0.5">error</span>
+                                                            <div>
+                                                                <p className="text-[10px] font-bold text-red-400 uppercase">Rejected</p>
+                                                                <p className="text-xs text-red-300 leading-tight">{t.rejectionReason}</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     <select
                                                         className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
                                                         value={statusUpdate[t.id] || t.status}
@@ -314,6 +325,7 @@ export default function InternTasksPage() {
                                                         <option value="NOT_STARTED">Not Started</option>
                                                         <option value="IN_PROGRESS">In Progress</option>
                                                         <option value="COMPLETED">Completed</option>
+                                                        <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
                                                     </select>
                                                 </td>
                                                 <td className="px-6 py-4">

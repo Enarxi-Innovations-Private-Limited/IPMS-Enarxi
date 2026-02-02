@@ -59,6 +59,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
         { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/manager' },
         { id: 'projects', label: 'Projects', icon: 'folder', path: '/manager/projects' },
         { id: 'team', label: 'Team', icon: 'group', path: '/manager/team' },
+        { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/stock-admin/inventory' },
     ];
 
     return (

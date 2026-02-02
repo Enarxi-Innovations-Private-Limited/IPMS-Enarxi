@@ -58,6 +58,8 @@ export default function EmployeeLayout({ children, currentPage = 'dashboard' }) 
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/employee' },
     { id: 'projects', label: 'My Projects', icon: 'folder', path: '/employee/projects' },
+    { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/employee/inventory' },
+    { id: 'my-items', label: 'My Issued Items', icon: 'assignment_turned_in', path: '/employee/my-items' },
   ];
 
   return (

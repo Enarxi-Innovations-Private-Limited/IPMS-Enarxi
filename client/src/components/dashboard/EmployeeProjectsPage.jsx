@@ -226,26 +226,12 @@ export default function EmployeeProjectsPage() {
                                     <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
                                         {selectedProject.projectCode || 'No ID'}
                                     </h1>
-                                    <div className="relative group">
-                                        <select
-                                            value={selectedProject.status}
-                                            onChange={(e) => handleUpdateProjectStatus(e.target.value)}
-                                            className={`appearance-none pl-4 pr-9 py-1.5 text-sm font-bold uppercase tracking-wider rounded-full cursor-pointer outline-none focus:ring-2 focus:ring-primary/50 transition-all border-none ${selectedProject.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30' :
-                                                selectedProject.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30' :
-                                                    selectedProject.status === 'ON_HOLD' ? 'bg-orange-500/20 text-orange-400 hover:bg-orange-500/30' :
-                                                        'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
-                                                }`}
-                                        >
-                                            <option value="PLANNING" className="bg-surface-dark text-white">Planning</option>
-                                            <option value="ACTIVE" className="bg-surface-dark text-white">Active</option>
-                                            <option value="ON_HOLD" className="bg-surface-dark text-white">On Hold</option>
-                                            <option value="COMPLETED" className="bg-surface-dark text-white">Completed</option>
-                                        </select>
-                                        <span className={`material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-base pointer-events-none transition-transform group-hover:rotate-180 ${selectedProject.status === 'ACTIVE' ? 'text-green-400' :
-                                            selectedProject.status === 'COMPLETED' ? 'text-purple-400' :
-                                                selectedProject.status === 'ON_HOLD' ? 'text-orange-400' :
-                                                    'text-blue-400'
-                                            }`}>expand_more</span>
+                                    <div className={`px-4 py-1.5 text-sm font-bold uppercase tracking-wider rounded-full border-none ${selectedProject.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
+                                        selectedProject.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-400' :
+                                            selectedProject.status === 'ON_HOLD' ? 'bg-orange-500/20 text-orange-400' :
+                                                'bg-blue-500/20 text-blue-400'
+                                        }`}>
+                                        {selectedProject.status}
                                     </div>
                                 </div>
                                 <p className="text-text-secondary text-lg">

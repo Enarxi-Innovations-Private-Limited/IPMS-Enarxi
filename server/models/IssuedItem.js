@@ -33,8 +33,18 @@ const issuedItemSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['ISSUED', 'RETURNED', 'CONSUMED'],
+        enum: ['ISSUED', 'RETURNED', 'CONSUMED', 'RETURN_REQUESTED'],
         default: 'ISSUED'
+    },
+    returnedAt: {
+        type: Date
+    },
+    returnCondition: {
+        type: String,
+        enum: ['GOOD', 'DEFECTIVE', 'DAMAGED']
+    },
+    remarks: {
+        type: String
     }
 }, {
     timestamps: true

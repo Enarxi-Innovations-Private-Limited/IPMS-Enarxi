@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import SuperUserLayout from '../common/SuperUserLayout.jsx';
 
 export default function SuperUserProjectsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [projects, setProjects] = useState([]);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -12,6 +13,14 @@ export default function SuperUserProjectsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterDepartment, setFilterDepartment] = useState('ALL');
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const filterParam = params.get('filter');
+        if (filterParam) {
+            setFilterStatus(filterParam);
+        }
+    }, [location.search]);
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -605,7 +614,8 @@ export default function SuperUserProjectsPage() {
                                     value={formatBudgetDisplay(createForm.budget)}
                                     onChange={(e) => {
                                         const val = e.target.value.replace(/,/g, '');
-                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                        // Max 10 Million (1,00,00,000)
+                                        if (val === '' || (/^\d*\.?\d*$/.test(val) && parseFloat(val) <= 10000000)) {
                                             setCreateForm({ ...createForm, budget: val });
                                         }
                                     }}
@@ -739,7 +749,8 @@ export default function SuperUserProjectsPage() {
                                     value={formatBudgetDisplay(editForm.budget)}
                                     onChange={(e) => {
                                         const val = e.target.value.replace(/,/g, '');
-                                        if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                        // Max 10 Million (1,00,00,000)
+                                        if (val === '' || (/^\d*\.?\d*$/.test(val) && parseFloat(val) <= 10000000)) {
                                             setEditForm({ ...editForm, budget: val });
                                         }
                                     }}
@@ -832,8 +843,8 @@ export default function SuperUserProjectsPage() {
                             <div className="flex items-center gap-3">
                                 {selectedProject.budget > 0 && (
                                     <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-full">
-                                        <span className="material-symbols-outlined text-green-400 text-sm">attach_money</span>
-                                        <span className="text-green-400 text-xs font-bold">₹{selectedProject.budget.toLocaleString()}</span>
+                                        <span className="material-symbols-outlined text-green-400 text-sm">payments</span>
+                                        <span className="text-green-400 text-xs font-bold">₹{selectedProject.budget.toLocaleString('en-IN')}</span>
                                     </div>
                                 )}
                                 <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedProject.status)}`}>{selectedProject.status.replace('_', ' ')}</span>

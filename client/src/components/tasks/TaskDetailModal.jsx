@@ -145,7 +145,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                 onClick={onClose}
             ></div>
             <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
-                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between shrink-0">
+                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between shrink-0">
                     <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                         <span className="material-symbols-outlined text-blue-500">info</span>
                         Task Details
@@ -158,7 +158,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                <div className="p-4 md:p-6 space-y-6 overflow-y-auto flex-1">
                     {/* Task Info */}
                     <div className="bg-background-dark/30 rounded-lg p-4 border border-border-dark">
                         <h3 className="text-xl font-bold text-white mb-2">{activeTask.title}</h3>
@@ -172,6 +172,17 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                 {users.find(u => u.id === (activeTask.assigneeId?._id || activeTask.assigneeId))?.name || 'Unassigned'}
                             </span>
                         </div>
+
+                        {/* Rejection Alert */}
+                        {activeTask.rejectionReason && activeTask.status === 'IN_PROGRESS' && (
+                            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
+                                <span className="material-symbols-outlined text-red-400 text-lg mt-0.5">error</span>
+                                <div>
+                                    <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">Rejection Reason</p>
+                                    <p className="text-white text-sm">{activeTask.rejectionReason}</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Deadline Section */}
                         <div className="mt-4 pt-4 border-t border-border-dark/50">

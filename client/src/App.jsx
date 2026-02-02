@@ -19,6 +19,7 @@ import ManagerTasksPage from './components/dashboard/ManagerTasksPage.jsx';
 import ManagerTeamPage from './components/dashboard/ManagerTeamPage.jsx';
 import InventoryPage from './components/stock/InventoryPage.jsx';
 import IssueReturnPage from './components/stock/IssueReturnPage.jsx';
+import MyIssuedItemsPage from './components/stock/MyIssuedItemsPage';
 import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
@@ -90,6 +91,22 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/employee/inventory"
+        element={
+          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
+            <InventoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/employee/my-items"
+        element={
+          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
+            <MyIssuedItemsPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/intern"
@@ -112,6 +129,22 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['INTERN']}>
             <InternTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/intern/inventory"
+        element={
+          <ProtectedRoute allowedRoles={['INTERN']}>
+            <InventoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/intern/my-items"
+        element={
+          <ProtectedRoute allowedRoles={['INTERN']}>
+            <MyIssuedItemsPage />
           </ProtectedRoute>
         }
       />

@@ -310,13 +310,7 @@ export default function EmployeeDashboard() {
               <p className="text-text-secondary text-lg">Manage your assigned projects and tasks.</p>
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowCreateTask(true)}
-                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
-              >
-                <span className="material-symbols-outlined text-lg">add</span>
-                Create Task
-              </button>
+              {/* Removed Create Task Button as per request */}
             </div>
           </div>
 
@@ -336,23 +330,32 @@ export default function EmployeeDashboard() {
             <>
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/employee/projects')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Projects</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">My Projects</h3>
                     <span className="material-symbols-outlined text-primary">folder</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{projects.length}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/employee/tasks')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-green-500/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Tasks</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">My Tasks</h3>
                     <span className="material-symbols-outlined text-green-500">task_alt</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{myTasks.length}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  onClick={() => navigate('/employee/tasks')}
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 hover:bg-surface-dark/80 transition-all group"
+                >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">In Progress</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">In Progress</h3>
                     <span className="material-symbols-outlined text-blue-500">trending_up</span>
                   </div>
                   <p className="text-3xl font-bold text-white">
@@ -408,340 +411,356 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Tasks Table */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
+              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
+                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface">
                   <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">task_alt</span>
                     My Tasks
                   </h2>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-background-dark/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Title
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Project
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Update Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Work Updates
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Queries
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-dark">
-                      {myTasks.map((t) => (
-                        <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-white font-medium">{t.title}</div>
-                            <div className="text-text-secondary text-sm mt-1">{t.description || 'No description'}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-white font-mono">
-                              {projects.find((p) => p.id === t.projectId)?.projectCode || '-'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${t.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400'
-                                : t.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400'
-                                  : t.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400'
-                                    : 'bg-gray-500/20 text-gray-400'
-                                }`}
-                            >
-                              {t.status.replace('_', ' ')}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {t.status === 'WAITING_APPROVAL' ? (
-                              <span className="text-yellow-400 text-sm italic">⏳ Pending Manager Approval</span>
-                            ) : t.status === 'COMPLETED' ? (
-                              <span className="text-green-400 text-sm">✓ Approved & Completed</span>
-                            ) : (
-                              <select
-                                className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                value={statusUpdate[t.id] || t.status}
-                                onChange={(e) => handleStatusChange(t.id, e.target.value)}
+                {loading ? (
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <p className="text-text-secondary">Loading your tasks...</p>
+                  </div>
+                ) : myTasks.length > 0 ? (
+                  <div className="overflow-x-auto custom-scrollbar flex-1">
+                    <table className="w-full">
+                      <thead className="bg-background-dark/50 border-b border-border-dark text-left">
+                        <tr>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Title</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Project</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Update Status</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Work Updates</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Queries</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-dark">
+                        {myTasks.map((t) => (
+                          <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
+                            <td className="px-4 py-3 md:px-6 md:py-4 max-w-[200px] md:max-w-xs overflow-hidden relative group cursor-pointer" onClick={() => setViewTask(t)}>
+                              <div className="text-white font-medium group-hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
+                              <div className="text-text-secondary text-xs md:text-sm mt-1 truncate">{t.description || 'No description'}</div>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              <span className="text-white font-mono text-xs md:text-sm">
+                                {t.projectCode || <span className="text-text-secondary italic">No Code</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-1 text-[10px] md:text-xs font-medium rounded-full ${t.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400'
+                                  : t.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400'
+                                    : t.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400'
+                                      : 'bg-gray-500/20 text-gray-400'
+                                  }`}
                               >
-                                <option value="NOT_STARTED">Not Started</option>
-                                <option value="IN_PROGRESS">In Progress</option>
-                                <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
-                              </select>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2 min-w-[200px]">
-                              <div className="flex gap-2">
-                                <input
-                                  className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                  placeholder="Add work update..."
-                                  value={commentText[t.id] || ''}
-                                  onChange={(e) =>
-                                    setCommentText({ ...commentText, [t.id]: e.target.value })
-                                  }
-                                />
-                                <button
-                                  onClick={() => handleAddComment(t.id)}
-                                  className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors"
-                                  disabled={!commentText[t.id]}
-                                  title="Post Update"
-                                >
-                                  <span className="material-symbols-outlined text-lg">send</span>
-                                </button>
-                              </div>
-                              {t.comments && t.comments.length > 0 && (
-                                <button
-                                  onClick={() => setViewTask(t)}
-                                  className="text-xs text-text-secondary mt-1 hover:text-white flex items-center gap-1 w-fit"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">visibility</span>
-                                  {t.comments.length} update{t.comments.length !== 1 ? 's' : ''}
-                                </button>
+                                {t.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              {/* Rejection Warning */}
+                              {t.rejectionReason && t.status === 'IN_PROGRESS' && (
+                                <div className="mb-2 p-2 bg-red-500/10 border border-red-500/30 rounded flex items-start gap-2 max-w-[200px] whitespace-normal">
+                                  <span className="material-symbols-outlined text-red-400 text-sm mt-0.5">error</span>
+                                  <div>
+                                    <p className="text-[10px] font-bold text-red-400 uppercase">Rejected</p>
+                                    <p className="text-xs text-red-300 leading-tight">{t.rejectionReason}</p>
+                                  </div>
+                                </div>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2 min-w-[150px]">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => openQueryModal(t)}
-                                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+
+                              {t.status === 'WAITING_APPROVAL' ? (
+                                <span className="text-yellow-400 text-sm italic">⏳ Pending Manager Approval</span>
+                              ) : t.status === 'COMPLETED' ? (
+                                <span className="text-green-400 text-sm">✓ Approved & Completed</span>
+                              ) : (
+                                <select
+                                  className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                  value={statusUpdate[t.id] || t.status}
+                                  onChange={(e) => handleStatusChange(t.id, e.target.value)}
                                 >
-                                  <span className="material-symbols-outlined text-base">help</span>
-                                  Raise
-                                </button>
-                                {t.queries?.length > 0 && (
+                                  <option value="NOT_STARTED">Not Started</option>
+                                  <option value="IN_PROGRESS">In Progress</option>
+                                  <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
+                                </select>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col gap-2 min-w-[200px]">
+                                <div className="flex gap-2">
+                                  <input
+                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    placeholder="Add work update..."
+                                    value={commentText[t.id] || ''}
+                                    onChange={(e) =>
+                                      setCommentText({ ...commentText, [t.id]: e.target.value })
+                                    }
+                                  />
+                                  <button
+                                    onClick={() => handleAddComment(t.id)}
+                                    className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors"
+                                    disabled={!commentText[t.id]}
+                                    title="Post Update"
+                                  >
+                                    <span className="material-symbols-outlined text-lg">send</span>
+                                  </button>
+                                </div>
+                                {t.comments && t.comments.length > 0 && (
                                   <button
                                     onClick={() => setViewTask(t)}
-                                    className="px-3 py-1.5 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-background-dark transition-colors"
-                                    title="View Queries"
+                                    className="text-xs text-text-secondary mt-1 hover:text-white flex items-center gap-1 w-fit"
                                   >
-                                    <span className="material-symbols-outlined text-base">visibility</span>
+                                    <span className="material-symbols-outlined text-[14px]">visibility</span>
+                                    {t.comments.length} update{t.comments.length !== 1 ? 's' : ''}
                                   </button>
                                 )}
                               </div>
-
-                              {t.queries && t.queries.length > 0 && (
-                                <div className="text-xs">
-                                  <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
-                                    {t.queries.filter(q => q.status === 'PENDING').length} pending
-                                  </span>
-                                  {' / '}
-                                  <span className="text-text-secondary">{t.queries.length} total</span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4">
+                              <div className="flex flex-col gap-2 min-w-[150px]">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => openQueryModal(t)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-base">help</span>
+                                    Raise
+                                  </button>
+                                  {t.queries?.length > 0 && (
+                                    <button
+                                      onClick={() => setViewTask(t)}
+                                      className="px-3 py-1.5 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-background-dark transition-colors"
+                                      title="View Queries"
+                                    >
+                                      <span className="material-symbols-outlined text-base">visibility</span>
+                                    </button>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          </td>
 
-                        </tr>
-                      ))}
-                      {myTasks.length === 0 && (
-                        <tr>
-                          <td colSpan="4" className="px-6 py-8 text-center text-text-secondary">
-                            No tasks assigned. Create your first task to get started.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                                {t.queries && t.queries.length > 0 && (
+                                  <div className="text-xs">
+                                    <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
+                                      {t.queries.filter(q => q.status === 'PENDING').length} pending
+                                    </span>
+                                    {' / '}
+                                    <span className="text-text-secondary">{t.queries.length} total</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
 
+                          </tr>
+                        ))}
 
-      {/* Project Details Modal */}
-      {showDetailsModal && selectedProject && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowDetailsModal(false)}
-          ></div>
-          <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-4xl mx-4 h-[80vh] flex flex-col overflow-hidden">
-
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span className="material-symbols-outlined text-primary">folder</span>
-                  {selectedProject.projectCode || 'No ID'}
-                </h2>
-                <p className="text-text-secondary text-xs mt-1 font-mono">ID: {selectedProject.id}</p>
-              </div>
-              <button
-                onClick={() => setShowDetailsModal(false)}
-                className="text-text-secondary hover:text-white"
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="p-6 overflow-y-auto">
-              <div className="mb-6">
-                <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-2">Description</h3>
-                <p className="text-white text-sm leading-relaxed">{selectedProject.description || 'No description provided.'}</p>
-              </div>
-
-              {/* Attachments Section */}
-              <div className="border border-border-dark rounded-xl bg-background-dark/20 overflow-hidden">
-                <div
-                  className="px-4 py-3 bg-surface-dark/50 border-b border-border-dark flex items-center justify-between cursor-pointer"
-                  onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
-                >
-                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary flex items-center gap-2">
-                    <span className="material-symbols-outlined text-base">attach_file</span>
-                    Attachments ({selectedProject.attachments?.length || 0})
-                  </h3>
-                  <span className={`material-symbols-outlined text-text-secondary transition-transform ${isAttachmentsExpanded ? 'rotate-180' : ''}`}>expand_more</span>
-                </div>
-
-                {isAttachmentsExpanded && (
-                  <div className="p-4">
-                    {/* List */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
-                      {selectedProject.attachments?.map((file, idx) => (
-                        <div key={idx} className="flex items-center gap-3 p-3 bg-black/20 border border-border-dark rounded-lg hover:bg-black/30 transition-colors group">
-                          <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                            <span className="material-symbols-outlined text-xl">description</span>
-                          </div>
-                          <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
-                            <p className="text-white text-sm font-medium truncate">{file.name}</p>
-                            <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
-                          </a>
-                          <div className="flex items-center gap-1">
-                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Preview">
-                              <span className="material-symbols-outlined">visibility</span>
-                            </a>
-                            <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-2" title="Download">
-                              <span className="material-symbols-outlined">download</span>
-                            </a>
-                          </div>
-                        </div>
-                      ))}
-                      {(!selectedProject.attachments || selectedProject.attachments.length === 0) && (
-                        <div className="col-span-full py-4 text-center text-text-secondary text-sm">
-                          No attachments yet.
-                        </div>
-                      )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                    <div className="w-16 h-16 rounded-full bg-surface-dark border border-border-dark flex items-center justify-center mb-4">
+                      <span className="material-symbols-outlined text-3xl text-text-secondary">assignment</span>
                     </div>
-
-                    {/* Upload Form */}
-                    <div className="border-t border-border-dark pt-4">
-                      <h4 className="text-white text-sm font-medium mb-3">Upload New Document</h4>
-                      <div className="flex gap-2 mb-3">
-                        <input
-                          type="text"
-                          placeholder="Document Name (e.g., Project Plan v1)"
-                          className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                          value={attachmentName}
-                          onChange={(e) => setAttachmentName(e.target.value)}
-                        />
-                      </div>
-                      <label className={`block w-full border-2 border-dashed border-border-dark rounded-xl p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <input
-                          type="file"
-                          multiple
-                          className="hidden"
-                          onChange={handleUploadAttachment}
-                          disabled={isUploading}
-                        />
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="material-symbols-outlined text-text-secondary group-hover:text-primary text-2xl">upload_file</span>
-                          <p className="text-sm font-medium text-white">Click to select files</p>
-                        </div>
-                      </label>
-                    </div>
+                    <h3 className="text-white font-medium mb-1">No Tasks Assigned</h3>
+                    <p className="text-text-secondary text-sm max-w-xs">
+                      You don't have any tasks assigned yet. Checked with your manager if this is a mistake.
+                    </p>
                   </div>
                 )}
               </div>
+            </>
+          )
+          }
+        </div >
+      </div >
+
+
+      {/* Project Details Modal */}
+      {
+        showDetailsModal && selectedProject && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowDetailsModal(false)}
+            ></div>
+            <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-4xl mx-4 h-[80vh] flex flex-col overflow-hidden">
+
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary">folder</span>
+                    {selectedProject.projectCode || 'No ID'}
+                  </h2>
+                  <p className="text-text-secondary text-xs mt-1 font-mono">ID: {selectedProject.id}</p>
+                </div>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-text-secondary hover:text-white"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto">
+                <div className="mb-6">
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary mb-2">Description</h3>
+                  <p className="text-white text-sm leading-relaxed">{selectedProject.description || 'No description provided.'}</p>
+                </div>
+
+                {/* Attachments Section */}
+                <div className="border border-border-dark rounded-xl bg-background-dark/20 overflow-hidden">
+                  <div
+                    className="px-4 py-3 bg-surface-dark/50 border-b border-border-dark flex items-center justify-between cursor-pointer"
+                    onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
+                  >
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base">attach_file</span>
+                      Attachments ({selectedProject.attachments?.length || 0})
+                    </h3>
+                    <span className={`material-symbols-outlined text-text-secondary transition-transform ${isAttachmentsExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                  </div>
+
+                  {isAttachmentsExpanded && (
+                    <div className="p-4">
+                      {/* List */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
+                        {selectedProject.attachments?.map((file, idx) => (
+                          <div key={idx} className="flex items-center gap-3 p-3 bg-black/20 border border-border-dark rounded-lg hover:bg-black/30 transition-colors group">
+                            <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-xl">description</span>
+                            </div>
+                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
+                              <p className="text-white text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
+                            </a>
+                            <div className="flex items-center gap-1">
+                              <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Preview">
+                                <span className="material-symbols-outlined">visibility</span>
+                              </a>
+                              <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-2" title="Download">
+                                <span className="material-symbols-outlined">download</span>
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                        {(!selectedProject.attachments || selectedProject.attachments.length === 0) && (
+                          <div className="col-span-full py-4 text-center text-text-secondary text-sm">
+                            No attachments yet.
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Upload Form */}
+                      <div className="border-t border-border-dark pt-4">
+                        <h4 className="text-white text-sm font-medium mb-3">Upload New Document</h4>
+                        <div className="flex gap-2 mb-3">
+                          <input
+                            type="text"
+                            placeholder="Document Name (e.g., Project Plan v1)"
+                            className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            value={attachmentName}
+                            onChange={(e) => setAttachmentName(e.target.value)}
+                          />
+                        </div>
+                        <label className={`block w-full border-2 border-dashed border-border-dark rounded-xl p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <input
+                            type="file"
+                            multiple
+                            className="hidden"
+                            onChange={handleUploadAttachment}
+                            disabled={isUploading}
+                          />
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="material-symbols-outlined text-text-secondary group-hover:text-primary text-2xl">upload_file</span>
+                            <p className="text-sm font-medium text-white">Click to select files</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Query Modal */}
-      {showQueryModal && selectedTaskForQuery && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowQueryModal(false)}
-          ></div>
-          <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-amber-500">help</span>
-                Raise Query to Manager
-              </h2>
-            </div>
-
-            <div className="p-6 space-y-5">
-              <div className="bg-background-dark/50 border border-border-dark rounded-lg p-4">
-                <p className="text-text-secondary text-xs uppercase tracking-wider mb-1">Task</p>
-                <p className="text-white font-medium">{selectedTaskForQuery.title}</p>
+      {
+        showQueryModal && selectedTaskForQuery && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowQueryModal(false)}
+            ></div>
+            <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+              <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
+                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <span className="material-symbols-outlined text-amber-500">help</span>
+                  Raise Query to Manager
+                </h2>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
-                  Your Query
-                </label>
-                <textarea
-                  className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none resize-none"
-                  placeholder="Describe your question or issue..."
-                  rows={4}
-                  value={queryText}
-                  onChange={(e) => setQueryText(e.target.value)}
-                ></textarea>
-              </div>
-            </div>
+              <div className="p-6 space-y-5">
+                <div className="bg-background-dark/50 border border-border-dark rounded-lg p-4">
+                  <p className="text-text-secondary text-xs uppercase tracking-wider mb-1">Task</p>
+                  <p className="text-white font-medium">{selectedTaskForQuery.title}</p>
+                </div>
 
-            <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowQueryModal(false)}
-                className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRaiseQuery}
-                disabled={!queryText.trim() || submittingQuery}
-                className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold shadow-lg shadow-amber-900/50 hover:shadow-amber-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                <span className="material-symbols-outlined text-lg">send</span>
-                {submittingQuery ? 'Sending...' : 'Send Query'}
-              </button>
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                    Your Query
+                  </label>
+                  <textarea
+                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none resize-none"
+                    placeholder="Describe your question or issue..."
+                    rows={4}
+                    value={queryText}
+                    onChange={(e) => setQueryText(e.target.value)}
+                  ></textarea>
+                </div>
+              </div>
+
+              <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowQueryModal(false)}
+                  className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRaiseQuery}
+                  disabled={!queryText.trim() || submittingQuery}
+                  className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold shadow-lg shadow-amber-900/50 hover:shadow-amber-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  <span className="material-symbols-outlined text-lg">send</span>
+                  {submittingQuery ? 'Sending...' : 'Send Query'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* View Task Details Modal (Read-Only/Query View) */}
-      {viewTask && (
-        <TaskDetailModal
-          task={viewTask}
-          users={[]} // Employee view might not have all users
-          onClose={() => setViewTask(null)}
-          onUpdate={(updatedTask) => {
-            // Update local state if needed
-            setTasks(tasks.map(t => t.id === updatedTask.id || t.id === updatedTask._id ? updatedTask : t));
-          }}
-          canRespond={false}
-        />
-      )}
-    </EmployeeLayout>
+      {
+        viewTask && (
+          <TaskDetailModal
+            task={viewTask}
+            users={[]} // Employee view might not have all users
+            onClose={() => setViewTask(null)}
+            onUpdate={(updatedTask) => {
+              // Update local state if needed
+              setTasks(tasks.map(t => t.id === updatedTask.id || t.id === updatedTask._id ? updatedTask : t));
+            }}
+            canRespond={false}
+          />
+        )
+      }
+    </EmployeeLayout >
   );
 }

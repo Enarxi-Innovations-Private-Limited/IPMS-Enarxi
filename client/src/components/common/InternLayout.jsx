@@ -59,6 +59,8 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/intern' },
     { id: 'projects', label: 'My Projects', icon: 'folder', path: '/intern/projects' },
+    { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/intern/inventory' },
+    { id: 'my-items', label: 'My Issued Items', icon: 'assignment_turned_in', path: '/intern/my-items' },
   ];
 
   return (

@@ -252,152 +252,159 @@ export default function InternDashboard() {
               </div>
 
               {/* Tasks Table */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
-                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
+              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
+                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface">
                   <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">task_alt</span>
                     My Tasks
                   </h2>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-background-dark/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Title
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Project
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Update Status
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Work Updates
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
-                          Queries
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border-dark">
-                      {myTasks.map((t) => (
-                        <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
-                          <td className="px-6 py-4 cursor-pointer" onClick={() => setViewTask(t)}>
-                            <div className="text-white font-medium hover:text-primary transition-colors">{t.title}</div>
-                            <div className="text-text-secondary text-sm mt-1">{t.description || 'No description'}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="text-white font-mono">
-                              {projects.find((p) => p.id === t.projectId)?.projectCode || '-'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${t.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400'
-                                : t.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400'
-                                  : t.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400'
-                                    : 'bg-gray-500/20 text-gray-400'
-                                }`}
-                            >
-                              {t.status.replace('_', ' ')}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {t.status === 'WAITING_APPROVAL' ? (
-                              <span className="text-yellow-400 text-sm italic">⏳ Pending Manager Approval</span>
-                            ) : t.status === 'COMPLETED' ? (
-                              <span className="text-green-400 text-sm">✓ Approved & Completed</span>
-                            ) : (
-                              <select
-                                className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                value={statusUpdate[t.id] || t.status}
-                                onChange={(e) => handleStatusChange(t.id, e.target.value)}
+                {loading ? (
+                  <div className="flex-1 flex items-center justify-center p-8">
+                    <p className="text-text-secondary">Loading your tasks...</p>
+                  </div>
+                ) : myTasks.length > 0 ? (
+                  <div className="overflow-x-auto custom-scrollbar flex-1">
+                    <table className="w-full">
+                      <thead className="bg-background-dark/50 border-b border-border-dark text-left">
+                        <tr>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Title</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Project</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Status</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Update Status</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Work Updates</th>
+                          <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Queries</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-dark">
+                        {myTasks.map((t) => (
+                          <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
+                            <td className="px-4 py-3 md:px-6 md:py-4 max-w-[200px] md:max-w-xs overflow-hidden relative group cursor-pointer" onClick={() => setViewTask(t)}>
+                              <div className="text-white font-medium hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
+                              <div className="text-text-secondary text-xs md:text-sm mt-1 truncate">{t.description || 'No description'}</div>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              <span className="text-white font-mono text-xs md:text-sm">
+                                {projects.find((p) => p.id === t.projectId)?.projectCode || '-'}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              <span
+                                className={`px-2 py-1 text-[10px] md:text-xs font-medium rounded-full ${t.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400'
+                                  : t.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400'
+                                    : t.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400'
+                                      : 'bg-gray-500/20 text-gray-400'
+                                  }`}
                               >
-                                <option value="NOT_STARTED">Not Started</option>
-                                <option value="IN_PROGRESS">In Progress</option>
-                                <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
-                              </select>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2 min-w-[200px]">
-                              <div className="flex gap-2">
-                                <input
-                                  className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                  placeholder="Add work update..."
-                                  value={commentText[t.id] || ''}
-                                  onChange={(e) =>
-                                    setCommentText({ ...commentText, [t.id]: e.target.value })
-                                  }
-                                />
-                                <button
-                                  onClick={() => handleAddComment(t.id)}
-                                  className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors"
-                                  disabled={!commentText[t.id]}
-                                  title="Post Update"
-                                >
-                                  <span className="material-symbols-outlined text-lg">send</span>
-                                </button>
-                              </div>
-                              {t.comments && t.comments.length > 0 && (
-                                <button
-                                  onClick={() => setViewTask(t)}
-                                  className="text-xs text-text-secondary mt-1 hover:text-white flex items-center gap-1 w-fit"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">visibility</span>
-                                  {t.comments.length} update{t.comments.length !== 1 ? 's' : ''}
-                                </button>
+                                {t.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
+                              {/* Rejection Warning */}
+                              {t.rejectionReason && t.status === 'IN_PROGRESS' && (
+                                <div className="mb-2 p-2 bg-red-500/10 border border-red-500/30 rounded flex items-start gap-2 max-w-[200px] whitespace-normal">
+                                  <span className="material-symbols-outlined text-red-400 text-sm mt-0.5">error</span>
+                                  <div>
+                                    <p className="text-[10px] font-bold text-red-400 uppercase">Rejected</p>
+                                    <p className="text-xs text-red-300 leading-tight">{t.rejectionReason}</p>
+                                  </div>
+                                </div>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2 min-w-[150px]">
-                              <div className="flex gap-2">
-                                <button
-                                  onClick={() => openQueryModal(t)}
-                                  className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+
+                              {t.status === 'WAITING_APPROVAL' ? (
+                                <span className="text-yellow-400 text-sm italic">⏳ Pending Manager Approval</span>
+                              ) : t.status === 'COMPLETED' ? (
+                                <span className="text-green-400 text-sm">✓ Approved & Completed</span>
+                              ) : (
+                                <select
+                                  className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                  value={statusUpdate[t.id] || t.status}
+                                  onChange={(e) => handleStatusChange(t.id, e.target.value)}
                                 >
-                                  <span className="material-symbols-outlined text-base">help</span>
-                                  Raise
-                                </button>
-                                {t.queries?.length > 0 && (
+                                  <option value="NOT_STARTED">Not Started</option>
+                                  <option value="IN_PROGRESS">In Progress</option>
+                                  <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
+                                </select>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4">
+                              <div className="flex flex-col gap-2 min-w-[200px]">
+                                <div className="flex gap-2">
+                                  <input
+                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    placeholder="Add work update..."
+                                    value={commentText[t.id] || ''}
+                                    onChange={(e) =>
+                                      setCommentText({ ...commentText, [t.id]: e.target.value })
+                                    }
+                                  />
+                                  <button
+                                    onClick={() => handleAddComment(t.id)}
+                                    className="px-3 py-1.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors"
+                                    disabled={!commentText[t.id]}
+                                    title="Post Update"
+                                  >
+                                    <span className="material-symbols-outlined text-lg">send</span>
+                                  </button>
+                                </div>
+                                {t.comments && t.comments.length > 0 && (
                                   <button
                                     onClick={() => setViewTask(t)}
-                                    className="px-3 py-1.5 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-background-dark transition-colors"
-                                    title="View Queries"
+                                    className="text-xs text-text-secondary mt-1 hover:text-white flex items-center gap-1 w-fit"
                                   >
-                                    <span className="material-symbols-outlined text-base">visibility</span>
+                                    <span className="material-symbols-outlined text-[14px]">visibility</span>
+                                    {t.comments.length} update{t.comments.length !== 1 ? 's' : ''}
                                   </button>
                                 )}
                               </div>
-
-                              {t.queries && t.queries.length > 0 && (
-                                <div className="text-xs">
-                                  <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
-                                    {t.queries.filter(q => q.status === 'PENDING').length} pending
-                                  </span>
-                                  {' / '}
-                                  <span className="text-text-secondary">{t.queries.length} total</span>
+                            </td>
+                            <td className="px-4 py-3 md:px-6 md:py-4">
+                              <div className="flex flex-col gap-2 min-w-[150px]">
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => openQueryModal(t)}
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+                                  >
+                                    <span className="material-symbols-outlined text-base">help</span>
+                                    Raise
+                                  </button>
+                                  {t.queries?.length > 0 && (
+                                    <button
+                                      onClick={() => setViewTask(t)}
+                                      className="px-3 py-1.5 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-background-dark transition-colors"
+                                      title="View Queries"
+                                    >
+                                      <span className="material-symbols-outlined text-base">visibility</span>
+                                    </button>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {myTasks.length === 0 && (
-                        <tr>
-                          <td colSpan="6" className="px-6 py-8 text-center text-text-secondary">
-                            No tasks assigned yet.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+
+                                {t.queries && t.queries.length > 0 && (
+                                  <div className="text-xs">
+                                    <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
+                                      {t.queries.filter(q => q.status === 'PENDING').length} pending
+                                    </span>
+                                    {' / '}
+                                    <span className="text-text-secondary">{t.queries.length} total</span>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {myTasks.length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="px-6 py-8 text-center text-text-secondary">
+                              No tasks assigned yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-text-secondary text-center py-8">No assigned tasks yet.</p>
+                )}
               </div>
             </>
           )}

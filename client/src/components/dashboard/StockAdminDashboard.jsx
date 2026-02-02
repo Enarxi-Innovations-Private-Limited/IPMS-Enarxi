@@ -59,7 +59,7 @@ export default function StockAdminDashboard() {
                 )}
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div className="bg-surface-dark border border-border-dark rounded-xl p-6">
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
@@ -73,21 +73,11 @@ export default function StockAdminDashboard() {
                     <div className="bg-surface-dark border border-border-dark rounded-xl p-6">
                         <div className="flex items-center justify-between mb-4">
                             <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-2xl text-green-400">attach_money</span>
+                                <span className="material-symbols-outlined text-2xl text-green-400">payments</span>
                             </div>
                         </div>
                         <p className="text-text-secondary text-sm mb-1">Total Value</p>
                         <p className="text-3xl font-bold text-white">₹{stats.totalValue.toLocaleString()}</p>
-                    </div>
-
-                    <div className="bg-surface-dark border border-border-dark rounded-xl p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-                                <span className="material-symbols-outlined text-2xl text-yellow-400">warning</span>
-                            </div>
-                        </div>
-                        <p className="text-text-secondary text-sm mb-1">Low Stock</p>
-                        <p className="text-3xl font-bold text-white">{stats.lowStock}</p>
                     </div>
 
                     <div className="bg-surface-dark border border-border-dark rounded-xl p-6">
@@ -154,17 +144,6 @@ export default function StockAdminDashboard() {
                             </div>
                             <button onClick={() => navigate('/stock-admin/inventory?filter=out_of_stock')} className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm font-medium hover:bg-red-500/30 transition-colors">
                                 View Items
-                            </button>
-                        </div>
-
-                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg flex items-start gap-4">
-                            <span className="material-symbols-outlined text-xl text-yellow-400">warning</span>
-                            <div className="flex-1">
-                                <p className="text-white font-medium">Low Stock Warnings</p>
-                                <p className="text-text-secondary text-sm">12 items are below minimum threshold</p>
-                            </div>
-                            <button onClick={() => navigate('/stock-admin/inventory?filter=low_stock')} className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm font-medium hover:bg-yellow-500/30 transition-colors">
-                                Reorder
                             </button>
                         </div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import StockAdminLayout from '../common/StockAdminLayout';
 import api from '../../services/api';
 import SearchableProductSelect from '../common/SearchableProductSelect';
@@ -18,6 +19,12 @@ export default function IssueReturnPage() {
     const [projectMembers, setProjectMembers] = useState([]);
     const [items, setItems] = useState([{ productId: '', quantity: 1 }]);
     const [submitting, setSubmitting] = useState(false);
+
+    // Return Modal State
+    const [showReturnModal, setShowReturnModal] = useState(false);
+    const [selectedReturnItem, setSelectedReturnItem] = useState(null);
+    const [returnCondition, setReturnCondition] = useState('GOOD');
+    const [returnRemarks, setReturnRemarks] = useState('');
 
     useEffect(() => {
         loadData();
@@ -81,6 +88,79 @@ export default function IssueReturnPage() {
         return prod ? prod.quantity : 0;
     };
 
+    const handleExcelUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const bstr = evt.target.result;
+                const wb = XLSX.read(bstr, { type: 'binary' });
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+                const data = XLSX.utils.sheet_to_json(ws);
+
+                const newItems = [];
+                let matchCount = 0;
+
+                data.forEach(row => {
+                    // Normalize keys to lower case for easier matching
+                    const keys = Object.keys(row).reduce((acc, k) => {
+                        acc[k.toLowerCase()] = row[k];
+                        return acc;
+                    }, {});
+
+                    // Look for Part Number or Part # or Product
+                    const partNum = keys['part number'] || keys['part #'] || keys['part_number'] || keys['product'];
+                    const qty = keys['quantity'] || keys['qty'] || 1;
+
+                    if (partNum) {
+                        // Find product
+                        const product = products.find(p =>
+                            (p.partNumber && p.partNumber.toLowerCase() === partNum.toString().toLowerCase()) ||
+                            (p.name && p.name.toLowerCase() === partNum.toString().toLowerCase())
+                        );
+
+                        if (product) {
+                            newItems.push({
+                                productId: product.id,
+                                quantity: parseInt(qty) || 1
+                            });
+                            matchCount++;
+                        }
+                    }
+                });
+
+                if (newItems.length > 0) {
+                    // Combine with existing empty items if any, or just append
+                    // If the current list has only one empty item, replace it
+                    if (items.length === 1 && !items[0].productId) {
+                        setItems(newItems);
+                    } else {
+                        setItems([...items, ...newItems]);
+                    }
+                    setSuccessMsg(`Successfully loaded ${matchCount} items from Excel.`);
+                    setTimeout(() => setSuccessMsg(''), 3000);
+                } else {
+                    setError('No matching products found in the uploaded file. Please check column headers (Part Number, Quantity).');
+                }
+            } catch (err) {
+                console.error("Excel parse error:", err);
+                setError('Failed to parse Excel file.');
+            }
+        };
+        reader.readAsBinaryString(file);
+        e.target.value = null; // Reset input
+    };
+
+    const handleDownloadTemplate = () => {
+        const ws = XLSX.utils.aoa_to_sheet([['Part Number', 'Quantity'], ['Example-Part-123', 5]]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.writeFile(wb, "Issue-Products-Template.xlsx");
+    };
+
     const handleIssueSubmit = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -123,6 +203,31 @@ export default function IssueReturnPage() {
             setTimeout(() => setSuccessMsg(''), 3000);
         } catch (err) {
             setError(err.response?.data?.message || err.message || 'Failed to issue items');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleReturnClick = (item) => {
+        setSelectedReturnItem(item);
+        setReturnCondition('GOOD');
+        setReturnRemarks('');
+        setShowReturnModal(true);
+    };
+
+    const handleReturnSubmit = async (e) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            await api.post(`/stock/return/${selectedReturnItem._id || selectedReturnItem.id}`, {
+                condition: returnCondition,
+                remarks: returnRemarks
+            });
+            setSuccessMsg('Item returned successfully');
+            setShowReturnModal(false);
+            loadData(); // Reload list
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to return item');
         } finally {
             setSubmitting(false);
         }
@@ -187,7 +292,29 @@ export default function IssueReturnPage() {
                 {/* Issue Form */}
                 {activeTab === 'issue' && (
                     <div className="bg-surface-dark border border-border-dark rounded-xl p-6 max-w-4xl">
-                        <h2 className="text-xl font-bold text-white mb-6">Issue Product to Project</h2>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-xl font-bold text-white">Issue Product to Project</h2>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleDownloadTemplate}
+                                    className="px-4 py-2 bg-blue-600/20 text-blue-400 border border-blue-600/50 rounded-lg hover:bg-blue-600/30 text-sm font-medium flex items-center gap-2 transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-lg">download</span>
+                                    Template
+                                </button>
+                                <label className="cursor-pointer px-4 py-2 bg-green-600/20 text-green-400 border border-green-600/50 rounded-lg hover:bg-green-600/30 text-sm font-medium flex items-center gap-2 transition-colors">
+                                    <span className="material-symbols-outlined text-lg">upload_file</span>
+                                    Upload Excel
+                                    <input
+                                        type="file"
+                                        accept=".xlsx, .xls"
+                                        className="hidden"
+                                        onChange={handleExcelUpload}
+                                    />
+                                </label>
+                            </div>
+                        </div>
                         <form onSubmit={handleIssueSubmit} className="space-y-6">
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -315,6 +442,7 @@ export default function IssueReturnPage() {
                                         <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Issued By</th>
                                         <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Date</th>
                                         <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Status</th>
+                                        <th className="text-left p-4 text-text-secondary font-medium uppercase text-xs">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -340,6 +468,16 @@ export default function IssueReturnPage() {
                                                 <td className="p-4 text-text-secondary text-sm">{item.issuedBy?.name}</td>
                                                 <td className="p-4 text-text-secondary text-sm">{new Date(item.issuedAt || item.createdAt).toLocaleDateString()}</td>
                                                 <td className="p-4">{getStatusBadge(item.status)}</td>
+                                                <td className="p-4">
+                                                    {item.status === 'ISSUED' && (
+                                                        <button
+                                                            onClick={() => handleReturnClick(item)}
+                                                            className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                                                        >
+                                                            Return
+                                                        </button>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))
                                     )}
@@ -349,6 +487,59 @@ export default function IssueReturnPage() {
                     </div>
                 )}
             </div>
+
+            {/* Return Modal */}
+            {showReturnModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+                    <div className="bg-surface-dark border border-border-dark rounded-xl w-full max-w-md mx-4 shadow-2xl p-6">
+                        <h2 className="text-xl font-bold text-white mb-4">Return Item</h2>
+                        <form onSubmit={handleReturnSubmit}>
+                            <div className="mb-4">
+                                <label className="block text-sm text-text-secondary mb-1">Product</label>
+                                <div className="text-white font-medium">{selectedReturnItem?.product?.name}</div>
+                                <div className="text-xs text-text-secondary">{selectedReturnItem?.product?.partNumber}</div>
+                            </div>
+                            <div className="mb-4">
+                                <label className="block text-sm text-text-secondary mb-1">Condition *</label>
+                                <select
+                                    value={returnCondition}
+                                    onChange={(e) => setReturnCondition(e.target.value)}
+                                    className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary"
+                                >
+                                    <option value="GOOD">Good (Return to Stock)</option>
+                                    <option value="DEFECTIVE">Defective (Do not Restock)</option>
+                                    <option value="DAMAGED">Damaged (User Fault)</option>
+                                </select>
+                            </div>
+                            <div className="mb-6">
+                                <label className="block text-sm text-text-secondary mb-1">Remarks</label>
+                                <textarea
+                                    value={returnRemarks}
+                                    onChange={(e) => setReturnRemarks(e.target.value)}
+                                    placeholder="Any notes about the return..."
+                                    className="w-full px-4 py-2 bg-surface-light border border-border-dark rounded-lg text-white focus:outline-none focus:border-primary h-24 resize-none"
+                                />
+                            </div>
+                            <div className="flex gap-3 justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowReturnModal(false)}
+                                    className="px-4 py-2 text-text-secondary hover:text-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover transition-colors"
+                                >
+                                    {submitting ? 'Processing...' : 'Confirm Return'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </StockAdminLayout>
     );
 }

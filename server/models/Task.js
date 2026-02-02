@@ -57,7 +57,12 @@ const taskSchema = new mongoose.Schema({
     // Self-Assignment Tracking (for Manager Performance)
     selfAssignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }, // Manager who self-assigned
     selfAssignedAt: { type: Date, default: null },       // When manager self-assigned the task
-    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }     // Who completed the task
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },     // Who completed the task
+
+    // Rejection Tracking
+    rejectionReason: { type: String, default: '' },
+    rejectedAt: { type: Date, default: null },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, {
     timestamps: true, // Automatically adds createdAt and updatedAt
 });

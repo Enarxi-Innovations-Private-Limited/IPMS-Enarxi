@@ -747,7 +747,7 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
             budget: p.budget,
             managerId: p.managerId?._id,
             managerName: p.managerId?.name,
-            teamIds: p.teamIds.map(member => member._id?.toString() || member.toString()),
+            teamIds: p.teamIds, // Return populated objects so frontend can see names
             templateUsed: p.templateUsed,
             attachments: p.attachments,
             taskCount,
@@ -1518,6 +1518,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
         projectName: isEmployeeOrIntern ? null : (t.projectId?.name || 'Unknown'),
         projectCode: t.projectId?.projectCode || null,
         assigneeId: t.assigneeId,
+        rejectionReason: t.rejectionReason,
         // Deadline and performance fields
         assignedAt: t.assignedAt,
         deadline: t.deadline,
@@ -1570,6 +1571,7 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
             projectName: isEmployeeOrIntern ? null : (task.projectId?.name || 'Unknown'),
             projectCode: task.projectId?.projectCode || null,
             assigneeId: task.assigneeId,
+            rejectionReason: task.rejectionReason,
             assignedAt: task.assignedAt,
             deadline: task.deadline,
             completedAt: task.completedAt,
@@ -1687,6 +1689,43 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
     }
 });
 
+// Delete Task
+app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+    console.log(`Received DELETE request for task: ${req.params.taskId}`);
+    try {
+        const { taskId } = req.params;
+        if (!isValidObjectId(taskId)) {
+            console.log('Invalid Object ID for delete:', taskId);
+            return res.status(400).json({ message: 'Invalid task ID' });
+        }
+
+        const task = await Task.findById(taskId);
+        if (!task) {
+            console.log('Task not found in DB for delete:', taskId);
+            return res.status(404).json({ message: 'Task not found in database' });
+        }
+
+        // Optionally check ownership/project management here if strictly required,
+        // but requireRole(MANAGER) covers the basic 'Manager can delete' requirement.
+        // For stricter control:
+        if (req.user.role === roles.MANAGER && task.projectId) {
+            const project = await Project.findById(task.projectId);
+            // If manager is not the manager of this project
+            if (project && project.managerId && project.managerId.toString() !== req.user._id.toString()) {
+                // Check if they are authorized otherwise? 
+                // For now, allow managers to delete tasks as requested by user flow.
+            }
+        }
+
+        await Task.findByIdAndDelete(taskId);
+        console.log(`✅ Task deleted: ${taskId}`);
+        res.json({ message: 'Task deleted successfully', id: taskId });
+    } catch (err) {
+        console.error('❌ [Delete Task]: Error:', err);
+        res.status(500).json({ message: 'Failed to delete task', error: err.message });
+    }
+});
+
 // Update Task
 app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
     try {
@@ -1698,7 +1737,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        const { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy } = req.body;
+        const { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy, rejectionReason } = req.body;
         console.log('Updating task:', taskId, { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy });
 
         if (title) task.title = title;
@@ -1709,8 +1748,12 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
             task.deadline = deadline ? new Date(deadline) : null;
             // Recalculate allocated minutes if assignedAt exists
             if (task.assignedAt && task.deadline) {
-                task.allocatedMinutes = Math.round((task.deadline.getTime() - task.assignedAt.getTime()) / (1000 * 60));
-                if (task.allocatedMinutes < 0) task.allocatedMinutes = 0;
+                const start = new Date(task.assignedAt);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(task.deadline);
+                end.setHours(0, 0, 0, 0);
+                const diffDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+                task.allocatedMinutes = diffDays * 1440; // Store as minutes (days * 24 * 60)
             }
         }
 
@@ -1724,6 +1767,14 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
                 // If approving an employee's waiting task, send notification
                 if (task.status === 'WAITING_APPROVAL' && task.assigneeId) {
                     const action = status === 'COMPLETED' ? 'approved' : 'returned for revision';
+
+                    // Handle Rejection Logic
+                    if (status === 'IN_PROGRESS' && rejectionReason) {
+                        task.rejectionReason = rejectionReason;
+                        task.rejectedAt = new Date();
+                        task.rejectedBy = req.user._id;
+                    }
+
                     await Notification.create({
                         recipientId: task.assigneeId,
                         type: 'TASK_UPDATE',
@@ -1790,8 +1841,12 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
             // Recalculate allocated minutes if assignedAt and deadline exist
             if (task.assignedAt && task.deadline) {
-                task.allocatedMinutes = Math.round((task.deadline.getTime() - task.assignedAt.getTime()) / (1000 * 60));
-                if (task.allocatedMinutes < 0) task.allocatedMinutes = 0;
+                const start = new Date(task.assignedAt);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(task.deadline);
+                end.setHours(0, 0, 0, 0);
+                const diffDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+                task.allocatedMinutes = diffDays * 1440; // Store as minutes
             }
         }
 
@@ -1815,8 +1870,13 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
             }
 
             if (task.assignedAt) {
-                const actualMinutes = Math.round((task.completedAt.getTime() - task.assignedAt.getTime()) / (1000 * 60));
-                task.actualMinutes = actualMinutes > 0 ? actualMinutes : 1; // Minimum 1 minute
+                const start = new Date(task.assignedAt);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date(task.completedAt);
+                end.setHours(0, 0, 0, 0);
+
+                const actualDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+                task.actualMinutes = actualDays * 1440;
 
                 if (task.allocatedMinutes !== null && task.allocatedMinutes !== undefined) {
                     task.performanceScore = Math.round((task.allocatedMinutes / task.actualMinutes) * 100);
@@ -2344,7 +2404,7 @@ app.get('/api/activities', authMiddleware, async (req, res) => {
 
 // -------- Product Routes --------
 // Get all products with filters
-app.get('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
+app.get('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN, roles.MANAGER, roles.SUPER_USER, roles.EMPLOYEE, roles.INTERN), async (req, res) => {
     try {
         const { category, status, search, lowStock } = req.query;
         let query = {};
@@ -2502,7 +2562,7 @@ app.put('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_ADMIN
 });
 
 // Delete product
-app.delete('/api/stock/products/:id', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.delete('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
     try {
         if (!isValidObjectId(req.params.id)) {
             return res.status(400).json({ message: 'Invalid product ID' });
@@ -2601,12 +2661,76 @@ app.get('/api/stock/issue/project/:projectId', authMiddleware, requireRole(roles
     }
 });
 
+// Mark item as CONSUMED (Employee)
+app.post('/api/stock/issued/:id/consume', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const issuedItem = await IssuedItem.findById(id);
+
+        if (!issuedItem) {
+            return res.status(404).json({ message: 'Item not found' });
+        }
+
+        if (issuedItem.issuedTo.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to modify this item' });
+        }
+
+        if (issuedItem.status !== 'ISSUED') {
+            return res.status(400).json({ message: 'Item is not in ISSUED state' });
+        }
+
+        issuedItem.status = 'CONSUMED';
+        await issuedItem.save();
+
+        await logActivity('STOCK_CONSUMED', `Consumed ${issuedItem.quantity} items of product ${issuedItem.product}`, req.user._id, req.user.name, issuedItem.project, 'Project');
+
+        res.json({ message: 'Item marked as consumed' });
+    } catch (err) {
+        console.error('❌ [Consume Item]: Error:', err);
+        res.status(500).json({ message: 'Failed to mark item as consumed', error: err.message });
+    }
+});
+
+// Request Return (Employee)
+app.post('/api/stock/issued/:id/request-return', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { condition, remarks } = req.body;
+
+        const issuedItem = await IssuedItem.findById(id);
+
+        if (!issuedItem) {
+            return res.status(404).json({ message: 'Item not found' });
+        }
+
+        if (issuedItem.issuedTo.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Not authorized to modify this item' });
+        }
+
+        if (issuedItem.status !== 'ISSUED') {
+            return res.status(400).json({ message: 'Item is not in ISSUED state' });
+        }
+
+        issuedItem.status = 'RETURN_REQUESTED';
+        issuedItem.returnCondition = condition || 'GOOD';
+        issuedItem.remarks = remarks || '';
+        await issuedItem.save();
+
+        await logActivity('RETURN_REQUESTED', `Requested return for ${issuedItem.quantity} items`, req.user._id, req.user.name, issuedItem.project, 'Project');
+
+        res.json({ message: 'Return requested successfully' });
+    } catch (err) {
+        console.error('❌ [Request Return]: Error:', err);
+        res.status(500).json({ message: 'Failed to request return', error: err.message });
+    }
+});
+
 // Get ALL issued items
 app.get('/api/stock/issued', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
     try {
         const items = await IssuedItem.find()
             .populate('project', 'name projectCode')
-            .populate('product', 'name partNumber brand')
+            .populate('product', 'name partNumber brand category')
             .populate('issuedBy', 'name')
             .populate('issuedTo', 'name')
             .sort({ issuedAt: -1 });
@@ -2616,37 +2740,58 @@ app.get('/api/stock/issued', authMiddleware, requireRole(roles.STOCK_ADMIN), asy
     }
 });
 
+// Get My Issued Items (Employee/Intern)
+app.get('/api/stock/issued/my-items', authMiddleware, async (req, res) => {
+    try {
+        const items = await IssuedItem.find({
+            issuedTo: req.user._id,
+            status: { $in: ['ISSUED', 'RETURN_REQUESTED'] }
+        })
+            .populate('project', 'name projectCode')
+            .populate('product', 'name partNumber brand category image')
+            .populate('issuedBy', 'name')
+            .sort({ issuedAt: -1 });
+        res.json(items);
+    } catch (err) {
+        res.status(500).json({ message: 'Failed to fetch your items', error: err.message });
+    }
+});
+
 // Return an issued item
 app.post('/api/stock/return/:id', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
     const session = await mongoose.startSession();
     session.startTransaction();
     try {
         const { id } = req.params;
-        const { condition } = req.body; // Optional condition
+        const { condition = 'GOOD', remarks = '' } = req.body; // Default good
 
         const issuedItem = await IssuedItem.findById(id).session(session);
         if (!issuedItem) {
             throw new Error('Issued item not found');
         }
 
-        if (issuedItem.status === 'RETURNED') {
-            throw new Error('Item already returned');
+        if (issuedItem.status === 'RETURNED' || issuedItem.status === 'CONSUMED') {
+            throw new Error('Item already returned or consumed');
         }
 
         issuedItem.status = 'RETURNED';
+        issuedItem.returnedAt = new Date();
+        issuedItem.returnCondition = condition;
+        issuedItem.remarks = remarks;
         await issuedItem.save({ session });
 
-        // Restore stock
+        // Restore stock ONLY if condition is GOOD
         const product = await Product.findById(issuedItem.product).session(session);
-        if (product) {
+        if (product && condition === 'GOOD') {
             product.quantity += issuedItem.quantity;
+            product.lastRestocked = new Date(); // Treat return as restock? Or separate field? keeping it simple
             await product.save({ session });
         }
 
         await session.commitTransaction();
         session.endSession();
 
-        await logActivity('STOCK_RETURNED', `Returned ${issuedItem.quantity} items of product ${product?.name}`, req.user._id, req.user.name, issuedItem.project, 'Project');
+        await logActivity('STOCK_RETURNED', `Returned ${issuedItem.quantity} items of product ${product?.name} (${condition})`, req.user._id, req.user.name, issuedItem.project, 'Project');
 
         res.json({ message: 'Item returned successfully' });
     } catch (err) {
