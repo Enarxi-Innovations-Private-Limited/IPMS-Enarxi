@@ -5,6 +5,7 @@ import api from '../../services/api.js';
 import NotificationBell from './NotificationBell';
 import GlobalSearch from './GlobalSearch';
 
+
 export default function SuperUserLayout({ children, currentPage = 'dashboard' }) {
   const navigate = useNavigate();
   const user = getCurrentUser();
@@ -59,6 +60,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/super' },
     { id: 'projects', label: 'Projects', icon: 'folder', path: '/super/projects' },
     { id: 'teams', label: 'Team Members', icon: 'group', path: '/super/teams' },
+    { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/super/inventory' },
     { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
   ];
 
@@ -172,10 +174,13 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             </button>
             <span className="text-white font-bold text-lg">IPMS</span>
           </div>
-          <div className="hidden md:flex flex-1 max-w-xl mx-auto">
-            <GlobalSearch placeholder="Search projects, tasks, or team members..." />
+
+          {/* Search Bar - Responsive */}
+          <div className="hidden md:flex flex-1 max-w-xl mx-4">
+            <GlobalSearch />
           </div>
-          <div className="flex items-center gap-4 ml-4">
+
+          <div className="flex items-center gap-4">
             <NotificationBell />
             <div className="h-8 w-px bg-border-dark"></div>
 
@@ -183,21 +188,20 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             <div className="relative">
               <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors"
+                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
               >
                 <div className="hidden md:flex flex-col items-end">
-                  <span className="text-white text-sm font-medium">{user?.name || 'User'}</span>
-                  <span className="text-text-secondary text-xs">{user?.role || 'Super User'}</span>
+                  <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                  <span className="text-xs text-text-secondary font-medium">{user?.role?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) || 'Super User'}</span>
                 </div>
-                <div className="size-10 rounded-full bg-gradient-primary flex items-center justify-center border-2 border-surface-dark">
-                  <span className="text-white font-semibold text-sm">
-                    {user?.name?.charAt(0)?.toUpperCase() || 'U'}
-                  </span>
+                <div className="size-9 rounded-lg bg-gradient-primary flex items-center justify-center text-white font-bold shadow-md shadow-primary/20 ring-2 ring-background-dark">
+                  {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                 </div>
-                <span className="material-symbols-outlined text-text-secondary text-lg hidden md:block">
-                  {showProfileDropdown ? 'expand_less' : 'expand_more'}
+                <span className={`material-symbols-outlined text-text-secondary transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`}>
+                  expand_more
                 </span>
               </button>
+
 
               {/* Dropdown Menu */}
               {showProfileDropdown && (

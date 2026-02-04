@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
+import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
 
 export default function ManagerTasksPage() {
     const navigate = useNavigate();
@@ -54,6 +55,21 @@ export default function ManagerTasksPage() {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Handle deep linking from search or dashboard
+    useEffect(() => {
+        if (location.state?.filter) {
+            setFilter(location.state.filter);
+        }
+        if (location.state?.openTaskId && tasks.length > 0) {
+            const taskToOpen = tasks.find(t => t.id === location.state.openTaskId);
+            if (taskToOpen) {
+                openDetailModal(taskToOpen);
+                // Optional: Clear state to avoid reopening on refresh, but for now it's fine
+                // window.history.replaceState({}, document.title);
+            }
+        }
+    }, [tasks, location.state]);
 
     const handleStatusChange = async (taskId, status) => {
         try {
@@ -112,8 +128,23 @@ export default function ManagerTasksPage() {
         }
     };
 
+    const handleManagerDelayReview = async (taskId, approved, rejectionReason = '') => {
+        try {
+            const payload = { approved };
+            if (!approved) payload.rejectionReason = rejectionReason;
+
+            await api.put(`/tasks/${taskId}/delay/manager-review`, payload);
+            await loadData();
+        } catch (err) {
+            console.error('Failed to review delay:', err);
+            setError(err.response?.data?.message || 'Failed to submit review');
+        }
+    };
+
     const filteredTasks =
-        filter === 'ALL' ? tasks : tasks.filter((t) => t.status === filter);
+        filter === 'ALL' ? tasks
+            : filter === 'DELAYED' ? tasks.filter((t) => t.delayStatus && t.delayStatus !== 'NONE')
+                : tasks.filter((t) => t.status === filter);
 
 
     return (
@@ -145,7 +176,7 @@ export default function ManagerTasksPage() {
                             <p className="text-text-secondary text-lg">Manage and track all team tasks.</p>
                         </div>
                         <div className="flex gap-3 flex-wrap">
-                            {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((status) => (
+                            {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED', 'DELAYED'].map((status) => (
                                 <button
                                     key={status}
                                     onClick={() => setFilter(status)}
@@ -154,7 +185,7 @@ export default function ManagerTasksPage() {
                                         : 'bg-surface-dark text-text-secondary hover:text-white border border-border-dark'
                                         }`}
                                 >
-                                    {status === 'ALL' ? 'All' : status.replace('_', ' ')}
+                                    {status === 'ALL' ? 'All' : status === 'DELAYED' ? 'Delay Requests' : status.replace('_', ' ')}
                                 </button>
                             ))}
                         </div>
@@ -209,6 +240,11 @@ export default function ManagerTasksPage() {
                                                         <div className="text-text-secondary text-sm mt-1 max-w-xs truncate">
                                                             {t.description || 'No description'}
                                                         </div>
+                                                        {t.delayReason && (filter === 'DELAYED' || t.delayStatus === 'PENDING_MANAGER') && (
+                                                            <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-amber-200/90 text-xs italic break-words whitespace-normal max-w-xs">
+                                                                "Delay: {t.delayReason}"
+                                                            </div>
+                                                        )}
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
                                                         <span className="text-white">{t.projectName || 'Unknown'}</span>
@@ -235,17 +271,39 @@ export default function ManagerTasksPage() {
                                                         </select>
                                                     </td>
                                                     <td className="px-6 py-4 whitespace-nowrap">
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedTask(t);
-                                                                setSelectedUserId(t.assigneeId || '');
-                                                                setShowAssignModal(true);
-                                                            }}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">person_add</span>
-                                                            Assign
-                                                        </button>
+                                                        {t.delayStatus === 'PENDING_MANAGER' ? (
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    onClick={() => handleManagerDelayReview(t.id, true)}
+                                                                    className="px-3 py-1 bg-green-600/20 text-green-400 border border-green-600/30 rounded text-xs font-bold hover:bg-green-600/30"
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const reason = prompt('Enter rejection reason:');
+                                                                        if (reason) {
+                                                                            handleManagerDelayReview(t.id, false, reason);
+                                                                        }
+                                                                    }}
+                                                                    className="px-3 py-1 bg-red-600/20 text-red-400 border border-red-600/30 rounded text-xs font-bold hover:bg-red-600/30"
+                                                                >
+                                                                    Reject
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedTask(t);
+                                                                    setSelectedUserId(t.assigneeId || '');
+                                                                    setShowAssignModal(true);
+                                                                }}
+                                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">person_add</span>
+                                                                Assign
+                                                            </button>
+                                                        )}
                                                     </td>
                                                     {/* Updates & Queries Column */}
                                                     <td className="px-6 py-4">
@@ -353,142 +411,16 @@ export default function ManagerTasksPage() {
 
             {/* Task Detail Modal - View Work Updates & Respond to Queries */}
             {showDetailModal && detailTask && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        onClick={() => setShowDetailModal(false)}
-                    ></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-blue-500">info</span>
-                                Task Details: {detailTask.title}
-                            </h2>
-                            <button
-                                onClick={() => setShowDetailModal(false)}
-                                className="text-text-secondary hover:text-white transition-colors"
-                            >
-                                <span className="material-symbols-outlined">close</span>
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-6 overflow-y-auto flex-1">
-                            {/* Work Updates Section */}
-                            <div>
-                                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary text-lg">edit_note</span>
-                                    Work Updates ({detailTask.comments?.length || 0})
-                                </h3>
-                                {detailTask.comments && detailTask.comments.length > 0 ? (
-                                    <div className="space-y-3 max-h-48 overflow-y-auto">
-                                        {detailTask.comments.map((c, idx) => (
-                                            <div key={c.id || idx} className="bg-background-dark/50 border border-border-dark rounded-lg p-3">
-                                                <p className="text-white text-sm">{c.text}</p>
-                                                <p className="text-text-secondary text-xs mt-2">
-                                                    {users.find(u => u.id === c.userId)?.name || 'Unknown'} • {new Date(c.createdAt).toLocaleString()}
-                                                </p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-text-secondary text-sm">No work updates yet.</p>
-                                )}
-                            </div>
-
-                            {/* Queries Section */}
-                            <div>
-                                <h3 className="text-white font-semibold mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-amber-500 text-lg">help</span>
-                                    Queries ({detailTask.queries?.length || 0})
-                                </h3>
-                                {detailTask.queries && detailTask.queries.length > 0 ? (
-                                    <div className="space-y-4">
-                                        {detailTask.queries.map((q, idx) => {
-                                            const qId = q._id ? String(q._id) : (q.id ? String(q.id) : null);
-                                            return (
-                                                <div key={qId || idx} className={`border rounded-lg p-4 ${q.status === 'PENDING' ? 'bg-amber-500/10 border-amber-500/50' : 'bg-green-500/10 border-green-500/50'}`}>
-                                                    <div className="flex items-start justify-between gap-4">
-                                                        <div className="flex-1">
-                                                            <p className="text-white text-sm font-medium">{q.question}</p>
-                                                            <p className="text-text-secondary text-xs mt-1">
-                                                                From: {q.userName || 'Unknown'} • {new Date(q.createdAt).toLocaleString()}
-                                                            </p>
-                                                        </div>
-                                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${q.status === 'PENDING' ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
-                                                            {q.status}
-                                                        </span>
-                                                    </div>
-
-                                                    {q.status === 'RESOLVED' && q.response && (
-                                                        <div className="mt-3 pt-3 border-t border-border-dark">
-                                                            <p className="text-green-400 text-sm">
-                                                                <span className="font-medium">Response:</span> {q.response}
-                                                            </p>
-                                                            <p className="text-text-secondary text-xs mt-1">
-                                                                By: {q.respondedByName || 'Manager'} • {new Date(q.respondedAt).toLocaleString()}
-                                                            </p>
-                                                        </div>
-                                                    )}
-
-                                                    {q.status === 'PENDING' && (
-                                                        <div className="mt-3 pt-3 border-t border-border-dark">
-                                                            {respondingToQuery === qId ? (
-                                                                <div className="space-y-2">
-                                                                    <textarea
-                                                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none resize-none"
-                                                                        placeholder="Type your response..."
-                                                                        rows={2}
-                                                                        value={responseText}
-                                                                        onChange={(e) => setResponseText(e.target.value)}
-                                                                    ></textarea>
-                                                                    <div className="flex gap-2">
-                                                                        <button
-                                                                            onClick={() => handleRespondToQuery(qId)}
-                                                                            disabled={!responseText.trim() || submittingResponse}
-                                                                            className="px-4 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-medium hover:bg-emerald-600 transition-colors disabled:opacity-50"
-                                                                        >
-                                                                            {submittingResponse ? 'Sending...' : 'Send Response'}
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => { setRespondingToQuery(null); setResponseText(''); }}
-                                                                            className="px-4 py-1.5 rounded-lg border border-border-dark text-white text-sm font-medium hover:bg-background-dark transition-colors"
-                                                                        >
-                                                                            Cancel
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            ) : (
-                                                                <button
-                                                                    onClick={() => setRespondingToQuery(qId)}
-                                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 text-sm font-medium hover:bg-emerald-500/30 transition-colors"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-base">reply</span>
-                                                                    Respond
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                ) : (
-                                    <p className="text-text-secondary text-sm">No queries raised.</p>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="px-6 py-4 border-t border-border-dark flex justify-end">
-                            <button
-                                type="button"
-                                onClick={() => setShowDetailModal(false)}
-                                className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
-                            >
-                                Close
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <TaskDetailModal
+                    task={detailTask}
+                    users={users}
+                    onClose={() => setShowDetailModal(false)}
+                    onUpdate={async () => {
+                        await loadData();
+                        // Also update the selected task in the list if needed, but loadData handles it
+                    }}
+                    canRespond={true}
+                />
             )}
         </ManagerLayout>
     );

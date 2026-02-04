@@ -115,47 +115,50 @@ export default function NotificationBell() {
             </button>
 
             {showDropdown && (
-                <div className="absolute right-0 mt-2 w-80 bg-surface-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-border-dark bg-background-dark/50">
-                        <h3 className="text-sm font-semibold text-white">Notifications</h3>
-                        {unreadCount > 0 && (
-                            <button
-                                onClick={handleMarkAllRead}
-                                className="text-xs text-primary hover:text-primary-light transition-colors"
-                            >
-                                Mark all as read
-                            </button>
-                        )}
-                    </div>
-                    <div className="max-h-96 overflow-y-auto">
-                        {notifications.length > 0 ? (
-                            notifications.map((notification) => (
-                                <div
-                                    key={notification._id}
-                                    onClick={() => handleNotificationClick(notification)}
-                                    className={`px-4 py-3 border-b border-border-dark last:border-0 hover:bg-background-dark/50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-primary/5' : ''}`}
+                <>
+                    <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] md:hidden" onClick={() => setShowDropdown(false)}></div>
+                    <div className="fixed left-4 right-4 top-16 md:absolute md:top-full md:right-0 md:left-auto md:w-80 bg-[#161A23] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-border-dark bg-background-dark/50">
+                            <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                            {unreadCount > 0 && (
+                                <button
+                                    onClick={handleMarkAllRead}
+                                    className="text-xs text-primary hover:text-primary-light transition-colors"
                                 >
-                                    <div className="flex gap-3">
-                                        <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-primary' : 'bg-transparent'}`} />
-                                        <div className="flex-1">
-                                            <p className={`text-sm ${!notification.isRead ? 'text-white font-medium' : 'text-text-secondary'}`}>
-                                                {notification.message}
-                                            </p>
-                                            <p className="text-xs text-text-secondary mt-1">
-                                                {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
+                                    Mark all as read
+                                </button>
+                            )}
+                        </div>
+                        <div className="max-h-96 overflow-y-auto">
+                            {notifications.length > 0 ? (
+                                notifications.map((notification) => (
+                                    <div
+                                        key={notification._id}
+                                        onClick={() => handleNotificationClick(notification)}
+                                        className={`px-4 py-3 border-b border-border-dark last:border-0 hover:bg-background-dark/50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-primary/5' : ''}`}
+                                    >
+                                        <div className="flex gap-3">
+                                            <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-primary' : 'bg-transparent'}`} />
+                                            <div className="flex-1">
+                                                <p className={`text-sm ${!notification.isRead ? 'text-white font-medium' : 'text-text-secondary'}`}>
+                                                    {notification.message}
+                                                </p>
+                                                <p className="text-xs text-text-secondary mt-1">
+                                                    {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
                                         </div>
                                     </div>
+                                ))
+                            ) : (
+                                <div className="px-4 py-8 text-center text-text-secondary text-sm">
+                                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50 block mx-auto">notifications_off</span>
+                                    No notifications
                                 </div>
-                            ))
-                        ) : (
-                            <div className="px-4 py-8 text-center text-text-secondary text-sm">
-                                <span className="material-symbols-outlined text-4xl mb-2 opacity-50 block mx-auto">notifications_off</span>
-                                No notifications
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div>
+                </>
             )}
         </div>
     );

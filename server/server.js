@@ -961,8 +961,13 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
 
         // Handle Team Changes and Task Reassignment
         if (teamIds !== undefined) {
-            const oldTeamIds = project.teamIds.map(id => id.toString());
-            const newTeamIds = teamIds.map(id => id.toString());
+            // Robustly extract string IDs from both raw IDs and potentially populated objects
+            const oldTeamIds = project.teamIds.map(id =>
+                (id && typeof id === 'object' && id._id) ? id._id.toString() : id.toString()
+            );
+            const newTeamIds = teamIds.map(id =>
+                (id && typeof id === 'object' && (id._id || id.id)) ? (id._id || id.id).toString() : id.toString()
+            );
 
             // Find removed members
             const removedMembers = oldTeamIds.filter(id => !newTeamIds.includes(id));
@@ -1528,6 +1533,12 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
         performanceScore: t.performanceScore,
         comments: t.comments,
         queries: t.queries,
+        // Delay workflow fields
+        delayStatus: t.delayStatus,
+        delayReason: t.delayReason,
+        delayRequestedAt: t.delayRequestedAt,
+        adminDelayApproved: t.adminDelayApproved,
+        delayRejectionReason: t.delayRejectionReason
     })));
 });
 
@@ -1596,14 +1607,17 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        // If no assigneeId provided, assign to the creator
-        const finalAssigneeId = assigneeId || req.user._id;
+        // If no assigneeId provided, assign to the creator ONLY if they are an Employee or Intern
+        const finalAssigneeId = assigneeId || (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user._id : null);
 
         // Set assignedAt if assignee is provided
         const assignedAt = finalAssigneeId ? new Date() : null;
 
         // Parse deadline if provided
         const deadlineDate = deadline ? new Date(deadline) : null;
+        if (deadlineDate && deadlineDate < new Date().setHours(0, 0, 0, 0)) {
+            return res.status(400).json({ message: 'Deadline cannot be in the past' });
+        }
 
         // Calculate allocated time in minutes if both are set
         let allocatedMinutes = null;
@@ -1625,12 +1639,35 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         });
 
         // Auto-switch Project to ACTIVE if task is assigned
+        // Auto-switch Project to ACTIVE if task is assigned AND ensure User is in Team
         if (finalAssigneeId) {
             const project = await Project.findById(projectId);
-            if (project && project.status === 'PLANNING') {
-                project.status = 'ACTIVE';
-                await project.save();
-                console.log(`✅ Project ${project.projectCode} auto-switched to ACTIVE upon task assignment.`);
+            if (project) {
+                let projectUpdated = false;
+
+                // 1. Switch to ACTIVE if pending
+                if (project.status === 'PLANNING') {
+                    project.status = 'ACTIVE';
+                    projectUpdated = true;
+                    console.log(`✅ Project ${project.projectCode} auto-switched to ACTIVE upon task assignment.`);
+                }
+
+                // 2. Add Assignee to Team Members if not present
+                // Ensure teamIds is initialized
+                if (!project.teamIds) project.teamIds = [];
+
+                // Check if finalAssigneeId is already in teamIds (comparing strings to be safe)
+                const isMember = project.teamIds.some(id => id.toString() === finalAssigneeId.toString());
+
+                if (!isMember) {
+                    project.teamIds.push(finalAssigneeId);
+                    projectUpdated = true;
+                    console.log(`✅ User ${finalAssigneeId} auto-added to Project ${project.projectCode} team.`);
+                }
+
+                if (projectUpdated) {
+                    await project.save();
+                }
             }
         }
 
@@ -1681,6 +1718,9 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
                 taskObj.projectName = project.name;
             }
         }
+
+        // Ensure delay fields are present (explicitly for clarity/safety)
+        if (!taskObj.delayStatus) taskObj.delayStatus = 'NONE';
 
         res.json(taskObj);
     } catch (err) {
@@ -1745,7 +1785,11 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         // Handle deadline update
         if (deadline !== undefined) {
-            task.deadline = deadline ? new Date(deadline) : null;
+            const newDeadline = deadline ? new Date(deadline) : null;
+            if (newDeadline && newDeadline < new Date().setHours(0, 0, 0, 0)) {
+                return res.status(400).json({ message: 'Deadline cannot be in the past' });
+            }
+            task.deadline = newDeadline;
             // Recalculate allocated minutes if assignedAt exists
             if (task.assignedAt && task.deadline) {
                 const start = new Date(task.assignedAt);
@@ -1839,6 +1883,24 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
             task.assigneeId = assigneeId;
 
+            // Ensure assignee is added to Project Team if assigned
+            if (assigneeId && task.projectId) {
+                try {
+                    const project = await Project.findById(task.projectId);
+                    if (project) {
+                        if (!project.teamIds) project.teamIds = [];
+                        const isMember = project.teamIds.some(id => id.toString() === assigneeId.toString());
+                        if (!isMember) {
+                            project.teamIds.push(assigneeId);
+                            await project.save();
+                            console.log(`✅ User ${assigneeId} auto-added to Project ${project.projectCode} team (Update Task).`);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error auto-adding team member:', err);
+                }
+            }
+
             // Recalculate allocated minutes if assignedAt and deadline exist
             if (task.assignedAt && task.deadline) {
                 const start = new Date(task.assignedAt);
@@ -1878,8 +1940,14 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
                 const actualDays = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
                 task.actualMinutes = actualDays * 1440;
 
-                if (task.allocatedMinutes !== null && task.allocatedMinutes !== undefined) {
-                    task.performanceScore = Math.round((task.allocatedMinutes / task.actualMinutes) * 100);
+                if (task.adminDelayApproved) {
+                    // Delay excused: Treat as on-time (100% score) regardless of actual time taken
+                    if (task.allocatedMinutes !== null && task.allocatedMinutes !== undefined) {
+                        task.actualMinutes = task.allocatedMinutes;
+                        task.performanceScore = 100;
+                    }
+                } else if (task.allocatedMinutes !== null && task.allocatedMinutes !== undefined) {
+                    task.performanceScore = Math.min(100, Math.round((task.allocatedMinutes / task.actualMinutes) * 100));
                 }
             }
         } else {
@@ -2004,7 +2072,7 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
 
                 // Calculate performance score: (allocated / actual) * 100
                 if (task.allocatedMinutes && task.allocatedMinutes > 0) {
-                    task.performanceScore = Math.round((task.allocatedMinutes / task.actualMinutes) * 100);
+                    task.performanceScore = Math.min(100, Math.round((task.allocatedMinutes / task.actualMinutes) * 100));
                     console.log(`📊 Performance calculated for task ${task._id}: ${task.performanceScore}% (${task.allocatedMinutes}min allocated / ${task.actualMinutes}min actual)`);
                 }
             }
@@ -2086,6 +2154,168 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
     } catch (err) {
         console.error('❌ [Update Task Status]: Error:', err);
         res.status(500).json({ message: 'Failed to update task status', error: err.message });
+    }
+});
+
+// ============ DELAY REASON WORKFLOW ROUTES ============
+
+// 1. Employee/Intern reports a delay
+app.post('/api/tasks/:taskId/delay', authMiddleware, async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const { reason } = req.body;
+
+        if (!isValidObjectId(taskId)) return res.status(400).json({ message: 'Invalid task ID' });
+        if (!reason) return res.status(400).json({ message: 'Reason is required' });
+
+        const task = await Task.findById(taskId);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+
+        // Verify user is the assignee
+        if (task.assigneeId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the assignee can report a delay' });
+        }
+
+        task.delayReason = reason;
+        task.delayStatus = 'PENDING_MANAGER';
+        task.delayRequestedAt = new Date();
+
+        await task.save();
+
+        // Notify Project Manager
+        const project = await Project.findById(task.projectId);
+        if (project && project.managerId) {
+            await Notification.create({
+                recipientId: project.managerId,
+                type: 'APPROVAL_REQUEST',
+                message: `Delay reported for task "${task.title}". Reason: ${reason}`,
+                relatedId: task._id
+            });
+        }
+
+        res.json({ message: 'Delay reported successfully', task });
+    } catch (err) {
+        console.error('❌ [Report Delay]: Error:', err);
+        res.status(500).json({ message: 'Failed to report delay' });
+    }
+});
+
+// 2. Manager Reviews Delay (Approves to forward to Admin, or Rejects)
+app.put('/api/tasks/:taskId/delay/manager-review', authMiddleware, requireRole(roles.MANAGER), async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const { approved, rejectionReason } = req.body; // approved = true (Forward to Admin) or false (Reject)
+
+        if (!isValidObjectId(taskId)) return res.status(400).json({ message: 'Invalid task ID' });
+
+        const task = await Task.findById(taskId);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+
+        if (task.delayStatus !== 'PENDING_MANAGER') {
+            return res.status(400).json({ message: 'Task is not pending manager review' });
+        }
+
+        task.managerDelayReviewedBy = req.user._id;
+        task.managerDelayReviewedAt = new Date();
+
+        if (approved) {
+            task.managerDelayApproved = true;
+            task.delayStatus = 'PENDING_ADMIN';
+
+            // Notify Super Admin
+            const superAdmins = await User.find({ role: roles.SUPER_USER });
+            for (const admin of superAdmins) {
+                await Notification.create({
+                    recipientId: admin._id,
+                    type: 'APPROVAL_REQUEST',
+                    message: `Manager verified delay for "${task.title}". Needs Admin approval.`,
+                    relatedId: task._id
+                });
+            }
+
+        } else {
+            task.managerDelayApproved = false;
+            task.delayStatus = 'REJECTED';
+            task.rejectionReason = rejectionReason || 'Rejected by Manager';
+            task.rejectedAt = new Date();
+            task.rejectedBy = req.user._id;
+
+            // Notify Employee
+            await Notification.create({
+                recipientId: task.assigneeId,
+                type: 'TASK_UPDATE',
+                message: `Your delay request for "${task.title}" was rejected by Manager.`,
+                relatedId: task._id
+            });
+        }
+
+        await task.save();
+        res.json({ message: 'Manager review submitted', task });
+    } catch (err) {
+        console.error('❌ [Manager Delay Review]: Error:', err);
+        res.status(500).json({ message: 'Failed to review delay' });
+    }
+});
+
+// 3. Admin Final Review
+app.put('/api/tasks/:taskId/delay/admin-review', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+    try {
+        const { taskId } = req.params;
+        const { approved, rejectionReason } = req.body;
+
+        if (!isValidObjectId(taskId)) return res.status(400).json({ message: 'Invalid task ID' });
+
+        const task = await Task.findById(taskId);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+
+        if (task.delayStatus !== 'PENDING_ADMIN') {
+            return res.status(400).json({ message: 'Task is not pending admin review' });
+        }
+
+        task.adminDelayReviewedBy = req.user._id;
+        task.adminDelayReviewedAt = new Date();
+
+        if (approved) {
+            task.adminDelayApproved = true;
+            task.delayStatus = 'APPROVED';
+
+            // EXCUSE LOGIC: Update performance score to 100% (Excused)
+            // We set actualMinutes equal to allocatedMinutes effectively to show on-time
+            if (task.allocatedMinutes) {
+                task.actualMinutes = task.allocatedMinutes;
+                task.performanceScore = 100;
+            }
+
+            // Notify Employee & Manager
+            await Notification.create({
+                recipientId: task.assigneeId,
+                type: 'TASK_UPDATE',
+                message: `Your delay request for "${task.title}" was APPROVED. It will not affect your score.`,
+                relatedId: task._id
+            });
+
+        } else {
+            task.adminDelayApproved = false;
+            task.delayStatus = 'REJECTED';
+            task.rejectionReason = rejectionReason || 'Rejected by Admin';
+            task.rejectedAt = new Date();
+            task.rejectedBy = req.user._id;
+
+            // Notify Employee
+            await Notification.create({
+                recipientId: task.assigneeId,
+                type: 'TASK_UPDATE',
+                message: `Your delay request for "${task.title}" was REJECTED by Admin.`,
+                relatedId: task._id
+            });
+        }
+
+        await task.save();
+        res.json({ message: 'Admin review submitted', task });
+
+    } catch (err) {
+        console.error('❌ [Admin Delay Review]: Error:', err);
+        res.status(500).json({ message: 'Failed to review delay' });
     }
 });
 

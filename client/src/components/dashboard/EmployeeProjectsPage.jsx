@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import api from '../../services/api.js';
 import EmployeeLayout from '../common/EmployeeLayout.jsx';
@@ -80,6 +80,7 @@ const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
 
 export default function EmployeeProjectsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -95,9 +96,36 @@ export default function EmployeeProjectsPage() {
     // Task Status State
     const [statusUpdate, setStatusUpdate] = useState({});
 
+    // Mobile: current status tab for list view
+    const [mobileStatus, setMobileStatus] = useState('NOT_STARTED');
+
+    // Notification state
+    const [notification, setNotification] = useState(null);
+
+    const [confirmModal, setConfirmModal] = useState({
+        show: false,
+        title: '',
+        message: '',
+        onConfirm: null,
+        type: 'primary'
+    });
+
     useEffect(() => {
         loadData();
     }, []);
+
+    useEffect(() => {
+        if (!loading && projects.length > 0) {
+            const searchParams = new URLSearchParams(location.search);
+            const projectId = searchParams.get('projectId');
+            if (projectId) {
+                const found = projects.find(p => p.id === projectId);
+                if (found) {
+                    setSelectedProject(found);
+                }
+            }
+        }
+    }, [location.search, loading, projects]);
 
     const loadData = async () => {
         try {
@@ -172,10 +200,10 @@ export default function EmployeeProjectsPage() {
             setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
             // Update in main list as well if needed
             setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
-            alert('Attachments uploaded successfully');
+            setNotification({ message: 'Attachments uploaded successfully', type: 'success' });
         } catch (err) {
             console.error(err);
-            alert('Failed to upload attachments');
+            setNotification({ message: 'Failed to upload attachments', type: 'error' });
         } finally {
             setIsUploading(false);
             e.target.value = null;
@@ -187,6 +215,26 @@ export default function EmployeeProjectsPage() {
     if (selectedProject) {
         const stats = getProjectStats(selectedProject.id);
         const projectTasks = getProjectTasks(selectedProject.id);
+
+        const mobileTabs = [
+            { key: 'NOT_STARTED', label: 'New' },
+            { key: 'IN_PROGRESS', label: 'In Progress' },
+            { key: 'WAITING_APPROVAL', label: 'Review' },
+            { key: 'COMPLETED', label: 'Done' },
+        ];
+
+        const nextStatusMap = {
+            NOT_STARTED: 'IN_PROGRESS',
+            IN_PROGRESS: 'WAITING_APPROVAL',
+            WAITING_APPROVAL: null,
+            COMPLETED: null,
+        };
+
+        const handleMobileAdvance = async (task) => {
+            const next = nextStatusMap[task.status];
+            if (!next) return;
+            await handleTaskStatusChange(task.id, next);
+        };
 
         return (
             <EmployeeLayout currentPage="projects">
@@ -294,8 +342,157 @@ export default function EmployeeProjectsPage() {
                             </div>
                         </div>
 
-                        {/* Attachments Section */}
-                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
+                        {/* Desktop Kanban Board */}
+                        <div
+                            className={`hidden md:flex bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-col ${projectTasks.length > 0 ? 'min-h-[320px] max-h-[70vh]' : 'min-h-[220px] max-h-[50vh]'}`}
+                        >
+                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
+                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary">view_kanban</span>
+                                    Project Board
+                                </h2>
+                            </div>
+
+                            <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
+                                <DndContext onDragEnd={(event) => {
+                                    const { active, over } = event;
+                                    if (!over) return;
+
+                                    const taskId = active.id;
+                                    const newStatus = over.data.current?.status;
+                                    const task = projectTasks.find(t => t.id === taskId);
+
+                                    if (task && newStatus && task.status !== newStatus) {
+                                        if (task.status === 'COMPLETED') {
+                                            setConfirmModal({
+                                                show: true,
+                                                title: 'Reopen Task?',
+                                                message: 'This task is already approved and completed. Are you sure you want to reopen it?',
+                                                type: 'primary',
+                                                onConfirm: () => {
+                                                    handleTaskStatusChange(taskId, newStatus);
+                                                    setConfirmModal({ ...confirmModal, show: false });
+                                                }
+                                            });
+                                            return;
+                                        }
+
+                                        handleTaskStatusChange(taskId, newStatus);
+                                    }
+                                }}>
+                                    <div className="flex gap-6 h-full min-w-[900px]">
+                                        {/* New / Not Started */}
+                                        <KanbanColumn
+                                            id="col-new"
+                                            title="New"
+                                            status="NOT_STARTED"
+                                            color="border-t-blue-500"
+                                            tasks={projectTasks.filter(t => t.status === 'NOT_STARTED')}
+                                            onTaskClick={(t) => { }}
+                                        />
+
+                                        {/* In Progress */}
+                                        <KanbanColumn
+                                            id="col-progress"
+                                            title="In Progress"
+                                            status="IN_PROGRESS"
+                                            color="border-t-amber-500"
+                                            tasks={projectTasks.filter(t => t.status === 'IN_PROGRESS')}
+                                            onTaskClick={(t) => { }}
+                                        />
+
+                                        {/* Ready for Approval / Closed */}
+                                        <KanbanColumn
+                                            id="col-review"
+                                            title="Ready for Review"
+                                            status="WAITING_APPROVAL"
+                                            color="border-t-purple-500"
+                                            tasks={projectTasks.filter(t => t.status === 'WAITING_APPROVAL')}
+                                            onTaskClick={(t) => { }}
+                                        />
+
+                                        {/* Completed (Read Only/Reference) */}
+                                        <KanbanColumn
+                                            id="col-done"
+                                            title="Approved / Closed"
+                                            status="COMPLETED"
+                                            color="border-t-green-500"
+                                            tasks={projectTasks.filter(t => t.status === 'COMPLETED')}
+                                            onTaskClick={(t) => { }}
+                                        />
+                                    </div>
+                                </DndContext>
+                            </div>
+                        </div>
+
+                        {/* Mobile Status Tabs + List */}
+                        <div className="md:hidden bg-surface-dark border border-border-dark rounded-xl shadow-xl mt-6">
+                            <div className="px-4 py-3 border-b border-border-dark bg-gradient-surface">
+                                <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-sm">view_kanban</span>
+                                    My Tasks
+                                </h2>
+                            </div>
+                            <div className="px-4 pt-3 flex gap-2 overflow-x-auto custom-scrollbar">
+                                {mobileTabs.map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        type="button"
+                                        onClick={() => setMobileStatus(tab.key)}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${mobileStatus === tab.key
+                                            ? 'bg-primary text-white border-primary'
+                                            : 'bg-background-dark text-text-secondary border-border-dark'}`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
+                            <div className="p-4 flex flex-col gap-3">
+                                {projectTasks.filter(t => t.status === mobileStatus).length === 0 && (
+                                    <p className="text-text-secondary text-xs text-center py-4">No tasks in this stage.</p>
+                                )}
+                                {projectTasks
+                                    .filter(t => t.status === mobileStatus)
+                                    .map((task) => (
+                                        <div
+                                            key={task.id}
+                                            className="bg-background-dark/60 border border-border-dark rounded-lg p-3 flex flex-col gap-2"
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs font-mono text-primary">
+                                                        {task.projectCode || 'Task'}
+                                                    </span>
+                                                    <span className="text-sm font-semibold text-white line-clamp-2">
+                                                        {task.title}
+                                                    </span>
+                                                </div>
+                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-black/40 text-text-secondary uppercase">
+                                                    {task.status.replace('_', ' ')}
+                                                </span>
+                                            </div>
+                                            {task.description && (
+                                                <p className="text-[11px] text-text-secondary line-clamp-2">
+                                                    {task.description}
+                                                </p>
+                                            )}
+                                            <div className="flex items-center justify-end gap-2 pt-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleMobileAdvance(task)}
+                                                    disabled={!nextStatusMap[task.status]}
+                                                    className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white disabled:opacity-40 disabled:cursor-not-allowed"
+                                                >
+                                                    {nextStatusMap[task.status] ? 'Move to Next Stage' : 'Completed'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+
+                        {/* Attachments Section (moved below Project Board) */}
+                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mt-8">
                             <div
                                 className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between cursor-pointer"
                                 onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
@@ -360,82 +557,6 @@ export default function EmployeeProjectsPage() {
                                     </div>
                                 </div>
                             )}
-                        </div>
-
-                        {/* Kanban Board */}
-                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden h-[calc(100vh-200px)] flex flex-col">
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">view_kanban</span>
-                                    Project Board
-                                </h2>
-                            </div>
-
-                            <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-                                <DndContext onDragEnd={(event) => {
-                                    const { active, over } = event;
-                                    if (!over) return;
-
-                                    const taskId = active.id;
-                                    const newStatus = over.data.current?.status;
-                                    const task = projectTasks.find(t => t.id === taskId); // Changed 'tasks' to 'projectTasks'
-
-                                    if (task && newStatus && task.status !== newStatus) {
-                                        // Logic handling:
-                                        // Employees can move NOT_STARTED -> IN_PROGRESS -> WAITING_APPROVAL
-                                        // They cannot move to COMPLETED directly (Manager does that)
-                                        // They cannot move back from COMPLETED (usually)
-
-                                        if (task.status === 'COMPLETED') {
-                                            if (!window.confirm("This task is already approved and completed. Are you sure you want to reopen it?")) return;
-                                        }
-
-                                        handleTaskStatusChange(taskId, newStatus);
-                                    }
-                                }}>
-                                    <div className="flex gap-6 h-full min-w-[900px]">
-                                        {/* New / Not Started */}
-                                        <KanbanColumn
-                                            id="col-new"
-                                            title="New"
-                                            status="NOT_STARTED"
-                                            color="border-t-blue-500"
-                                            tasks={projectTasks.filter(t => t.status === 'NOT_STARTED')}
-                                            onTaskClick={(t) => { }} // Could open detail
-                                        />
-
-                                        {/* In Progress */}
-                                        <KanbanColumn
-                                            id="col-progress"
-                                            title="In Progress"
-                                            status="IN_PROGRESS"
-                                            color="border-t-amber-500"
-                                            tasks={projectTasks.filter(t => t.status === 'IN_PROGRESS')}
-                                            onTaskClick={(t) => { }}
-                                        />
-
-                                        {/* Ready for Approval / Closed */}
-                                        <KanbanColumn
-                                            id="col-review"
-                                            title="Ready for Review"
-                                            status="WAITING_APPROVAL"
-                                            color="border-t-purple-500"
-                                            tasks={projectTasks.filter(t => t.status === 'WAITING_APPROVAL')}
-                                            onTaskClick={(t) => { }}
-                                        />
-
-                                        {/* Completed (Read Only/Reference) */}
-                                        <KanbanColumn
-                                            id="col-done"
-                                            title="Approved / Closed"
-                                            status="COMPLETED"
-                                            color="border-t-green-500"
-                                            tasks={projectTasks.filter(t => t.status === 'COMPLETED')}
-                                            onTaskClick={(t) => { }}
-                                        />
-                                    </div>
-                                </DndContext>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -557,6 +678,69 @@ export default function EmployeeProjectsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Notification Toast */}
+            {notification && (
+                <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10000] animate-in fade-in zoom-in duration-300">
+                    <div className={`bg-[#0a0f1d] border ${notification.type === 'error' ? 'border-red-500/50' : 'border-slate-800'} rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-3 min-w-[200px]`}>
+                        <div className={`size-12 rounded-full flex items-center justify-center ${notification.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                            <span className="material-symbols-outlined text-3xl">
+                                {notification.type === 'error' ? 'error' : 'check_circle'}
+                            </span>
+                        </div>
+                        <p className="text-white font-medium text-center">{notification.message}</p>
+                        <button
+                            onClick={() => setNotification(null)}
+                            className="mt-2 px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
+            {notification && (
+                <div
+                    className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[9999] animate-in fade-in duration-300"
+                    onClick={() => setNotification(null)}
+                />
+            )}
+            {/* Confirmation Modal */}
+            {confirmModal.show && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal({ ...confirmModal, show: false })}></div>
+                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className={`size-12 rounded-full flex items-center justify-center shrink-0 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'
+                                }`}>
+                                <span className="material-symbols-outlined text-3xl">
+                                    {confirmModal.type === 'danger' ? 'warning' : 'help_outline'}
+                                </span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{confirmModal.title}</h3>
+                                <p className="text-text-secondary mt-1 text-sm">{confirmModal.message}</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                                className="px-5 py-2 rounded-xl border border-border-dark text-white font-medium hover:bg-white/5 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmModal.onConfirm}
+                                className={`px-5 py-2 rounded-xl text-white font-bold shadow-lg transition-all text-sm ${confirmModal.type === 'danger'
+                                    ? 'bg-red-600 hover:bg-red-700 shadow-red-900/20'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20'
+                                    }`}
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </EmployeeLayout>
     );
 }

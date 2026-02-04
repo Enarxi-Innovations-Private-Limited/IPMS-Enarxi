@@ -6,6 +6,7 @@ import StockAdminLayout from '../common/StockAdminLayout';
 import ManagerLayout from '../common/ManagerLayout';
 import EmployeeLayout from '../common/EmployeeLayout';
 import InternLayout from '../common/InternLayout';
+import SuperUserLayout from '../common/SuperUserLayout';
 import api from '../../services/api';
 
 // Import Excel Modal Component
@@ -607,6 +608,7 @@ export default function InventoryPage() {
     };
 
     const getLayout = () => {
+        if (user?.role === 'SUPER_USER') return SuperUserLayout;
         if (user?.role === 'MANAGER') return ManagerLayout;
         if (user?.role === 'EMPLOYEE') return EmployeeLayout;
         if (user?.role === 'INTERN') return InternLayout;

@@ -14,6 +14,7 @@ export default function EmployeeDashboard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [notification, setNotification] = useState(null); // { message, type: 'success' | 'error' }
 
   const [taskForm, setTaskForm] = useState({
     projectId: '',
@@ -62,10 +63,10 @@ export default function EmployeeDashboard() {
       const updatedAttachments = res.data.attachments;
       setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
       setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
-      alert('Attachments uploaded successfully');
+      setNotification({ message: 'Attachments uploaded successfully', type: 'success' });
     } catch (err) {
       console.error(err);
-      alert('Failed to upload attachments');
+      setNotification({ message: 'Failed to upload attachments', type: 'error' });
     } finally {
       setIsUploading(false);
       e.target.value = null;
@@ -292,6 +293,29 @@ export default function EmployeeDashboard() {
 
   return (
     <EmployeeLayout currentPage={currentPage}>
+      {notification && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10000] animate-in fade-in zoom-in duration-300">
+          <div className="bg-[#0a0f1d] border border-slate-800 rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-3 min-w-[200px]">
+            <button
+              onClick={() => setNotification(null)}
+              className="absolute top-2 right-2 text-slate-500 hover:text-white"
+            >
+              <span className="material-symbols-outlined text-sm">close</span>
+            </button>
+            <div className={`w-12 h-12 rounded-full border-2 flex items-center justify-center ${notification.type === 'error' ? 'border-red-500/20' : 'border-emerald-500/20'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${notification.type === 'error' ? 'bg-red-500 shadow-red-500/20' : 'bg-emerald-500 shadow-emerald-500/20'}`}>
+                <span className="material-symbols-outlined text-white text-lg font-bold">
+                  {notification.type === 'error' ? 'close' : 'check'}
+                </span>
+              </div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-white font-bold text-base">{notification.message}</h3>
+              <p className="text-slate-500 text-xs">Just now</p>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="p-6 lg:px-12 pb-24">
         <div className="max-w-7xl mx-auto w-full">
           {/* Breadcrumb */}
@@ -378,10 +402,11 @@ export default function EmployeeDashboard() {
                       {projects.map((p) => (
                         <div
                           key={p.id}
-                          className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors"
+                          onClick={() => navigate(`/employee/projects?projectId=${p.id}`)}
+                          className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-primary font-bold font-mono">{p.projectCode || 'No ID'}</h3>
+                            <h3 className="text-primary font-bold font-mono group-hover:text-blue-400 transition-colors">{p.projectCode || 'No ID'}</h3>
                             <span
                               className={`px-2 py-1 text-xs font-medium rounded-full ${p.status === 'ACTIVE'
                                 ? 'bg-green-500/20 text-green-400'
@@ -394,7 +419,10 @@ export default function EmployeeDashboard() {
                           <div className="flex items-center justify-between mt-2">
                             <p className="text-text-secondary text-sm line-clamp-2 flex-1 mr-2">{p.description || 'No description'}</p>
                             <button
-                              onClick={() => openDetailsModal(p)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/employee/projects?projectId=${p.id}`);
+                              }}
                               className="p-1.5 rounded-lg bg-surface-dark border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
                               title="View Details"
                             >

@@ -25,18 +25,29 @@ export default function SuperUserDashboard() {
   const [error, setError] = useState('');
   const [availableUsers, setAvailableUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [pendingDelayTasks, setPendingDelayTasks] = useState([]);
+  const [notification, setNotification] = useState(null);
+  const [showRejectionModal, setShowRejectionModal] = useState(false);
+  const [rejectionTaskId, setRejectionTaskId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projRes, summaryRes, actRes] = await Promise.all([
+      const [projRes, summaryRes, actRes, taskRes] = await Promise.all([
         api.get('/projects'),
         api.get('/projects/summary'),
         api.get('/activities'),
+        api.get('/tasks')
       ]);
       setProjects(Array.isArray(projRes.data) ? projRes.data : []);
       setSummary(summaryRes.data);
       setActivities(actRes.data.slice(0, 10)); // Show only recent 10
+
+      // Filter tasks for pending admin delay approval
+      const tasks = Array.isArray(taskRes.data) ? taskRes.data : [];
+      setPendingDelayTasks(tasks.filter(t => t.delayStatus === 'PENDING_ADMIN'));
+
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load data');
     } finally {
@@ -44,9 +55,34 @@ export default function SuperUserDashboard() {
     }
   };
 
+  const handleAdminDelayReview = async (taskId, approved, rejectionReason = '') => {
+    try {
+      const payload = { approved };
+      if (!approved) payload.rejectionReason = rejectionReason;
+
+      await api.put(`/tasks/${taskId}/delay/admin-review`, payload);
+
+      // Remove from local list
+      setPendingDelayTasks(prev => prev.filter(t => t.id !== taskId && t._id !== taskId));
+      // Refresh data to keep stats in sync
+      loadData();
+      setNotification({ message: 'Delay review submitted', type: 'success' });
+    } catch (err) {
+      console.error('Failed to review delay:', err);
+      setNotification({ message: 'Failed to submit review', type: 'error' });
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
 
 
@@ -152,6 +188,68 @@ export default function SuperUserDashboard() {
                 </div>
               </div>
 
+              {/* Pending Delay Approvals Widget */}
+              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
+                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
+                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <span className="material-symbols-outlined text-amber-500">warning</span>
+                    Pending Delay Approvals ({pendingDelayTasks.length})
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  {pendingDelayTasks.length > 0 ? (
+                    <table className="w-full">
+                      <thead className="bg-background-dark/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Task</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Project</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Assignee</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Reason</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-dark">
+                        {pendingDelayTasks.map(task => (
+                          <tr key={task.id || task._id} className="hover:bg-background-dark/30">
+                            <td className="px-6 py-4 text-white font-medium">{task.title}</td>
+                            <td className="px-6 py-4 text-text-secondary text-sm">{task.projectName || task.projectCode}</td>
+                            <td className="px-6 py-4 text-text-secondary text-sm">
+                              {availableUsers.find(u => u.id === task.assigneeId)?.name || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 text-text-secondary text-sm italic">"{task.delayReason}"</td>
+                            <td className="px-6 py-4">
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => handleAdminDelayReview(task.id || task._id, true)}
+                                  className="px-3 py-1 bg-green-600/20 text-green-400 border border-green-600/30 rounded text-xs font-bold hover:bg-green-600/30"
+                                >
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRejectionTaskId(task.id || task._id);
+                                    setRejectionReason('');
+                                    setShowRejectionModal(true);
+                                  }}
+                                  className="px-3 py-1 bg-red-600/20 text-red-400 border border-red-600/30 rounded text-xs font-bold hover:bg-red-600/30"
+                                >
+                                  Reject
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="p-8 text-center text-text-secondary">
+                      <span className="material-symbols-outlined text-4xl mb-2 opacity-50">check_circle</span>
+                      <p>No pending delay approvals.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Projects Table */}
               <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
@@ -180,8 +278,9 @@ export default function SuperUserDashboard() {
                     </thead>
                     <tbody className="divide-y divide-border-dark">
                       {projects.map((p) => {
-                        const completion =
-                          summary?.projectSummaries?.find((s) => s.projectId === p.id)?.completion ?? 0;
+                        const totalTasks = p.taskCount || 0;
+                        const completedTasks = p.completedTaskCount || 0;
+                        const completion = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
                         return (
                           <tr key={p.id} className="hover:bg-background-dark/30 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -210,7 +309,10 @@ export default function SuperUserDashboard() {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <button className="text-primary hover:text-blue-400 text-sm font-medium">
+                              <button
+                                onClick={() => navigate(`/super/projects?projectId=${p.id}`)}
+                                className="text-primary hover:text-blue-400 text-sm font-medium"
+                              >
                                 View Details
                               </button>
                             </td>
@@ -265,6 +367,58 @@ export default function SuperUserDashboard() {
           )}
         </div>
       </div>
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[10000] animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className={`${notification.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 font-bold`}>
+            <span className="material-symbols-outlined">{notification.type === 'error' ? 'error' : 'check_circle'}</span>
+            {notification.message}
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Modal */}
+      {showRejectionModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-border-dark bg-red-500/10">
+              <h2 className="text-lg font-semibold text-red-400 flex items-center gap-2">
+                <span className="material-symbols-outlined">feedback</span>
+                Reject Delay Request
+              </h2>
+            </div>
+            <div className="p-6">
+              <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Rejection Reason</label>
+              <textarea
+                className="w-full bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white placeholder-text-secondary/30 focus:ring-2 focus:ring-red-500/50 outline-none resize-none h-32"
+                placeholder="Enter reason for rejection..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+              />
+            </div>
+            <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
+              <button
+                onClick={() => setShowRejectionModal(false)}
+                className="px-4 py-2 text-white hover:bg-white/5 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (rejectionReason.trim()) {
+                    handleAdminDelayReview(rejectionTaskId, false, rejectionReason);
+                    setShowRejectionModal(false);
+                  }
+                }}
+                disabled={!rejectionReason.trim()}
+                className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all disabled:opacity-50"
+              >
+                Confirm Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SuperUserLayout>
   );
 }

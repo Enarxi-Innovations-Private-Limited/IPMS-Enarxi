@@ -68,6 +68,14 @@ function App() {
         }
       />
       <Route
+        path="/super/inventory"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER']}>
+            <InventoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/employee"
         element={
           <ProtectedRoute allowedRoles={['EMPLOYEE']}>

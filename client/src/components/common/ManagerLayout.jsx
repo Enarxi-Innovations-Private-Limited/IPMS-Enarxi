@@ -172,10 +172,10 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         </button>
                         <span className="text-white font-bold text-lg">IPMS</span>
                     </div>
-                    <div className="hidden md:flex flex-1 max-w-xl mx-auto">
+                    <div className="hidden md:flex flex-1 max-w-xl mx-4">
                         <GlobalSearch placeholder="Search projects, tasks, team..." />
                     </div>
-                    <div className="flex items-center gap-4 ml-4">
+                    <div className="flex items-center gap-4">
                         <NotificationBell />
                         <div className="h-8 w-px bg-border-dark"></div>
 
@@ -183,19 +183,17 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors"
+                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
                             >
                                 <div className="hidden md:flex flex-col items-end">
-                                    <span className="text-white text-sm font-medium">{user?.name || 'User'}</span>
-                                    <span className="text-text-secondary text-xs">{user?.role || 'Manager'}</span>
+                                    <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                                    <span className="text-xs text-text-secondary font-medium">{user?.role?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) || 'Manager'}</span>
                                 </div>
-                                <div className="size-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center border-2 border-surface-dark">
-                                    <span className="text-white font-semibold text-sm">
-                                        {user?.name?.charAt(0)?.toUpperCase() || 'M'}
-                                    </span>
+                                <div className="size-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold shadow-md shadow-emerald-500/20 ring-2 ring-background-dark">
+                                    {user?.name?.charAt(0)?.toUpperCase() || 'M'}
                                 </div>
-                                <span className="material-symbols-outlined text-text-secondary text-lg hidden md:block">
-                                    {showProfileDropdown ? 'expand_less' : 'expand_more'}
+                                <span className={`material-symbols-outlined text-text-secondary transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`}>
+                                    expand_more
                                 </span>
                             </button>
 

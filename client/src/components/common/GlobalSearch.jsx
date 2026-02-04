@@ -90,27 +90,27 @@ export default function GlobalSearch({ placeholder = "Search projects, tasks, or
 
         switch (type) {
             case 'project':
-                // Navigate based on role
+                // Navigate based on role with project ID
                 if (user?.role === 'SUPER_USER') {
-                    navigate('/super/projects');
+                    navigate('/super/projects', { state: { openProjectId: item.id } });
                 } else if (user?.role === 'MANAGER') {
-                    navigate('/manager/projects');
+                    navigate('/manager/projects', { state: { openProjectId: item.id } });
                 } else if (user?.role === 'EMPLOYEE') {
-                    navigate('/employee/projects');
+                    navigate('/employee/projects', { state: { openProjectId: item.id } });
                 } else if (user?.role === 'INTERN') {
-                    navigate('/intern/projects');
+                    navigate('/intern/projects', { state: { openProjectId: item.id } });
                 }
                 break;
             case 'task':
-                // Navigate to tasks page
+                // Navigate to tasks page with state to open the specific task
                 if (user?.role === 'SUPER_USER') {
-                    navigate('/super/projects'); // Super user doesn't have tasks page
+                    navigate('/super/projects', { state: { highlightTaskId: item.id } });
                 } else if (user?.role === 'MANAGER') {
-                    navigate('/manager/tasks');
+                    navigate('/manager/tasks', { state: { openTaskId: item.id } });
                 } else if (user?.role === 'EMPLOYEE') {
-                    navigate('/employee/tasks');
+                    navigate('/employee/tasks', { state: { openTaskId: item.id } });
                 } else if (user?.role === 'INTERN') {
-                    navigate('/intern/tasks');
+                    navigate('/intern/tasks', { state: { openTaskId: item.id } });
                 }
                 break;
             case 'user':
@@ -200,12 +200,12 @@ export default function GlobalSearch({ placeholder = "Search projects, tasks, or
                                     >
                                         <div className="flex items-start gap-3">
                                             <div className={`size-8 rounded-lg flex items-center justify-center shrink-0 ${task.status === 'COMPLETED' ? 'bg-green-500/10' :
-                                                    task.status === 'IN_PROGRESS' ? 'bg-blue-500/10' :
-                                                        'bg-gray-500/10'
+                                                task.status === 'IN_PROGRESS' ? 'bg-blue-500/10' :
+                                                    'bg-gray-500/10'
                                                 }`}>
                                                 <span className={`material-symbols-outlined text-sm ${task.status === 'COMPLETED' ? 'text-green-500' :
-                                                        task.status === 'IN_PROGRESS' ? 'text-blue-500' :
-                                                            'text-gray-500'
+                                                    task.status === 'IN_PROGRESS' ? 'text-blue-500' :
+                                                        'text-gray-500'
                                                     }`}>check_circle</span>
                                             </div>
                                             <div className="flex-1 min-w-0">

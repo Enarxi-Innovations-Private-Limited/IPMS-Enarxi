@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import InternLayout from '../common/InternLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
 
 export default function InternTasksPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const user = getCurrentUser();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -28,6 +29,18 @@ export default function InternTasksPage() {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Handle deep linking
+    useEffect(() => {
+        if (location.state?.openTaskId && tasks.length > 0) {
+            const taskToOpen = tasks.find(t => t.id === location.state.openTaskId);
+            if (taskToOpen) {
+                setSearchTerm(taskToOpen.title); // Filter to show this task
+                // Optional: Scroll to it if needed
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+    }, [tasks, location.state]);
 
     const loadData = async () => {
         try {

@@ -331,16 +331,12 @@ export default function ManagerTeamPage() {
                                             <span className="material-symbols-outlined text-base">insights</span>
                                             Performance Summary
                                         </h4>
-                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div className="text-center">
                                                 <p className="text-2xl font-bold text-white">
                                                     {userPerformance.stats.averagePerformance ? `${userPerformance.stats.averagePerformance}%` : '-'}
                                                 </p>
                                                 <p className="text-xs text-text-secondary">Avg Performance</p>
-                                            </div>
-                                            <div className="text-center">
-                                                <p className="text-2xl font-bold text-green-400">{userPerformance.stats.excellentCount}</p>
-                                                <p className="text-xs text-text-secondary">🚀 Excellent (≥150%)</p>
                                             </div>
                                             <div className="text-center">
                                                 <p className="text-2xl font-bold text-blue-400">{userPerformance.stats.onTimeCount}</p>

@@ -9,6 +9,8 @@ export default function PurchaseOrdersPage() {
     const [loading, setLoading] = useState(true);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [statusFilter, setStatusFilter] = useState('ALL');
+    const [notification, setNotification] = useState(null);
+    const [confirmModal, setConfirmModal] = useState({ show: false, poId: null });
 
     // Create PO form
     const [poForm, setPOForm] = useState({
@@ -44,23 +46,28 @@ export default function PurchaseOrdersPage() {
         e.preventDefault();
         try {
             await api.post('/stock/purchase-orders', poForm);
-            alert('Purchase order created successfully');
+            setNotification({ message: 'Purchase order created successfully', type: 'success' });
             setShowCreateModal(false);
             setPOForm({ supplierId: '', items: [{ productId: '', quantity: '', unitPrice: '' }], expectedDelivery: '', notes: '' });
             loadData();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to create purchase order');
+            setNotification({ message: err.response?.data?.message || 'Failed to create purchase order', type: 'error' });
         }
     };
 
     const handleReceivePO = async (poId) => {
-        if (!confirm('Mark this purchase order as received? This will update stock levels.')) return;
+        setConfirmModal({ show: true, poId });
+    };
+
+    const confirmReceivePO = async () => {
+        const { poId } = confirmModal;
+        setConfirmModal({ show: false, poId: null });
         try {
             await api.post(`/stock/purchase-orders/${poId}/receive`);
-            alert('Purchase order received and stock updated');
+            setNotification({ message: 'Purchase order received and stock updated', type: 'success' });
             loadData();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to receive purchase order');
+            setNotification({ message: err.response?.data?.message || 'Failed to receive purchase order', type: 'error' });
         }
     };
 
@@ -298,6 +305,64 @@ export default function PurchaseOrdersPage() {
                     </div>
                 )}
             </div>
+
+            {/* Confirm Modal */}
+            {confirmModal.show && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal({ show: false, poId: null })}></div>
+                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="size-12 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-3xl">info</span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Receive PO?</h3>
+                                <p className="text-text-secondary mt-1">This will update stock levels for all items in this purchase order.</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmModal({ show: false, poId: null })}
+                                className="px-5 py-2 rounded-xl border border-border-dark text-white font-medium hover:bg-white/5 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmReceivePO}
+                                className="px-5 py-2 rounded-xl bg-blue-500 hover:bg-blue-600 text-white font-bold shadow-lg shadow-blue-900/40 transition-all"
+                            >
+                                Confirm Receive
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Notification Toast */}
+            {notification && (
+                <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10000] animate-in fade-in zoom-in duration-300">
+                    <div className={`bg-[#0a0f1d] border ${notification.type === 'error' ? 'border-red-500/50' : 'border-slate-800'} rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-3 min-w-[200px]`}>
+                        <div className={`size-12 rounded-full flex items-center justify-center ${notification.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                            <span className="material-symbols-outlined text-3xl">
+                                {notification.type === 'error' ? 'error' : 'check_circle'}
+                            </span>
+                        </div>
+                        <p className="text-white font-medium text-center">{notification.message}</p>
+                        <button
+                            onClick={() => setNotification(null)}
+                            className="mt-2 px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+                        >
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
+            {notification && (
+                <div
+                    className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[9999] animate-in fade-in duration-300"
+                    onClick={() => setNotification(null)}
+                />
+            )}
         </StockAdminLayout>
     );
 }

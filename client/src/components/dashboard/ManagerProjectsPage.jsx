@@ -57,6 +57,19 @@ export default function ManagerProjectsPage() {
     const [taskToReject, setTaskToReject] = useState(null);
     const [rejectionReason, setRejectionReason] = useState('');
 
+    const [confirmModal, setConfirmModal] = useState({
+        show: false,
+        title: '',
+        message: '',
+        onConfirm: null,
+        type: 'primary'
+    });
+
+    // Member Details Modal State
+    const [showMemberDetailsModal, setShowMemberDetailsModal] = useState(false);
+    const [selectedTeamMember, setSelectedTeamMember] = useState(null);
+    const [memberPerformance, setMemberPerformance] = useState(null);
+
     useEffect(() => {
         if (notification) {
             const timer = setTimeout(() => {
@@ -85,10 +98,10 @@ export default function ManagerProjectsPage() {
             setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
             // Also update projects list if needed, though detail modal uses selectedProject
             setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
-            alert('Attachments uploaded successfully');
+            setNotification({ message: 'Attachments uploaded successfully', type: 'success' });
         } catch (err) {
             console.error(err);
-            alert('Failed to upload attachments');
+            setNotification({ message: 'Failed to upload attachments', type: 'error' });
         } finally {
             setIsUploading(false);
             // Clear input
@@ -99,20 +112,28 @@ export default function ManagerProjectsPage() {
 
     const handleRemoveAttachment = async (fileUrl) => {
         if (!selectedProject) return;
-        if (!window.confirm('Are you sure you want to remove this attachment?')) return;
+        setConfirmModal({
+            show: true,
+            title: 'Remove Attachment?',
+            message: 'Are you sure you want to remove this attachment? This action cannot be undone.',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    const filename = fileUrl.split('/').pop();
+                    const res = await api.delete(`/projects/${selectedProject.id}/attachments/${filename}`);
 
-        try {
-            const filename = fileUrl.split('/').pop();
-            const res = await api.delete(`/projects/${selectedProject.id}/attachments/${filename}`);
-
-            // Update local state
-            const updatedAttachments = res.data.attachments;
-            setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
-            setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
-        } catch (err) {
-            console.error('Failed to remove attachment:', err);
-            alert('Failed to remove attachment');
-        }
+                    // Update local state
+                    const updatedAttachments = res.data.attachments;
+                    setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
+                    setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
+                    setConfirmModal({ ...confirmModal, show: false });
+                } catch (err) {
+                    console.error('Failed to remove attachment:', err);
+                    setNotification({ message: 'Failed to remove attachment', type: 'error' });
+                    setConfirmModal({ ...confirmModal, show: false });
+                }
+            }
+        });
     };
 
     const handleUnassignTask = async (taskId) => {
@@ -133,7 +154,7 @@ export default function ManagerProjectsPage() {
             setTasks(tasks.map(t => t.id === taskId ? { ...t, status } : t));
         } catch (err) {
             console.error('Failed to update task status:', err);
-            alert('Failed to update task status');
+            setNotification({ message: 'Failed to update task status', type: 'error' });
         }
     };
 
@@ -159,7 +180,7 @@ export default function ManagerProjectsPage() {
             setTaskToReject(null);
         } catch (err) {
             console.error('Failed to reject task:', err);
-            alert('Failed to reject task');
+            setNotification({ message: 'Failed to reject task', type: 'error' });
         }
     };
 
@@ -202,6 +223,19 @@ export default function ManagerProjectsPage() {
         loadData();
     }, []);
 
+    useEffect(() => {
+        if (!loading && projects.length > 0) {
+            const searchParams = new URLSearchParams(location.search);
+            const projectId = searchParams.get('projectId');
+            if (projectId) {
+                const found = projects.find(p => p.id === projectId);
+                if (found) {
+                    openDetailsModal(found);
+                }
+            }
+        }
+    }, [location.search, loading, projects]);
+
     const handleStatusChange = async (projectId, status) => {
         try {
             await api.put(`/projects/${projectId}`, { status });
@@ -217,13 +251,16 @@ export default function ManagerProjectsPage() {
 
     const getTeamMembers = (project) => {
         if (!project || !project.teamIds) return [];
-        return users.filter((u) => project.teamIds.includes(u.id));
+        // Support both populated objects and ID strings
+        const memberIds = project.teamIds.map(m => (typeof m === 'object' && m ? m.id || m._id : m));
+        return users.filter((u) => memberIds.includes(u.id));
     };
 
     const getAvailableMembers = (project) => {
         if (!project) return [];
-        // Users NOT in the project team
-        return users.filter(u => !project.teamIds?.includes(u.id));
+        // Support both populated objects and ID strings
+        const memberIds = project.teamIds?.map(m => (typeof m === 'object' && m ? m.id || m._id : m)) || [];
+        return users.filter(u => !memberIds.includes(u.id));
     };
 
     const getStatusColor = (status) => {
@@ -247,16 +284,32 @@ export default function ManagerProjectsPage() {
         setShowTaskDetail(true);
     };
 
+    const handleViewMemberDetails = async (member) => {
+        setSelectedTeamMember(member);
+        setShowMemberDetailsModal(true);
+        try {
+            const res = await api.get(`/users/${member.id}/performance`);
+            setMemberPerformance(res.data);
+        } catch (err) {
+            console.error('Failed to load member performance:', err);
+            setMemberPerformance(null);
+        }
+    };
+
     // --- Actions ---
 
     const handleAddTask = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
+        if (!newTaskDeadline) {
+            setNotification({ message: 'Task deadline is mandatory', type: 'error' });
+            return;
+        }
         try {
             const res = await api.post('/tasks', {
                 title: newTaskTitle,
                 description: newTaskDescription,
                 projectId: selectedProject.id,
-                deadline: newTaskDeadline ? new Date(newTaskDeadline) : null,
+                deadline: new Date(newTaskDeadline),
                 // Assignee is left null intentionally so the manager can assign it later
             });
             setTasks([...tasks, res.data]);
@@ -274,15 +327,21 @@ export default function ManagerProjectsPage() {
     const handleAddTeamMember = async (userId) => {
         if (!selectedProject) return;
         try {
-            const updatedTeamIds = [...(selectedProject.teamIds || []), userId];
+            // Always work with ID strings
+            const currentIds = (selectedProject.teamIds || []).map(m => (typeof m === 'object' && m ? m.id || m._id : m));
+            if (currentIds.includes(userId)) return;
+
+            const updatedTeamIds = [...currentIds, userId];
             const res = await api.put(`/projects/${selectedProject.id}`, {
                 teamIds: updatedTeamIds
             });
-            // Update local state
-            setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, teamIds: updatedTeamIds } : p));
-            setSelectedProject({ ...selectedProject, teamIds: updatedTeamIds });
+            // Update local state with normalized IDs
+            const normalizedTeamIds = res.data.teamIds || updatedTeamIds;
+            setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, teamIds: normalizedTeamIds } : p));
+            setSelectedProject({ ...selectedProject, teamIds: normalizedTeamIds });
         } catch (err) {
             console.error('Failed to add member', err);
+            setNotification({ message: 'Failed to add member', type: 'error' });
         }
     };
 
@@ -310,9 +369,11 @@ export default function ManagerProjectsPage() {
                 ));
             }
 
-            // 2. Remove member from project
-            const updatedTeamIds = selectedProject.teamIds.filter(id => id !== userId);
-            const res = await api.put(`/projects/${selectedProject.id}`, {
+            // 2. Remove member from project (normalize current IDs first)
+            const currentIds = (selectedProject.teamIds || []).map(m => (typeof m === 'object' && m ? m.id || m._id : m));
+            const updatedTeamIds = currentIds.filter(id => id !== userId);
+
+            await api.put(`/projects/${selectedProject.id}`, {
                 teamIds: updatedTeamIds
             });
 
@@ -364,46 +425,13 @@ export default function ManagerProjectsPage() {
 
             await api.put(`/tasks/${taskId}`, updatePayload);
 
-            // Close modal
-            setShowAssignDeadlineModal(false);
-            setPendingAssignment(null);
-            setAssignDeadline('');
-        } catch (err) {
-            console.error("Failed to assign task", err);
-            loadData(); // Revert on error
-        }
-    };
-
-    // Skip deadline and just assign
-    const handleSkipDeadline = async () => {
-        if (!pendingAssignment) return;
-
-        const { taskId, assigneeId, isSelfAssign } = pendingAssignment;
-
-        try {
-            // Build update payload
-            const updatePayload = { assigneeId };
-
-            // Add self-assignment tracking if this is a self-assign
-            if (isSelfAssign) {
-                updatePayload.selfAssignedBy = assigneeId;
-                updatePayload.selfAssignedAt = new Date().toISOString();
+            // AUTO-SYNC: Ensure assignee is in the project team
+            const currentTeamIds = (selectedProject.teamIds || []).map(m => (typeof m === 'object' && m ? m.id || m._id : m));
+            if (selectedProject && !currentTeamIds.includes(assigneeId)) {
+                console.log("Syncing assignee to project team...");
+                await handleAddTeamMember(assigneeId);
             }
 
-            // Optimistic UI Update
-            setTasks(prev => prev.map(t =>
-                t.id === taskId ? {
-                    ...t,
-                    assigneeId,
-                    ...(isSelfAssign ? {
-                        selfAssignedBy: assigneeId,
-                        selfAssignedAt: new Date().toISOString()
-                    } : {})
-                } : t
-            ));
-
-            await api.put(`/tasks/${taskId}`, updatePayload);
-
             // Close modal
             setShowAssignDeadlineModal(false);
             setPendingAssignment(null);
@@ -413,6 +441,9 @@ export default function ManagerProjectsPage() {
             loadData(); // Revert on error
         }
     };
+
+    // handleSkipDeadline removed as mandatory deadline is now required.
+
 
     // "Approve Completion" Logic
     const isProjectReadyForCompletion = selectedProject &&
@@ -422,8 +453,16 @@ export default function ManagerProjectsPage() {
 
     const handleApproveCompletion = async () => {
         if (!selectedProject) return;
-        if (!window.confirm('All tasks are completed. Mark project as COMPLETED?')) return;
-        await handleStatusChange(selectedProject.id, 'COMPLETED');
+        setConfirmModal({
+            show: true,
+            title: 'Complete Project?',
+            message: 'All tasks are completed. Do you want to mark this project as COMPLETED?',
+            type: 'primary',
+            onConfirm: async () => {
+                await handleStatusChange(selectedProject.id, 'COMPLETED');
+                setConfirmModal({ ...confirmModal, show: false });
+            }
+        });
     };
 
     const filteredProjects = filter === 'ALL' ? projects : projects.filter((p) => p.status === filter);
@@ -670,13 +709,13 @@ export default function ManagerProjectsPage() {
 
                         {/* Controls: Filter & Search */}
                         <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
-                            <div className="flex items-center space-x-1 bg-slate-900/40 p-1 rounded-xl border border-slate-800 self-start overflow-x-auto max-w-full no-scrollbar">
+                            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
                                 {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((f) => (
                                     <button
                                         key={f}
                                         onClick={() => { setTaskFilter(f); setCurrentPage(1); }}
-                                        className={`px-3 py-1.5 md:px-5 md:py-2 rounded-lg text-xs font-bold transition-colors uppercase tracking-wider whitespace-nowrap ${taskFilter === f
-                                            ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-all whitespace-nowrap ${taskFilter === f
+                                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                                             : 'text-slate-500 hover:text-white'
                                             }`}
                                     >
@@ -703,7 +742,7 @@ export default function ManagerProjectsPage() {
                                     e.preventDefault();
                                     handleAddTask(e);
                                 }}
-                                className="flex flex-col md:flex-row items-stretch md:items-center gap-3"
+                                className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
                             >
                                 <div className="flex-1 flex flex-col md:flex-row gap-3">
                                     <div className="flex-[1.5] relative">
@@ -742,7 +781,11 @@ export default function ManagerProjectsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <button type="submit" className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap">
+                                <button
+                                    type="submit"
+                                    disabled={!newTaskTitle || !newTaskDeadline}
+                                    className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap"
+                                >
                                     <span className="material-symbols-outlined text-lg">add</span>
                                     <span>Add Task</span>
                                 </button>
@@ -752,7 +795,7 @@ export default function ManagerProjectsPage() {
                         {/* Table Content */}
                         <div className="flex-1 overflow-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
                             <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
-                                <table className="w-full text-left border-collapse">
+                                <table className="w-full text-left border-collapse hidden lg:table">
                                     <thead className="sticky top-0 bg-[#0a0f1d] z-10">
                                         <tr className="bg-slate-900/50 border-b border-slate-800">
                                             <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
@@ -832,8 +875,17 @@ export default function ManagerProjectsPage() {
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            if (window.confirm('Mark this task as completed?')) {
-                                                                                handleTaskApproval(task.id, 'COMPLETED');
+                                                                            if (true) {
+                                                                                setConfirmModal({
+                                                                                    show: true,
+                                                                                    title: 'Complete Task?',
+                                                                                    message: 'Mark this task as completed?',
+                                                                                    type: 'primary',
+                                                                                    onConfirm: () => {
+                                                                                        handleTaskApproval(task.id, 'COMPLETED');
+                                                                                        setConfirmModal({ ...confirmModal, show: false });
+                                                                                    }
+                                                                                });
                                                                             }
                                                                         }}
                                                                         className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
@@ -859,8 +911,17 @@ export default function ManagerProjectsPage() {
                                                                     <button
                                                                         onClick={(e) => {
                                                                             e.stopPropagation();
-                                                                            if (window.confirm('Reopen this task? Status will be set to IN PROGRESS.')) {
-                                                                                handleTaskApproval(task.id, 'IN_PROGRESS');
+                                                                            if (true) {
+                                                                                setConfirmModal({
+                                                                                    show: true,
+                                                                                    title: 'Reopen Task?',
+                                                                                    message: 'Reopen this task? Status will be set to IN PROGRESS.',
+                                                                                    type: 'primary',
+                                                                                    onConfirm: () => {
+                                                                                        handleTaskApproval(task.id, 'IN_PROGRESS');
+                                                                                        setConfirmModal({ ...confirmModal, show: false });
+                                                                                    }
+                                                                                });
                                                                             }
                                                                         }}
                                                                         className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
@@ -876,8 +937,17 @@ export default function ManagerProjectsPage() {
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                if (window.confirm('Approve this task as COMPLETED?')) {
-                                                                                    handleTaskApproval(task.id, 'COMPLETED');
+                                                                                if (true) {
+                                                                                    setConfirmModal({
+                                                                                        show: true,
+                                                                                        title: 'Approve Task?',
+                                                                                        message: 'Approve this task as COMPLETED?',
+                                                                                        type: 'primary',
+                                                                                        onConfirm: () => {
+                                                                                            handleTaskApproval(task.id, 'COMPLETED');
+                                                                                            setConfirmModal({ ...confirmModal, show: false });
+                                                                                        }
+                                                                                    });
                                                                                 }
                                                                             }}
                                                                             className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
@@ -931,12 +1001,107 @@ export default function ManagerProjectsPage() {
                                         )}
                                     </tbody>
                                 </table>
+
+                                {/* Mobile Card View */}
+                                <div className="lg:hidden divide-y divide-white/5">
+                                    {paginatedTasks.length > 0 ? (
+                                        paginatedTasks.map((task) => {
+                                            const currentUser = getCurrentUser();
+                                            const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
+                                            const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
+                                            const deadline = task.deadline ? new Date(task.deadline) : null;
+                                            const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+
+                                            return (
+                                                <div key={task.id} className="p-4 space-y-3">
+                                                    <div className="flex justify-between items-start gap-3">
+                                                        <div className="min-w-0">
+                                                            <div className={`font-bold text-sm truncate ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                                {task.title}
+                                                            </div>
+                                                            <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description || 'No description'}</div>
+                                                        </div>
+                                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                                                            {badgeStyle.label}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="flex items-center justify-between pt-2">
+                                                        <div className="flex items-center gap-2">
+                                                            {assignee ? (
+                                                                <>
+                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
+                                                                        {assignee.name.charAt(0)}
+                                                                    </div>
+                                                                    <span className="text-xs text-slate-300 font-medium truncate max-w-[100px]">{assignee.name}</span>
+                                                                </>
+                                                            ) : (
+                                                                <>
+                                                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400">?</div>
+                                                                    <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                        {deadline && (
+                                                            <div className={`text-[10px] font-mono border px-2 py-0.5 rounded ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                                                {deadline.toLocaleDateString()}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Mobile Actions */}
+                                                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5 mt-2">
+                                                        {/* Assign Button */}
+                                                        {!task.assigneeId && (
+                                                            <button
+                                                                onClick={(e) => handleAssignClick(e, task)}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase hover:bg-emerald-500 hover:text-white transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">person_add</span> Assign
+                                                            </button>
+                                                        )}
+
+                                                        {/* Unassign Button */}
+                                                        {task.assigneeId && task.status !== 'COMPLETED' && (
+                                                            <button
+                                                                onClick={() => handleUnassignTask(task.id)}
+                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase hover:bg-amber-500 hover:text-white transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-sm">person_remove</span> Unassign
+                                                            </button>
+                                                        )}
+
+                                                        {/* Delete Button */}
+                                                        <button
+                                                            onClick={() => handleDeleteTask(task.id)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">delete</span>
+                                                        </button>
+
+                                                        {/* View Button */}
+                                                        <button
+                                                            onClick={() => openTaskDetail(task)}
+                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 text-[10px] font-bold uppercase hover:bg-slate-700 hover:text-white transition-colors"
+                                                        >
+                                                            <span className="material-symbols-outlined text-sm">visibility</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })
+                                    ) : (
+                                        <div className="p-8 text-center text-slate-500 italic">
+                                            No tasks found matching current filters.
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
 
                         {/* Footer */}
-                        <div className="px-8 py-6 border-t border-slate-800 bg-slate-900/30 flex items-center justify-between mt-auto shrink-0">
-                            <div className="flex items-center space-x-6">
+                        <div className="px-4 py-4 md:px-8 md:py-6 border-t border-slate-800 bg-slate-900/30 flex flex-col md:flex-row items-center justify-between mt-auto shrink-0 gap-4">
+                            <div className="flex items-center justify-between w-full md:w-auto md:justify-start gap-6">
                                 <button
                                     onClick={() => setShowAttachmentsModal(true)}
                                     className="flex items-center space-x-2 text-slate-500 hover:text-emerald-400 transition-colors group"
@@ -1038,15 +1203,21 @@ export default function ManagerProjectsPage() {
                                     <button
                                         key={u.id}
                                         onClick={() => {
-                                            if (window.confirm(`Add ${u.name} to project team and assign task?`)) {
-                                                handleAddTeamMember(u.id).then(() => {
+                                            setConfirmModal({
+                                                show: true,
+                                                title: 'Add & Assign?',
+                                                message: `Add ${u.name} to project team and assign task?`,
+                                                type: 'primary',
+                                                onConfirm: async () => {
+                                                    await handleAddTeamMember(u.id);
                                                     const task = tasks.find(t => t.id === showUserPicker);
                                                     setPendingAssignment({ taskId: showUserPicker, assigneeId: u.id, task });
                                                     setAssignDeadline(task?.deadline ? new Date(task.deadline).toISOString().slice(0, 10) : '');
                                                     setShowAssignDeadlineModal(true);
                                                     setShowUserPicker(null);
-                                                });
-                                            }
+                                                    setConfirmModal({ ...confirmModal, show: false });
+                                                }
+                                            });
                                         }}
                                         className="w-full text-left px-3 py-2 rounded hover:bg-slate-800 flex items-center gap-2 group opacity-70 hover:opacity-100"
                                     >
@@ -1213,9 +1384,10 @@ export default function ManagerProjectsPage() {
                                 <div className="space-y-2">
                                     {getTeamMembers(selectedProject).length > 0 ? (
                                         getTeamMembers(selectedProject).map(u => (
-                                            <div key={u.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 group">
+                                            <div key={u.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg border border-slate-700/50 hover:bg-slate-800 hover:border-indigo-500/30 transition-all group cursor-pointer"
+                                                onClick={() => handleViewMemberDetails(u)}>
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 font-medium text-sm">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-700 group-hover:bg-indigo-600 flex items-center justify-center text-slate-300 group-hover:text-white font-medium text-sm transition-colors">
                                                         {u.name.charAt(0)}
                                                     </div>
                                                     <div>
@@ -1224,10 +1396,18 @@ export default function ManagerProjectsPage() {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => {
-                                                        if (window.confirm(`Remove ${u.name} from the project team?`)) {
-                                                            handleRemoveTeamMember(u.id);
-                                                        }
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setConfirmModal({
+                                                            show: true,
+                                                            title: 'Remove Member?',
+                                                            message: `Are you sure you want to remove ${u.name} from the project team? Their assigned tasks will be unassigned.`,
+                                                            type: 'danger',
+                                                            onConfirm: async () => {
+                                                                await handleRemoveTeamMember(u.id);
+                                                                setConfirmModal({ ...confirmModal, show: false });
+                                                            }
+                                                        });
                                                     }}
                                                     className="p-2 rounded hover:bg-red-500/10 text-slate-400 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
                                                     title="Remove from team"
@@ -1252,9 +1432,10 @@ export default function ManagerProjectsPage() {
                                 <div className="space-y-2">
                                     {getAvailableMembers(selectedProject).length > 0 ? (
                                         getAvailableMembers(selectedProject).map(u => (
-                                            <div key={u.id} className="flex items-center justify-between p-3 hover:bg-slate-800/30 rounded-lg border border-transparent hover:border-slate-800 transition-colors group">
+                                            <div key={u.id} className="flex items-center justify-between p-3 hover:bg-slate-800/30 rounded-lg border border-transparent hover:border-indigo-500/30 transition-all group cursor-pointer"
+                                                onClick={() => handleViewMemberDetails(u)}>
                                                 <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 text-sm">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-800 group-hover:bg-indigo-600 flex items-center justify-center text-slate-500 group-hover:text-white text-sm transition-colors">
                                                         {u.name.charAt(0)}
                                                     </div>
                                                     <div>
@@ -1263,7 +1444,10 @@ export default function ManagerProjectsPage() {
                                                     </div>
                                                 </div>
                                                 <button
-                                                    onClick={() => handleAddTeamMember(u.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleAddTeamMember(u.id);
+                                                    }}
                                                     className="px-3 py-1.5 rounded bg-indigo-500/10 hover:bg-indigo-500 text-indigo-400 hover:text-white text-xs font-medium transition-all"
                                                 >
                                                     Add
@@ -1357,10 +1541,14 @@ export default function ManagerProjectsPage() {
                             </div>
                             <div className="px-6 py-4 border-t border-border-dark flex justify-between gap-3">
                                 <button
-                                    onClick={handleSkipDeadline}
+                                    onClick={() => {
+                                        setShowAssignDeadlineModal(false);
+                                        setPendingAssignment(null);
+                                        setAssignDeadline('');
+                                    }}
                                     className="px-4 py-2 rounded-lg border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
                                 >
-                                    Skip (No Deadline)
+                                    Cancel
                                 </button>
                                 <button
                                     onClick={handleConfirmAssignment}
@@ -1429,6 +1617,166 @@ export default function ManagerProjectsPage() {
                     </div>
                 )
             }
+
+            {/* Team Member Details Modal */}
+            {showMemberDetailsModal && selectedTeamMember && (
+                <div className="fixed inset-0 z-[10002] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowMemberDetailsModal(false)}></div>
+                    <div className="relative bg-[#0F172A] border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="px-6 py-5 border-b border-white/5 bg-gradient-to-r from-indigo-600/10 to-purple-600/10">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                                        {selectedTeamMember.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-indigo-400">person</span>
+                                            Team Member Details & Performance
+                                        </h3>
+                                        <p className="text-slate-400 text-sm mt-1">{selectedTeamMember.name}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowMemberDetailsModal(false)}
+                                    className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* User Info */}
+                            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                                <div className="flex items-start justify-between">
+                                    <div>
+                                        <h4 className="text-xl font-bold text-white">{selectedTeamMember.name}</h4>
+                                        <p className="text-slate-400 mt-1">{selectedTeamMember.email}</p>
+                                        <div className="flex gap-2 mt-3">
+                                            <span className={`px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wider ${selectedTeamMember.role === 'EMPLOYEE' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                                                selectedTeamMember.role === 'INTERN' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                                                    'bg-green-500/20 text-green-400 border border-green-500/30'
+                                                }`}>
+                                                {selectedTeamMember.role}
+                                            </span>
+                                            <span className="px-3 py-1 text-xs font-bold rounded-full bg-slate-700/50 text-slate-300 border border-slate-600">
+                                                {selectedTeamMember.employeeId || selectedTeamMember.id}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+
+                            {/* Pending Tasks (NOT_STARTED and IN_PROGRESS only) */}
+                            {memberPerformance?.tasks && (
+                                <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                                    <h4 className="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-base">task</span>
+                                        Pending Tasks ({memberPerformance.tasks.filter(t => t.status !== 'COMPLETED').length})
+                                    </h4>
+                                    {memberPerformance.tasks.filter(t => t.status !== 'COMPLETED').length > 0 ? (
+                                        <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                                            {memberPerformance.tasks
+                                                .filter(t => t.status !== 'COMPLETED')
+                                                .map((task) => (
+                                                    <div key={task.id} className="p-3 bg-white/5 border border-white/5 rounded-lg">
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex-1">
+                                                                <p className="text-sm font-medium text-white">{task.title}</p>
+                                                                <p className="text-xs text-slate-500 mt-1">{task.projectName}</p>
+                                                                {task.deadline && (
+                                                                    <p className="text-xs text-slate-500 mt-1">
+                                                                        Due: {new Date(task.deadline).toLocaleDateString()}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <span className={`px-2 py-1 text-[10px] font-bold rounded uppercase ml-2 ${task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
+                                                                    'bg-slate-700 text-slate-400'
+                                                                }`}>
+                                                                {task.status === 'NOT_STARTED' ? 'NOT STARTED' : task.status.replace('_', ' ')}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-500 text-sm">
+                                            <span className="material-symbols-outlined text-4xl opacity-50">check_circle</span>
+                                            <p className="mt-2">No pending tasks.</p>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t border-white/5 bg-white/5 flex justify-between items-center">
+                            <button
+                                onClick={() => setShowMemberDetailsModal(false)}
+                                className="px-6 py-2.5 rounded-lg border border-slate-600 hover:bg-slate-700 text-white font-semibold transition-colors"
+                            >
+                                Close
+                            </button>
+                            {/* Show Add button only if member is NOT in current team */}
+                            {!getTeamMembers(selectedProject).some(m => m.id === selectedTeamMember.id) && (
+                                <button
+                                    onClick={async () => {
+                                        await handleAddTeamMember(selectedTeamMember.id);
+                                        setShowMemberDetailsModal(false);
+                                    }}
+                                    className="px-6 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold transition-colors flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined text-lg">person_add</span>
+                                    Add to Team
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Confirmation Modal */}
+            {confirmModal.show && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setConfirmModal({ ...confirmModal, show: false })}></div>
+                    <div className="relative bg-[#0F172A] border border-slate-700 rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className={`size-12 rounded-full flex items-center justify-center shrink-0 ${confirmModal.type === 'danger' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'
+                                }`}>
+                                <span className="material-symbols-outlined text-3xl">
+                                    {confirmModal.type === 'danger' ? 'warning' : 'help_outline'}
+                                </span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">{confirmModal.title}</h3>
+                                <p className="text-slate-400 mt-1 text-sm">{confirmModal.message}</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                                className="px-5 py-2 rounded-xl border border-slate-700 text-slate-300 font-medium hover:bg-slate-800 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmModal.onConfirm}
+                                className={`px-5 py-2 rounded-xl text-white font-bold shadow-lg transition-all text-sm ${confirmModal.type === 'danger'
+                                    ? 'bg-red-600 hover:bg-red-700 shadow-red-900/20'
+                                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-900/20'
+                                    }`}
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </ManagerLayout >
     );
 }

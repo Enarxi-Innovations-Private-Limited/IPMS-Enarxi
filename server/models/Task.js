@@ -59,6 +59,25 @@ const taskSchema = new mongoose.Schema({
     selfAssignedAt: { type: Date, default: null },       // When manager self-assigned the task
     completedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },     // Who completed the task
 
+    // Delay Reason Workflow
+    delayReason: { type: String, default: null }, // Reason submitted by employee
+    delayStatus: {
+        type: String,
+        enum: ['NONE', 'PENDING_MANAGER', 'PENDING_ADMIN', 'APPROVED', 'REJECTED'],
+        default: 'NONE'
+    },
+    delayRequestedAt: { type: Date, default: null },
+
+    // Manager Approval
+    managerDelayApproved: { type: Boolean, default: false },
+    managerDelayReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    managerDelayReviewedAt: { type: Date },
+
+    // Admin Approval
+    adminDelayApproved: { type: Boolean, default: false }, // Final approval (Excused Delay)
+    adminDelayReviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    adminDelayReviewedAt: { type: Date },
+
     // Rejection Tracking
     rejectionReason: { type: String, default: '' },
     rejectedAt: { type: Date, default: null },

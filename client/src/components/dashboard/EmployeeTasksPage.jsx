@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import EmployeeLayout from '../common/EmployeeLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
 
 export default function EmployeeTasksPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const user = getCurrentUser();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -27,11 +28,21 @@ export default function EmployeeTasksPage() {
     const [projectFilter, setProjectFilter] = useState('ALL');
     const [searchTerm, setSearchTerm] = useState('');
 
-
-
     useEffect(() => {
         loadData();
     }, []);
+
+    // Handle deep linking
+    useEffect(() => {
+        if (location.state?.openTaskId && tasks.length > 0) {
+            const taskToOpen = tasks.find(t => t.id === location.state.openTaskId);
+            if (taskToOpen) {
+                setSearchTerm(taskToOpen.title); // Filter to show this task
+                // Optional: Scroll to it if needed, but filtering is usually enough
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
+    }, [tasks, location.state]);
 
     const loadData = async () => {
         try {

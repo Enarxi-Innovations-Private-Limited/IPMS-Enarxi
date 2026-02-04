@@ -494,7 +494,7 @@ app.post(
       title,
       description: description || '',
       status: 'NOT_STARTED', // NOT_STARTED | IN_PROGRESS | COMPLETED
-      assigneeId: assigneeId || req.user.id,
+      assigneeId: assigneeId !== undefined ? assigneeId : (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user.id : null),
       createdBy: req.user.id,
       createdAt: new Date().toISOString(),
       comments: [],

@@ -15,6 +15,16 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
     const [deadlineInput, setDeadlineInput] = useState('');
     const [savingDeadline, setSavingDeadline] = useState(false);
 
+    // Delay Reporting State
+    const [showDelayInput, setShowDelayInput] = useState(false);
+    const [delayReasonInput, setDelayReasonInput] = useState('');
+    const [submittingDelay, setSubmittingDelay] = useState(false);
+
+    // Manager Review State
+    const [showDelayReview, setShowDelayReview] = useState(false);
+    const [delayRejectionReason, setDelayRejectionReason] = useState('');
+    const [showConfirmComplete, setShowConfirmComplete] = useState(false);
+
     const currentUser = getCurrentUser();
     const isManager = currentUser?.role === 'MANAGER' || currentUser?.role === 'SUPER_USER';
 
@@ -30,7 +40,11 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                     // Initialize deadline input if exists
                     if (res.data.deadline) {
                         const d = new Date(res.data.deadline);
-                        setDeadlineInput(d.toISOString().slice(0, 16));
+                        // Format as YYYY-MM-DD for date input
+                        const year = d.getFullYear();
+                        const month = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        setDeadlineInput(`${year}-${month}-${day}`);
                     }
                 }
             } catch (err) {
@@ -66,6 +80,51 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
             setError(err.response?.data?.message || 'Failed to update deadline');
         } finally {
             setSavingDeadline(false);
+        }
+    };
+
+    const handleReportDelay = async () => {
+        if (!delayReasonInput.trim()) return;
+        try {
+            setSubmittingDelay(true);
+            const taskId = activeTask._id || activeTask.id;
+            const res = await api.post(`/tasks/${taskId}/delay`, { reason: delayReasonInput });
+
+            // Update local state
+            const updatedTask = { ...activeTask, delayStatus: 'PENDING_MANAGER', delayReason: delayReasonInput, delayRequestedAt: new Date() };
+            setCurrentTask(updatedTask);
+            if (onUpdate) onUpdate(updatedTask);
+            setShowDelayInput(false);
+            setDelayReasonInput('');
+        } catch (err) {
+            console.error(err);
+            setError(err.response?.data?.message || 'Failed to report delay');
+        } finally {
+            setSubmittingDelay(false);
+        }
+    };
+
+    const handleManagerReviewDelay = async (approved) => {
+        try {
+            setLoading(true); // Re-use loading state
+            const taskId = activeTask._id || activeTask.id;
+            const payload = { approved };
+            if (!approved) payload.rejectionReason = delayRejectionReason;
+
+            const res = await api.put(`/tasks/${taskId}/delay/manager-review`, payload);
+
+            // Update local state is tricky as it might change structure, safer to reload or merge
+            // Merging fields from response
+            const updatedTask = { ...activeTask, ...res.data.task };
+            setCurrentTask(updatedTask);
+            if (onUpdate) onUpdate(updatedTask);
+            setShowDelayReview(false);
+            setDelayRejectionReason('');
+        } catch (err) {
+            console.error(err);
+            setError(err.response?.data?.message || 'Failed to submit review');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -118,8 +177,12 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
     const handleCompleteTask = async () => {
         const taskId = activeTask._id || activeTask.id;
         if (!taskId) return;
-        if (!window.confirm("Are you sure you want to mark this task as completed?")) return;
+        setShowConfirmComplete(true);
+    };
 
+    const confirmCompleteTask = async () => {
+        const taskId = activeTask._id || activeTask.id;
+        setShowConfirmComplete(false);
         try {
             setLoading(true);
             const res = await api.put(`/tasks/${taskId}`, { status: 'COMPLETED' });
@@ -173,8 +236,85 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                             </span>
                         </div>
 
+                        {/* DELAY INFO / ACTIONS - Moved to Top for Visibility */}
+                        {activeTask.delayStatus && activeTask.delayStatus !== 'NONE' && (
+                            <div className={`mt-4 p-3 border rounded-lg flex items-start gap-3 ${activeTask.delayStatus === 'APPROVED' ? 'bg-green-500/10 border-green-500/30' :
+                                activeTask.delayStatus === 'REJECTED' ? 'bg-red-500/10 border-red-500/30' :
+                                    'bg-amber-500/10 border-amber-500/30'
+                                }`}>
+                                <span className={`material-symbols-outlined text-lg mt-0.5 ${activeTask.delayStatus === 'APPROVED' ? 'text-green-400' :
+                                    activeTask.delayStatus === 'REJECTED' ? 'text-red-400' :
+                                        'text-amber-400'
+                                    }`}>
+                                    {activeTask.delayStatus === 'APPROVED' ? 'check_circle' :
+                                        activeTask.delayStatus === 'REJECTED' ? 'cancel' : 'pending'}
+                                </span>
+                                <div className="flex-1">
+                                    <p className={`text-xs font-bold uppercase tracking-wider mb-1 ${activeTask.delayStatus === 'APPROVED' ? 'text-green-400' :
+                                        activeTask.delayStatus === 'REJECTED' ? 'text-red-400' :
+                                            'text-amber-400'
+                                        }`}>
+                                        Delay Request: {activeTask.delayStatus.replace('_', ' ')}
+                                    </p>
+                                    <p className="text-slate-300 text-sm italic">"{activeTask.delayReason}"</p>
+                                    {activeTask.delayStatus === 'REJECTED' && activeTask.rejectionReason && (
+                                        <p className="text-xs text-red-400 mt-1 font-medium">Rejection Reason: {activeTask.rejectionReason}</p>
+                                    )}
+                                    {activeTask.delayStatus === 'APPROVED' && (
+                                        <p className="text-xs text-green-400 mt-1 font-medium">Delay Excused. Will count as on-time.</p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {isManager && activeTask.delayStatus === 'PENDING_MANAGER' && (
+                            <div className="mt-4 p-4 bg-slate-800/50 border border-slate-700 rounded-xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-2 opacity-10">
+                                    <span className="material-symbols-outlined text-6xl text-amber-500">warning</span>
+                                </div>
+                                <h4 className="text-white font-bold text-sm mb-2 flex items-center gap-2 relative z-10">
+                                    <span className="material-symbols-outlined text-amber-500">rate_review</span>
+                                    Review Delay Request
+                                </h4>
+                                <div className="flex gap-2 relative z-10">
+                                    <button
+                                        onClick={() => handleManagerReviewDelay(true)}
+                                        className="flex-1 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">check</span>
+                                        Verify & Forward
+                                    </button>
+                                    <button
+                                        onClick={() => setShowDelayReview(!showDelayReview)}
+                                        className="flex-1 py-2 rounded-lg bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/30 text-xs font-bold transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">close</span>
+                                        Reject
+                                    </button>
+                                </div>
+                                {showDelayReview && (
+                                    <div className="mt-3 animate-in slide-in-from-top-2 relative z-10">
+                                        <textarea
+                                            value={delayRejectionReason}
+                                            onChange={(e) => setDelayRejectionReason(e.target.value)}
+                                            placeholder="Reason for rejection..."
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white text-xs mb-2 focus:ring-1 focus:ring-red-500 outline-none"
+                                            rows={2}
+                                        />
+                                        <button
+                                            onClick={() => handleManagerReviewDelay(false)}
+                                            disabled={!delayRejectionReason.trim()}
+                                            className="w-full py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold disabled:opacity-50"
+                                        >
+                                            Confirm Reject
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Rejection Alert */}
-                        {activeTask.rejectionReason && activeTask.status === 'IN_PROGRESS' && (
+                        {activeTask.rejectionReason && activeTask.status === 'IN_PROGRESS' && !activeTask.delayStatus && (
                             <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-start gap-3">
                                 <span className="material-symbols-outlined text-red-400 text-lg mt-0.5">error</span>
                                 <div>
@@ -183,6 +323,8 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                 </div>
                             </div>
                         )}
+
+
 
                         {/* Deadline Section */}
                         <div className="mt-4 pt-4 border-t border-border-dark/50">
@@ -194,7 +336,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                 {editingDeadline ? (
                                     <div className="flex items-center gap-2">
                                         <input
-                                            type="datetime-local"
+                                            type="date"
                                             value={deadlineInput}
                                             onChange={(e) => setDeadlineInput(e.target.value)}
                                             className="bg-background-dark border border-border-dark rounded px-2 py-1 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
@@ -217,7 +359,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                     <div className="flex items-center gap-2">
                                         {activeTask.deadline ? (
                                             <span className="text-white text-sm">
-                                                {new Date(activeTask.deadline).toLocaleString()}
+                                                {new Date(activeTask.deadline).toLocaleDateString()}
                                             </span>
                                         ) : (
                                             <span className="text-text-secondary text-sm italic">Not set</span>
@@ -374,27 +516,101 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                     </div>
                 </div>
 
-                <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3 bg-surface-dark shrink-0">
-                    {showCompleteButton && (
+                <div className="px-6 py-4 border-t border-border-dark flex justify-between bg-surface-dark shrink-0">
+                    <div className="flex items-center gap-2">
+                        {isAssignee && activeTask.status !== 'COMPLETED' && (!activeTask.delayStatus || activeTask.delayStatus === 'NONE' || activeTask.delayStatus === 'REJECTED') && (
+                            <div className="relative">
+                                {showDelayInput ? (
+                                    <div className="flex flex-col gap-2 bg-slate-800 p-2 rounded-lg border border-slate-700 absolute bottom-full left-0 mb-2 w-72 shadow-xl z-20 animate-in slide-in-from-bottom-2">
+                                        <p className="text-xs text-slate-400">Describe why this task is delayed. This will be sent to your manager.</p>
+                                        <textarea
+                                            value={delayReasonInput}
+                                            onChange={(e) => setDelayReasonInput(e.target.value)}
+                                            placeholder="Reason due to..."
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-md p-2 text-white text-xs focus:ring-1 focus:ring-emerald-500 outline-none"
+                                            rows={2}
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={handleReportDelay}
+                                                disabled={!delayReasonInput.trim() || submittingDelay}
+                                                className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded disabled:opacity-50"
+                                            >
+                                                {submittingDelay ? 'Sending...' : 'Submit Report'}
+                                            </button>
+                                            <button
+                                                onClick={() => setShowDelayInput(false)}
+                                                className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium rounded"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setShowDelayInput(true)}
+                                        className="text-amber-500 text-xs font-bold hover:text-amber-400 hover:underline flex items-center gap-1 px-2 py-1"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">warning</span>
+                                        Report Delay
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex gap-3">
+                        {showCompleteButton && (
+                            <button
+                                type="button"
+                                onClick={handleCompleteTask}
+                                disabled={loading}
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                            >
+                                <span className="material-symbols-outlined text-lg">check_circle</span>
+                                Mark as Completed
+                            </button>
+                        )}
                         <button
                             type="button"
-                            onClick={handleCompleteTask}
-                            disabled={loading}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                            onClick={onClose}
+                            className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
                         >
-                            <span className="material-symbols-outlined text-lg">check_circle</span>
-                            Mark as Completed
+                            Close
                         </button>
-                    )}
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
-                    >
-                        Close
-                    </button>
+                    </div>
                 </div>
             </div>
+            {showConfirmComplete && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirmComplete(false)}></div>
+                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="size-12 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-3xl">check_circle</span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white">Complete Task?</h3>
+                                <p className="text-text-secondary mt-1 text-sm">Are you sure you want to mark this task as completed?</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowConfirmComplete(false)}
+                                className="px-5 py-2 rounded-xl border border-border-dark text-white font-medium hover:bg-white/5 transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmCompleteTask}
+                                className="px-5 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-900/40 transition-all text-sm"
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

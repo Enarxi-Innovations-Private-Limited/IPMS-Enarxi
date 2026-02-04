@@ -109,8 +109,11 @@ export default function SuperUserProjectsPage() {
     const loadProjectTasks = async (projectId) => {
         try {
             setLoadingTasks(true);
-            const res = await api.get(`/projects/${projectId}/tasks`);
-            setProjectTasks(res.data);
+            // Use general /tasks endpoint to ensure all fields (deadline) are populated, consistent with Manager view
+            const res = await api.get('/tasks');
+            const allTasks = Array.isArray(res.data) ? res.data : [];
+            // Filter tasks for the specific project
+            setProjectTasks(allTasks.filter(t => t.projectId === projectId || (t.project && t.project._id === projectId)));
         } catch (err) {
             console.error('Failed to load tasks:', err);
         } finally {
@@ -284,12 +287,28 @@ export default function SuperUserProjectsPage() {
     const openDetailsModal = async (project) => {
         setSelectedProject(project);
         setShowDetailsModal(true);
+        try {
+            const res = await api.get(`/projects/${project.id}`);
+            setSelectedProject(res.data);
+            // Update list state so Grid reflects the fetched details (e.g. team members)
+            setProjects(prev => prev.map(p => p.id === project.id ? { ...p, ...res.data } : p));
+        } catch (err) {
+            console.error('Failed to load project details:', err);
+        }
         await loadProjectTasks(project.id);
     };
 
-    const openTeamModal = (project) => {
+    const openTeamModal = async (project) => {
         setSelectedProject(project);
         setShowTeamModal(true);
+        try {
+            const res = await api.get(`/projects/${project.id}`);
+            setSelectedProject(res.data);
+            // Update list state
+            setProjects(prev => prev.map(p => p.id === project.id ? { ...p, ...res.data } : p));
+        } catch (err) {
+            console.error('Failed to load project details:', err);
+        }
     };
 
     // Filter projects
@@ -321,8 +340,13 @@ export default function SuperUserProjectsPage() {
     };
 
     const getTeamMembers = (project) => {
-        if (!project.teamIds || project.teamIds.length === 0) return [];
-        return users.filter((u) => project.teamIds.includes(u.id));
+        // Fallback checks for different data structures
+        const teamIds = project.teamIds || (Array.isArray(project.team) ? project.team : []);
+        if (!teamIds || teamIds.length === 0) return [];
+        // If team contains objects, return them directly
+        if (teamIds.length > 0 && typeof teamIds[0] === 'object') return teamIds;
+        // Otherwise filter from users list using IDs
+        return users.filter((u) => teamIds.includes(u.id));
     };
 
     return (
@@ -447,35 +471,13 @@ export default function SuperUserProjectsPage() {
                                                     <span className="text-text-secondary text-xs">No team assigned</span>
                                                 )}
                                             </div>
-                                            <button onClick={() => openTeamModal(project)} className="text-primary hover:text-white text-xs font-medium transition-colors">Manage</button>
+                                            <button onClick={() => openTeamModal(project)} className="text-primary hover:text-white text-xs font-medium transition-colors">View</button>
                                         </div>
 
                                         {/* Actions */}
                                         <div className="px-5 py-3 border-t border-border-dark flex gap-2">
-                                            {project.status === 'WAITING_APPROVAL' && (
-                                                <>
-                                                    <button
-                                                        onClick={() => handleProjectApproval(project.id, 'COMPLETED')}
-                                                        className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-green-500 text-white text-sm font-bold hover:bg-green-400 transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">check</span>Approve
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleProjectApproval(project.id, 'ACTIVE')}
-                                                        className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors"
-                                                    >
-                                                        <span className="material-symbols-outlined text-base">close</span>Reject
-                                                    </button>
-                                                </>
-                                            )}
-                                            <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
-                                                <span className="material-symbols-outlined text-base">visibility</span>View
-                                            </button>
-                                            <button onClick={() => openEditModal(project)} className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-amber-500/10 text-amber-400 text-sm font-medium hover:bg-amber-500/20 transition-colors">
-                                                <span className="material-symbols-outlined text-base">edit</span>
-                                            </button>
-                                            <button onClick={() => { setSelectedProject(project); setShowDeleteConfirm(true); }} className="flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors">
-                                                <span className="material-symbols-outlined text-base">delete</span>
+                                            <button onClick={() => openDetailsModal(project)} className="w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
+                                                <span className="material-symbols-outlined text-base">visibility</span>View Details
                                             </button>
                                         </div>
                                     </div>
@@ -680,334 +682,297 @@ export default function SuperUserProjectsPage() {
                 </div>
             )}
 
-            {/* Edit Project Modal */}
-            {showEditModal && selectedProject && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEditModal(false)}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-amber-400">edit</span>Edit Project
-                            </h2>
-                        </div>
-                        <form onSubmit={handleEditProject} className="p-6 space-y-4 overflow-y-auto max-h-[80vh]">
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Name *</label>
-                                <input type="text" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Description</label>
-                                <textarea className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={3} value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}></textarea>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
+
+
+            {/* Project Details Modal - Variant 2 Command Center */}
+            {showDetailsModal && selectedProject && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+                    {/* Backdrop */}
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm" onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }}></div>
+
+                    {/* Background effects */}
+                    <div className="fixed inset-0 blur-[120px] opacity-20 pointer-events-none select-none overflow-hidden">
+                        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/20 rounded-full"></div>
+                        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-500/10 rounded-full"></div>
+                    </div>
+
+                    {/* Modal Container */}
+                    <div className="relative bg-[#11141D] border border-white/10 w-full max-w-7xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] z-10">
+                        {/* Hero Header */}
+                        <div className="relative pt-8 pb-10 px-10 border-b border-white/5" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(10, 12, 18, 0) 100%)' }}>
+                            <div className="flex items-start justify-between">
                                 <div>
-                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
-                                        <option value="SOFTWARE">Software</option>
-                                        <option value="HARDWARE">Hardware</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Status</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
-                                        <option value="PLANNING">Planning</option>
-                                        <option value="ACTIVE">Active</option>
-                                        <option value="ON_HOLD">On Hold</option>
-                                        <option value="COMPLETED">Completed</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2 flex items-center gap-2">
-                                    Deadline
-                                    {selectedProject.deadline && (
-                                        <span className="text-amber-400" title="Deadline is locked once set">
-                                            <span className="material-symbols-outlined text-sm">lock</span>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-10 h-10 rounded-xl bg-blue-600/20 flex items-center justify-center text-blue-500">
+                                            <span className="material-symbols-outlined text-2xl">folder</span>
+                                        </div>
+                                        <h1 className="text-3xl font-bold text-white tracking-tight">{selectedProject.name}</h1>
+                                        <span className={`ml-4 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${selectedProject.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                                            selectedProject.status === 'COMPLETED' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                                'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                                            }`}>
+                                            {selectedProject.status.replace('_', ' ')}
                                         </span>
-                                    )}
-                                </label>
-                                <input
-                                    type="date"
-                                    min={new Date().toISOString().split('T')[0]}
-                                    disabled={!!selectedProject.deadline}
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                    value={editForm.endDate}
-                                    onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
-                                />
-                                {selectedProject.deadline && (
-                                    <p className="text-text-secondary text-xs mt-1">⚠️ Deadline cannot be changed once set</p>
-                                )}
-                            </div>
-
-                            {/* Budget */}
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Budget (₹)</label>
-                                <input
-                                    type="text"
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                    placeholder="Enter budget amount"
-                                    value={formatBudgetDisplay(editForm.budget)}
-                                    onChange={(e) => {
-                                        const val = e.target.value.replace(/,/g, '');
-                                        // Max 10 Million (1,00,00,000)
-                                        if (val === '' || (/^\d*\.?\d*$/.test(val) && parseFloat(val) <= 10000000)) {
-                                            setEditForm({ ...editForm, budget: val });
-                                        }
-                                    }}
-                                />
-                            </div>
-
-                            {/* Attachments */}
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Attachments</label>
-
-                                {/* Existing Attachments */}
-                                {existingAttachments.length > 0 && (
-                                    <div className="mb-3">
-                                        <p className="text-text-secondary text-xs mb-2">Existing Files:</p>
-                                        <div className="space-y-2">
-                                            {existingAttachments.map((att, idx) => (
-                                                <div key={idx} className="flex items-center justify-between bg-green-500/10 border border-green-500/30 px-3 py-2 rounded-lg">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="material-symbols-outlined text-green-400 text-base">check_circle</span>
-                                                        <a href={`/api${att.url}`} target="_blank" rel="noopener noreferrer" className="text-white text-sm hover:text-primary truncate max-w-[200px]">{att.name}</a>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                    </div>
+                                    <div className="flex items-center gap-6 mt-4">
+                                        {selectedProject.budget > 0 && (
+                                            <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
+                                                <span className="material-symbols-outlined text-emerald-400 text-lg">payments</span>
+                                                <span className="text-white font-mono font-semibold">₹{selectedProject.budget.toLocaleString('en-IN')}</span>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
+                                            <span className="material-symbols-outlined text-sm">event</span>
+                                            <span>
+                                                {selectedProject.startDate ? new Date(selectedProject.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'}
+                                            </span>
+                                            {selectedProject.endDate && (
+                                                <>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-600"></span>
+                                                    <span className="text-blue-400 font-bold">
+                                                        {Math.max(0, Math.ceil((new Date(selectedProject.endDate) - new Date()) / (1000 * 60 * 60 * 24)))} Days Left
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
-                                )}
-
-                                {/* Upload New Files */}
-                                <div className="border-2 border-dashed border-border-dark rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
-                                    <p className="text-text-secondary text-sm mb-2">Add more files</p>
-                                    <input
-                                        type="file"
-                                        multiple
-                                        className="hidden"
-                                        id="edit-project-attachments"
-                                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.zip,.rar"
-                                        onChange={(e) => {
-                                            const files = Array.from(e.target.files);
-                                            setEditFiles(prev => [...prev, ...files]);
-                                            e.target.value = '';
-                                        }}
-                                    />
-                                    <label htmlFor="edit-project-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-background-dark border border-border-dark text-white text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
-                                        <span className="material-symbols-outlined text-base">attach_file</span>
-                                        Choose Files
-                                    </label>
                                 </div>
-
-                                {/* New Files to Upload */}
-                                {editFiles.length > 0 && (
-                                    <div className="mt-3 space-y-2">
-                                        <p className="text-text-secondary text-xs">New files to upload:</p>
-                                        {editFiles.map((file, idx) => (
-                                            <div key={idx} className="flex items-center justify-between bg-background-dark/50 px-3 py-2 rounded-lg">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="material-symbols-outlined text-primary text-base">description</span>
-                                                    <span className="text-white text-sm truncate max-w-[200px]">{file.name}</span>
-                                                    <span className="text-text-secondary text-xs">({(file.size / 1024).toFixed(1)} KB)</span>
-                                                </div>
-                                                <button type="button" onClick={() => setEditFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300">
-                                                    <span className="material-symbols-outlined text-base">close</span>
-                                                </button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {formError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{formError}</div>}
-                            <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-amber-500 text-white font-bold hover:bg-amber-600 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                                    {isSubmitting ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Saving...</> : <><span className="material-symbols-outlined text-lg">check</span>Save Changes</>}
+                                <button onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }} className="p-2 text-slate-500 hover:text-white transition-colors">
+                                    <span className="material-symbols-outlined">close</span>
                                 </button>
                             </div>
-                        </form>
-                    </div>
-                </div>
-            )}
 
-            {/* Project Details Modal */}
-            {showDetailsModal && selectedProject && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0 flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary">folder</span>{selectedProject.name}
-                            </h2>
-                            <div className="flex items-center gap-3">
-                                {selectedProject.budget > 0 && (
-                                    <div className="flex items-center gap-1 bg-green-500/10 border border-green-500/20 px-3 py-1 rounded-full">
-                                        <span className="material-symbols-outlined text-green-400 text-sm">payments</span>
-                                        <span className="text-green-400 text-xs font-bold">₹{selectedProject.budget.toLocaleString('en-IN')}</span>
-                                    </div>
-                                )}
-                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${getStatusColor(selectedProject.status)}`}>{selectedProject.status.replace('_', ' ')}</span>
+                            {/* Progress Bar */}
+                            <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
+                                <div
+                                    className="h-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)] transition-all duration-500"
+                                    style={{ width: `${projectTasks.length > 0 ? (projectTasks.filter(t => t.status === 'COMPLETED').length / projectTasks.length * 100) : 0}%` }}
+                                ></div>
                             </div>
                         </div>
-                        <div className="p-6 overflow-y-auto flex-1">
-                            {selectedProject.description && <p className="text-text-secondary mb-4">{selectedProject.description}</p>}
 
-                            {/* Stats */}
-                            <div className="grid grid-cols-3 gap-4 mb-6">
-                                <div className="bg-background-dark/50 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold text-white">{projectTasks.length}</p>
-                                    <p className="text-text-secondary text-sm">Total Tasks</p>
-                                </div>
-                                <div className="bg-background-dark/50 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold text-green-400">{projectTasks.filter(t => t.status === 'COMPLETED').length}</p>
-                                    <p className="text-text-secondary text-sm">Completed</p>
-                                </div>
-                                <div className="bg-background-dark/50 rounded-lg p-4 text-center">
-                                    <p className="text-2xl font-bold text-blue-400">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length}</p>
-                                    <p className="text-text-secondary text-sm">In Progress</p>
-                                </div>
-                            </div>
+                        {/* Content Area */}
+                        <div className="flex-1 overflow-auto custom-scrollbar p-8">
+                            <div className="flex flex-col-reverse lg:flex-row gap-8">
+                                {/* Left Column: Task Management */}
+                                <div className="flex-1 space-y-6 min-w-0">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-blue-400">format_list_bulleted</span>
+                                            Task Management
+                                        </h3>
+                                    </div>
 
-                            {/* Assigned Manager */}
-                            <div className="mb-6">
-                                <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-base">person_outline</span>Assigned Manager
-                                </h3>
-                                {selectedProject.managerName ? (
-                                    <div className="flex items-center gap-3 bg-background-dark/50 px-4 py-3 rounded-lg border border-border-dark inline-flex min-w-[200px]">
-                                        <div className="size-10 rounded-full bg-gradient-primary flex items-center justify-center shrink-0 shadow-lg shadow-primary/20">
-                                            <span className="text-white text-sm font-bold">{selectedProject.managerName.charAt(0)}</span>
+                                    {loadingTasks ? (
+                                        <div className="text-center py-12 text-slate-500">Loading tasks...</div>
+                                    ) : projectTasks.length > 0 ? (
+                                        <>
+                                            <div className="md:hidden space-y-4">
+                                                {projectTasks.map((task) => {
+                                                    const assignee = users.find(u => u.id === task.assigneeId);
+                                                    return (
+                                                        <div key={task.id} className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div>
+                                                                    <div className="font-semibold text-white text-sm leading-tight">{task.title}</div>
+                                                                    {task.description && <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{task.description}</div>}
+                                                                </div>
+                                                                <span className={`shrink-0 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                                                    task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                                                        task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                                                            'bg-slate-800 text-slate-400 border border-white/10'
+                                                                    }`}>
+                                                                    {task.status === 'NOT_STARTED' ? 'N/S' : task.status.replace('_', ' ')}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                                                <div className="flex items-center gap-2">
+                                                                    {assignee ? (
+                                                                        <>
+                                                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-white/5">{assignee.name.charAt(0)}</div>
+                                                                            <span className="text-xs text-slate-300">{assignee.name}</span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <div className="w-5 h-5 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[8px] text-slate-500">?</div>
+                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-[10px] text-slate-400 font-mono">
+                                                                    {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No Date'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <div className="hidden md:block bg-white/5 border border-white/5 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-white/5 border-b border-white/5">
+                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
+                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
+                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
+                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-white/5">
+                                                        {projectTasks.map((task) => {
+                                                            const assignee = users.find(u => u.id === task.assigneeId);
+                                                            return (
+                                                                <tr key={task.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                                    <td className="px-6 py-5">
+                                                                        <div className="font-semibold text-white text-sm">{task.title}</div>
+                                                                        {task.description && <div className="text-[11px] text-slate-500 mt-1">{task.description.substring(0, 50)}</div>}
+                                                                    </td>
+                                                                    <td className="px-6 py-5">
+                                                                        {assignee ? (
+                                                                            <div className="flex items-center space-x-2">
+                                                                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white/5">
+                                                                                    {assignee.name.charAt(0)}
+                                                                                </div>
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="text-xs text-slate-300 font-medium">{assignee.name}</span>
+                                                                                    <span className="text-[9px] text-emerald-500 font-bold uppercase">Assigned</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <div className="flex items-center space-x-2">
+                                                                                <div className="w-7 h-7 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[10px] font-bold text-slate-500">?</div>
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="text-xs text-slate-500 italic">No Assignee</span>
+                                                                                    <span className="text-[9px] text-slate-500 font-bold uppercase">Unassigned</span>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="px-6 py-5">
+                                                                        <div className="flex justify-center items-center gap-2">
+                                                                            <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                                                                task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                                                                    task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                                                                        'bg-slate-800 text-slate-400 border border-white/10'
+                                                                                }`}>
+                                                                                {task.status === 'NOT_STARTED' ? 'Not Started' : task.status.replace('_', ' ')}
+                                                                            </span>
+
+
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-6 py-5 font-mono text-[11px] text-slate-400">
+                                                                        {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No deadline'}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center py-12 text-slate-500">
+                                            <span className="material-symbols-outlined text-5xl opacity-50">task_alt</span>
+                                            <p className="mt-2">No tasks created yet.</p>
                                         </div>
-                                        <div>
-                                            <p className="text-white text-base font-bold">{selectedProject.managerName}</p>
-                                            <p className="text-primary text-xs font-medium uppercase tracking-wide">Project Manager</p>
+                                    )}
+                                </div>
+
+                                {/* Right Column: Sidebar */}
+                                <div className="w-full lg:w-96 space-y-6 shrink-0 mt-1">
+                                    {/* Stats */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Project Stats</h4>
+                                        <div className="flex gap-4">
+                                            <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Tasks</p>
+                                                <p className="text-2xl font-bold text-white">{projectTasks.length}</p>
+                                            </div>
+                                            <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</p>
+                                                <p className="text-2xl font-bold text-emerald-500">{projectTasks.filter(t => t.status === 'COMPLETED').length.toString().padStart(2, '0')}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl w-full" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                            <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">In Progress</p>
+                                            <div className="flex items-end justify-between">
+                                                <p className="text-2xl font-bold text-white">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
+                                                {projectTasks.length > 0 && (
+                                                    <span className="text-xs text-blue-400 font-bold">
+                                                        {Math.round((projectTasks.filter(t => t.status === 'IN_PROGRESS').length / projectTasks.length) * 100)}% Active
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                ) : (
-                                    <div className="flex items-center gap-2 p-3 rounded-lg border border-dashed border-border-dark bg-background-dark/30 text-text-secondary/70">
-                                        <span className="material-symbols-outlined text-lg">person_off</span>
-                                        <span className="text-sm italic">No manager assigned yet</span>
-                                    </div>
-                                )}
-                            </div>
 
-                            {/* Team Members */}
-                            <div className="mb-6">
-                                <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-base">group</span>Team Members ({getTeamMembers(selectedProject).length})
-                                </h3>
-                                {getTeamMembers(selectedProject).length > 0 ? (
-                                    <div className="flex flex-wrap gap-2">
-                                        {getTeamMembers(selectedProject).map((member) => (
-                                            <div key={member.id} className="flex items-center gap-2 bg-background-dark/50 px-3 py-2 rounded-lg">
-                                                <div className="size-8 rounded-full bg-gradient-primary flex items-center justify-center">
-                                                    <span className="text-white text-xs font-medium">{member.name.charAt(0)}</span>
+                                    {/* Assigned Manager */}
+                                    <div className="space-y-4">
+                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Assigned Manager</h4>
+                                        {selectedProject.managerName ? (
+                                            <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-4" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-blue-900/40">
+                                                    {selectedProject.managerName.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <p className="text-white text-sm font-medium">{member.name}</p>
-                                                    <p className="text-text-secondary text-xs">{member.role}</p>
+                                                    <h5 className="text-white font-bold leading-tight">{selectedProject.managerName}</h5>
+                                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Project Manager</p>
                                                 </div>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : <p className="text-text-secondary text-sm">No team members assigned.</p>}
-                            </div>
-
-                            {/* Attachments */}
-                            <div className="mb-6">
-                                <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-base">attach_file</span>Attachments ({selectedProject.attachments?.length || 0})
-                                </h3>
-                                {selectedProject.attachments && selectedProject.attachments.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                        {selectedProject.attachments.map((file, idx) => (
-                                            <div key={idx} className="flex items-center gap-3 p-3 bg-black/20 border border-border-dark rounded-lg hover:bg-black/30 transition-colors group">
-                                                <div className="size-8 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
-                                                    <span className="material-symbols-outlined text-lg">description</span>
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-white text-sm truncate">{file.name}</p>
-                                                    <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
-                                                </div>
-                                                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <a
-                                                        href={`/api${file.url}`}
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="p-1.5 text-text-secondary hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                                                        title="Preview"
-                                                    >
-                                                        <span className="material-symbols-outlined text-lg">visibility</span>
-                                                    </a>
-                                                    <a
-                                                        href={`/api${file.url}`}
-                                                        download
-                                                        target="_blank"
-                                                        rel="noreferrer"
-                                                        className="p-1.5 text-primary hover:text-white hover:bg-primary rounded-lg transition-colors"
-                                                        title="Download"
-                                                    >
-                                                        <span className="material-symbols-outlined text-lg">download</span>
-                                                    </a>
-                                                </div>
+                                        ) : (
+                                            <div className="bg-slate-800/30 border border-slate-700/50 border-dashed p-4 rounded-2xl text-center text-slate-500 italic text-sm">
+                                                No manager assigned
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
-                                ) : <p className="text-text-secondary text-sm">No attachments.</p>}
-                            </div>
 
-                            {/* Tasks */}
-                            <div>
-                                <h3 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-base">task_alt</span>Tasks
-                                </h3>
-                                {loadingTasks ? (
-                                    <p className="text-text-secondary text-center py-4">Loading tasks...</p>
-                                ) : projectTasks.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {projectTasks.map((task) => (
-                                            <div key={task.id} className={`bg-background-dark/50 border rounded-lg px-4 py-3 flex items-center justify-between ${task.status === 'WAITING_APPROVAL' ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-border-dark'}`}>
-                                                <div className="flex-1">
-                                                    <p className="text-white font-medium">{task.title}</p>
-                                                    <p className="text-text-secondary text-xs">Assigned to: {users.find(u => u.id === task.assigneeId)?.name || 'Unassigned'}</p>
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${task.status === 'COMPLETED' ? 'bg-green-500/20 text-green-400' :
-                                                        task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                                            task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/20 text-yellow-400' :
-                                                                'bg-gray-500/20 text-gray-400'
-                                                        }`}>
-                                                        {task.status.replace('_', ' ')}
-                                                    </span>
-
-                                                    {task.status === 'WAITING_APPROVAL' && (
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => handleTaskApproval(task.id, 'COMPLETED')}
-                                                                className="bg-green-500 text-black p-1 rounded shadow-sm hover:bg-green-400 transition-colors"
-                                                                title="Approve"
-                                                            >
-                                                                <span className="material-symbols-outlined text-[14px] block font-bold">check</span>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleTaskApproval(task.id, 'IN_PROGRESS')}
-                                                                className="bg-red-500 text-white p-1 rounded shadow-sm hover:bg-red-600 transition-colors"
-                                                                title="Reject"
-                                                            >
-                                                                <span className="material-symbols-outlined text-[14px] block font-bold">close</span>
-                                                            </button>
+                                    {/* Team Members */}
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Team Members ({getTeamMembers(selectedProject).length})</h4>
+                                            <button
+                                                onClick={() => { setShowDetailsModal(false); setShowTeamModal(true); }}
+                                                className="text-[10px] font-bold text-blue-400 hover:underline uppercase"
+                                            >
+                                                View All
+                                            </button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            {getTeamMembers(selectedProject).length > 0 ? getTeamMembers(selectedProject).slice(0, 3).map((member) => (
+                                                <div key={member.id} className="flex items-center justify-between group">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/5 overflow-hidden flex items-center justify-center">
+                                                            <div className="text-[10px] text-slate-400">{member.name.substring(0, 2).toUpperCase()}</div>
                                                         </div>
-                                                    )}
+                                                        <span className="text-sm text-slate-300">{member.name}</span>
+                                                    </div>
+                                                    <span className="text-[9px] font-bold text-slate-600 group-hover:text-blue-400 uppercase transition-colors">{member.role}</span>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            )) : (
+                                                <p className="text-slate-500 text-sm">No team members</p>
+                                            )}
+                                        </div>
                                     </div>
-                                ) : <p className="text-text-secondary text-sm">No tasks created yet.</p>}
+                                </div>
                             </div>
                         </div>
-                        <div className="px-6 py-4 border-t border-border-dark flex justify-end shrink-0">
-                            <button type="button" onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors">Close</button>
+
+                        {/* Footer */}
+                        <div className="px-10 py-6 border-t border-white/5 bg-[#11141D]/60 flex items-center justify-between">
+                            <div className="flex items-center space-x-8">
+                                <div className="flex items-center space-x-2 text-slate-500 hover:text-blue-400 transition-colors cursor-pointer">
+                                    <span className="material-symbols-outlined text-xl">attach_file</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">{selectedProject.attachments?.length || 0} Attachments</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <button
+                                    onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }}
+                                    className="px-6 py-2.5 rounded-xl border border-slate-600 text-white text-xs font-bold hover:bg-slate-800 transition-all"
+                                >
+                                    Close
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1022,7 +987,7 @@ export default function SuperUserProjectsPage() {
                         <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden flex flex-col">
                             <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">group_add</span>Manage Team
+                                    <span className="material-symbols-outlined text-primary">group</span>Team Members
                                 </h2>
                                 <p className="text-text-secondary text-sm mt-1">{selectedProject.name}</p>
                             </div>
@@ -1032,7 +997,7 @@ export default function SuperUserProjectsPage() {
                                         {users.map((user) => {
                                             const isAssigned = (selectedProject.teamIds || []).includes(user.id);
                                             return (
-                                                <button key={user.id} onClick={() => handleAssignTeam(user.id)} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${isAssigned ? 'bg-primary/20 border border-primary/50' : 'bg-background-dark/50 border border-border-dark hover:border-primary/30'}`}>
+                                                <div key={user.id} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${isAssigned ? 'bg-primary/20 border border-primary/50' : 'bg-background-dark/50 border border-border-dark opacity-40'}`}>
                                                     <div className="size-10 rounded-full bg-gradient-primary flex items-center justify-center">
                                                         <span className="text-white font-medium">{user.name.charAt(0)}</span>
                                                     </div>
@@ -1041,7 +1006,7 @@ export default function SuperUserProjectsPage() {
                                                         <p className="text-text-secondary text-xs">{user.role} • {user.department || 'No dept'}</p>
                                                     </div>
                                                     {isAssigned && <span className="material-symbols-outlined text-primary">check_circle</span>}
-                                                </button>
+                                                </div>
                                             );
                                         })}
                                     </div>
@@ -1055,31 +1020,7 @@ export default function SuperUserProjectsPage() {
                 )
             }
 
-            {/* Delete Confirmation Modal */}
-            {
-                showDeleteConfirm && selectedProject && (
-                    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border-dark bg-red-500/10">
-                                <h2 className="text-lg font-semibold text-red-400 flex items-center gap-2">
-                                    <span className="material-symbols-outlined">warning</span>Delete Project
-                                </h2>
-                            </div>
-                            <div className="p-6">
-                                <p className="text-white mb-2">Are you sure you want to delete <strong>{selectedProject.name}</strong>?</p>
-                                <p className="text-text-secondary text-sm">This will also delete all tasks associated with this project. This action cannot be undone.</p>
-                            </div>
-                            <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
-                                <button type="button" onClick={() => setShowDeleteConfirm(false)} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors">Cancel</button>
-                                <button type="button" onClick={handleDeleteProject} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-red-500 text-white font-bold hover:bg-red-600 transition-colors">
-                                    <span className="material-symbols-outlined text-lg">delete</span>Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )
-            }
+
         </SuperUserLayout >
     );
 }

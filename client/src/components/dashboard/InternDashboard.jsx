@@ -33,6 +33,9 @@ export default function InternDashboard() {
   const [queryText, setQueryText] = useState('');
   const [submittingQuery, setSubmittingQuery] = useState(false);
 
+  // Notification state
+  const [notification, setNotification] = useState(null);
+
   // Determine current page from route
   const getCurrentPage = () => {
     if (location.pathname === '/intern' || location.pathname === '/intern/') return 'dashboard';
@@ -130,10 +133,10 @@ export default function InternDashboard() {
       const updatedAttachments = res.data.attachments;
       setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
       setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
-      alert('Attachments uploaded successfully');
+      setNotification({ message: 'Attachments uploaded successfully', type: 'success' });
     } catch (err) {
       console.error(err);
-      alert('Failed to upload attachments');
+      setNotification({ message: 'Failed to upload attachments', type: 'error' });
     } finally {
       setIsUploading(false);
       e.target.value = null;
@@ -142,6 +145,14 @@ export default function InternDashboard() {
   };
 
   const myTasks = tasks.filter((t) => t.assigneeId === user.id);
+
+  const goToProjects = () => {
+    navigate('/intern/projects');
+  };
+
+  const goToTasks = () => {
+    navigate('/intern/tasks');
+  };
 
   return (
     <InternLayout currentPage={currentPage}>
@@ -180,21 +191,30 @@ export default function InternDashboard() {
             <>
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl"
+                  onClick={goToProjects}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Projects</h3>
                     <span className="material-symbols-outlined text-primary">folder</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{projects.length}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl"
+                  onClick={goToTasks}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Tasks</h3>
                     <span className="material-symbols-outlined text-green-500">task_alt</span>
                   </div>
                   <p className="text-3xl font-bold text-white">{myTasks.length}</p>
                 </div>
-                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                <div
+                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl"
+                  onClick={goToTasks}
+                >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completed</h3>
                     <span className="material-symbols-outlined text-blue-500">check_circle</span>
@@ -219,10 +239,11 @@ export default function InternDashboard() {
                       {projects.map((p) => (
                         <div
                           key={p.id}
-                          className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors"
+                          onClick={() => navigate(`/intern/projects?projectId=${p.id}`)}
+                          className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-primary font-bold font-mono">{p.projectCode || 'No ID'}</h3>
+                            <h3 className="text-primary font-bold font-mono group-hover:text-blue-400 transition-colors">{p.projectCode || 'No ID'}</h3>
                             <span
                               className={`px-2 py-1 text-xs font-medium rounded-full ${p.status === 'ACTIVE'
                                 ? 'bg-green-500/20 text-green-400'
@@ -235,7 +256,10 @@ export default function InternDashboard() {
                           <div className="flex items-center justify-between mt-2">
                             <p className="text-text-secondary text-sm line-clamp-2 flex-1 mr-2">{p.description || 'No description'}</p>
                             <button
-                              onClick={() => openDetailsModal(p)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/intern/projects?projectId=${p.id}`);
+                              }}
                               className="p-1.5 rounded-lg bg-surface-dark border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
                               title="View Details"
                             >
@@ -588,6 +612,32 @@ export default function InternDashboard() {
             setTasks(tasks.map(t => t.id === updatedTask.id || t.id === updatedTask._id ? updatedTask : t));
           }}
           canRespond={false}
+        />
+      )}
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10000] animate-in fade-in zoom-in duration-300">
+          <div className={`bg-[#0a0f1d] border ${notification.type === 'error' ? 'border-red-500/50' : 'border-slate-800'} rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-3 min-w-[200px]`}>
+            <div className={`size-12 rounded-full flex items-center justify-center ${notification.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+              <span className="material-symbols-outlined text-3xl">
+                {notification.type === 'error' ? 'error' : 'check_circle'}
+              </span>
+            </div>
+            <p className="text-white font-medium text-center">{notification.message}</p>
+            <button
+              onClick={() => setNotification(null)}
+              className="mt-2 px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+      {notification && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-[2px] z-[9999] animate-in fade-in duration-300"
+          onClick={() => setNotification(null)}
         />
       )}
     </InternLayout>

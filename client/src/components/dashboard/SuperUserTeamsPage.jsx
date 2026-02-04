@@ -210,6 +210,63 @@ export default function SuperUserTeamsPage() {
         }
     };
 
+    const [showStatusModal, setShowStatusModal] = useState(false);
+    const [allTasks, setAllTasks] = useState([]);
+    const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SOFTWARE, HARDWARE
+
+    // ... existing ... 
+
+    const handleOpenStatusModal = async () => {
+        try {
+            setLoading(true);
+            const [usersRes, tasksRes] = await Promise.all([
+                api.get('/users'),
+                api.get('/tasks')
+            ]);
+            setTeamMembers(usersRes.data);
+            setAllTasks(tasksRes.data);
+            setShowStatusModal(true);
+        } catch (err) {
+            console.error("Failed to load data for status view", err);
+            setError('Failed to load team status');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getUserStatus = (userId) => {
+        const userTasks = allTasks.filter(t => t.assigneeId === userId);
+        const activeTask = userTasks.find(t => t.status === 'IN_PROGRESS');
+
+        if (activeTask) {
+            return {
+                state: 'WORKING',
+                task: activeTask.title,
+                projectCode: activeTask.projectCode,
+                color: 'text-green-400',
+                bg: 'bg-green-500/10 border-green-500/30'
+            };
+        }
+
+        const completedTasks = userTasks.filter(t => t.status === 'COMPLETED').sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        if (completedTasks.length > 0) {
+            return {
+                state: 'Recently Completed',
+                task: completedTasks[0].title,
+                projectCode: completedTasks[0].projectCode,
+                color: 'text-blue-400',
+                bg: 'bg-blue-500/10 border-blue-500/30'
+            };
+        }
+
+        return {
+            state: 'IDLE',
+            task: 'No active tasks',
+            color: 'text-gray-400',
+            bg: 'bg-gray-500/10 border-gray-500/30'
+        };
+    };
+
     const confirmDelete = (user) => {
         setSelectedUser(user);
         setShowDeleteConfirm(true);
@@ -368,21 +425,30 @@ export default function SuperUserTeamsPage() {
                             <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Team Members</h1>
                             <p className="text-text-secondary text-lg">Manage your team members by department.</p>
                         </div>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    const res = await api.get('/users/next-id');
-                                    setNextEmployeeId(res.data.nextEmployeeId);
-                                } catch (err) {
-                                    console.error('Failed to get next ID');
-                                }
-                                setShowCreateModal(true);
-                            }}
-                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
-                        >
-                            <span className="material-symbols-outlined text-lg">person_add</span>
-                            Add Team Member
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                            <button
+                                onClick={handleOpenStatusModal}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600/20 border border-blue-500/30 text-blue-400 font-bold hover:bg-blue-600/30 transition-all shadow-lg shadow-blue-500/10 whitespace-nowrap"
+                            >
+                                <span className="material-symbols-outlined text-lg">monitor_heart</span>
+                                Live Activity Board
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const res = await api.get('/users/next-id');
+                                        setNextEmployeeId(res.data.nextEmployeeId);
+                                    } catch (err) {
+                                        console.error('Failed to get next ID');
+                                    }
+                                    setShowCreateModal(true);
+                                }}
+                                className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all whitespace-nowrap"
+                            >
+                                <span className="material-symbols-outlined text-lg">person_add</span>
+                                Add Team Member
+                            </button>
+                        </div>
                     </div>
 
                     {/* Search and Filter Bar */}
@@ -648,16 +714,12 @@ export default function SuperUserTeamsPage() {
                                                     <span className="material-symbols-outlined text-base">insights</span>
                                                     Performance Summary
                                                 </h4>
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                                     <div className="text-center">
                                                         <p className="text-2xl font-bold text-white">
                                                             {userPerformance.stats.averagePerformance ? `${userPerformance.stats.averagePerformance}%` : '-'}
                                                         </p>
                                                         <p className="text-xs text-text-secondary">Avg Performance</p>
-                                                    </div>
-                                                    <div className="text-center">
-                                                        <p className="text-2xl font-bold text-green-400">{userPerformance.stats.excellentCount}</p>
-                                                        <p className="text-xs text-text-secondary">🚀 Excellent (≥150%)</p>
                                                     </div>
                                                     <div className="text-center">
                                                         <p className="text-2xl font-bold text-blue-400">{userPerformance.stats.onTimeCount}</p>
@@ -779,6 +841,89 @@ export default function SuperUserTeamsPage() {
                     </div>
                 </div>
             )}
+            {/* Team Live Status Modal */}
+            {showStatusModal && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowStatusModal(false)}></div>
+                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-4xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">monitor_heart</span>
+                                Team Live Status
+                            </h2>
+                            <button onClick={() => setShowStatusModal(false)} className="text-text-secondary hover:text-white transition-colors">
+                                <span className="material-symbols-outlined">close</span>
+                            </button>
+                        </div>
+
+                        {/* Status Filters - Segmented Control */}
+                        <div className="px-6 py-4 border-b border-border-dark">
+                            <div className="bg-background-dark p-1 rounded-xl flex">
+                                {['ALL', 'SOFTWARE', 'HARDWARE'].map(dept => (
+                                    <button
+                                        key={dept}
+                                        onClick={() => setStatusFilter(dept)}
+                                        className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${statusFilter === dept
+                                            ? 'bg-primary text-white shadow-md'
+                                            : 'text-text-secondary hover:text-white hover:bg-surface-dark/50'
+                                            }`}
+                                    >
+                                        {dept === 'ALL' ? 'All' : dept === 'SOFTWARE' ? 'Software' : 'Hardware'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {teamMembers
+                                    .filter(m => statusFilter === 'ALL' || m.department === statusFilter)
+                                    .map(member => {
+                                        const status = getUserStatus(member.id);
+                                        return (
+                                            <div key={member.id} className={`p-4 rounded-xl border ${status.bg} transition-all flex flex-col h-full`}>
+                                                <div className="flex items-center gap-3 mb-4">
+                                                    <div className="size-10 rounded-full bg-surface-dark flex items-center justify-center border border-white/10 shrink-0">
+                                                        <span className="text-white font-bold">{member.name.charAt(0)}</span>
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h3 className="text-white font-medium text-sm truncate">{member.name}</h3>
+                                                        <p className="text-xs text-text-secondary truncate">{member.department || 'Unassigned'}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-surface-dark/50 rounded-lg p-3 flex-1 flex flex-col">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className={`text-xs font-bold ${status.color} flex items-center gap-1.5`}>
+                                                            <span className="material-symbols-outlined text-sm">
+                                                                {status.state === 'WORKING' ? 'engineering' : status.state === 'Recently Completed' ? 'check_circle' : 'bedtime'}
+                                                            </span>
+                                                            <span className="truncate max-w-[100px]">{status.state}</span>
+                                                        </span>
+                                                        {status.projectCode && (
+                                                            <span className="text-[10px] font-mono bg-white/5 text-text-secondary px-1.5 py-0.5 rounded shrink-0">
+                                                                {status.projectCode}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <p className="text-sm text-white line-clamp-2 mt-auto">
+                                                        {status.task}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                {teamMembers.filter(m => statusFilter === 'ALL' || m.department === statusFilter).length === 0 && (
+                                    <div className="col-span-full py-12 text-center text-text-secondary">
+                                        No team members found in this department.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </SuperUserLayout>
     );
 }
