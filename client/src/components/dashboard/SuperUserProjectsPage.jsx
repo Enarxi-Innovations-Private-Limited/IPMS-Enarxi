@@ -214,7 +214,9 @@ export default function SuperUserProjectsPage() {
         try {
             await api.delete(`/projects/${selectedProject.id}`);
             setShowDeleteConfirm(false);
+            setShowDetailsModal(false);
             setSelectedProject(null);
+            setProjectTasks([]);
             await loadProjects();
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to delete project');
@@ -535,8 +537,11 @@ export default function SuperUserProjectsPage() {
 
                                         {/* Actions */}
                                         <div className="px-5 py-3 border-t border-border-dark flex gap-2">
-                                            <button onClick={() => openDetailsModal(project)} className="w-full flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
+                                            <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
                                                 <span className="material-symbols-outlined text-base">visibility</span>View Details
+                                            </button>
+                                            <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors" title="Delete Project">
+                                                <span className="material-symbols-outlined text-base">delete</span>
                                             </button>
                                         </div>
                                     </div>
@@ -1029,6 +1034,13 @@ export default function SuperUserProjectsPage() {
                             </div>
                             <div className="flex items-center space-x-4">
                                 <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/20 text-red-500 text-xs font-bold hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                    Delete Project
+                                </button>
+                                <button
                                     onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }}
                                     className="px-6 py-2.5 rounded-xl border border-slate-600 text-white text-xs font-bold hover:bg-slate-800 transition-all"
                                 >
@@ -1206,6 +1218,41 @@ export default function SuperUserProjectsPage() {
                 )
             }
 
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setShowDeleteConfirm(false)}></div>
+                    <div className="relative bg-[#11141D] border border-white/10 rounded-2xl shadow-2xl p-8 w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="size-14 rounded-2xl bg-red-500/20 text-red-500 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-4xl">warning</span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Delete Project?</h3>
+                                <p className="text-slate-400 mt-2 text-sm leading-relaxed">
+                                    Are you sure you want to delete <span className="text-white font-bold">"{selectedProject?.name}"</span>?
+                                    This will permanently remove all tasks and back up all attachments. This action cannot be undone.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end pt-2">
+                            <button
+                                onClick={() => setShowDeleteConfirm(false)}
+                                className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 font-bold hover:bg-white/5 transition-all text-xs uppercase tracking-widest"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDeleteProject}
+                                className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
+                            >
+                                Confirm Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </SuperUserLayout >
     );
