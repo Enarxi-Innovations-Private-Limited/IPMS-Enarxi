@@ -22,12 +22,28 @@ export default function SuperUserProjectsPage() {
         }
     }, [location.search]);
 
+    // Handle deep-linking from search or dashboard
+    useEffect(() => {
+        if (projects.length > 0) {
+            const params = new URLSearchParams(location.search);
+            const projectIdParam = params.get('projectId');
+            if (projectIdParam) {
+                const project = projects.find(p => p.id === projectIdParam);
+                if (project) {
+                    openDetailsModal(project);
+                }
+            }
+        }
+    }, [projects, location.search]);
+
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showTeamModal, setShowTeamModal] = useState(false);
+    const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [projectTasks, setProjectTasks] = useState([]);
     const [loadingTasks, setLoadingTasks] = useState(false);
@@ -245,6 +261,49 @@ export default function SuperUserProjectsPage() {
             }
         } catch (err) {
             console.error('Failed to update project status:', err);
+        }
+    };
+
+    const handleUploadAttachment = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0 || !selectedProject) return;
+
+        try {
+            setIsUploading(true);
+            const formData = new FormData();
+            files.forEach(file => {
+                formData.append('attachments', file);
+            });
+
+            const res = await api.post(`/projects/${selectedProject.id}/attachments`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+
+            const updatedAttachments = res.data.attachments;
+            setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
+            // Update in main list too
+            setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
+        } catch (err) {
+            console.error('Failed to upload attachments:', err);
+            setError('Failed to upload attachments');
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleRemoveAttachment = async (fileUrl) => {
+        if (!selectedProject || !window.confirm('Are you sure you want to remove this attachment?')) return;
+
+        try {
+            const filename = fileUrl.split('/').pop();
+            const res = await api.delete(`/projects/${selectedProject.id}/attachments/${filename}`);
+            const updatedAttachments = res.data.attachments;
+            setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
+            // Update in main list too
+            setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
+        } catch (err) {
+            console.error('Failed to remove attachment:', err);
+            setError('Failed to remove attachment');
         }
     };
 
@@ -960,7 +1019,10 @@ export default function SuperUserProjectsPage() {
                         {/* Footer */}
                         <div className="px-10 py-6 border-t border-white/5 bg-[#11141D]/60 flex items-center justify-between">
                             <div className="flex items-center space-x-8">
-                                <div className="flex items-center space-x-2 text-slate-500 hover:text-blue-400 transition-colors cursor-pointer">
+                                <div
+                                    onClick={() => setShowAttachmentsModal(true)}
+                                    className="flex items-center space-x-2 text-slate-500 hover:text-blue-400 transition-colors cursor-pointer"
+                                >
                                     <span className="material-symbols-outlined text-xl">attach_file</span>
                                     <span className="text-[10px] font-bold uppercase tracking-widest">{selectedProject.attachments?.length || 0} Attachments</span>
                                 </div>
@@ -1014,6 +1076,130 @@ export default function SuperUserProjectsPage() {
                             </div>
                             <div className="px-6 py-4 border-t border-border-dark flex justify-end shrink-0">
                                 <button type="button" onClick={() => setShowTeamModal(false)} className="px-4 py-2 rounded-lg bg-gradient-primary text-white font-bold hover:scale-[1.02] transition-all">Done</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Attachments Center Modal */}
+            {
+                showAttachmentsModal && selectedProject && (
+                    <div className="fixed inset-0 z-[10000] flex items-center justify-center">
+                        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setShowAttachmentsModal(false)}></div>
+                        <div className="relative bg-[#11141D] border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[80vh] animate-in fade-in zoom-in-95 duration-200">
+
+                            {/* Header */}
+                            <div className="relative px-6 py-4 border-b border-white/5 bg-gradient-to-r from-blue-600/10 to-transparent flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-blue-600/20 flex items-center justify-center text-blue-500">
+                                        <span className="material-symbols-outlined">folder_open</span>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-white tracking-tight">Attachment Center</h3>
+                                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Manage files for {selectedProject.name}</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowAttachmentsModal(false)}
+                                    className="p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+
+                                {/* Upload Section */}
+                                <div className="relative bg-white/5 border-2 border-dashed border-white/10 hover:border-blue-500/50 rounded-2xl p-8 transition-all group overflow-hidden">
+                                    <div className="absolute inset-0 bg-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <div className="relative flex flex-col items-center justify-center text-center gap-3">
+                                        <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center group-hover:bg-blue-600/20 group-hover:text-blue-400 transition-all duration-300">
+                                            <span className="material-symbols-outlined text-3xl">cloud_upload</span>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-white">Click or drag to upload files</p>
+                                            <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Max file size: 50MB</p>
+                                        </div>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            onChange={handleUploadAttachment}
+                                            className="absolute inset-0 opacity-0 cursor-pointer"
+                                            disabled={isUploading}
+                                        />
+                                    </div>
+                                    {isUploading && (
+                                        <div className="mt-4 flex items-center justify-center gap-2 text-blue-400 text-xs font-bold uppercase tracking-widest animate-pulse">
+                                            <span className="material-symbols-outlined animate-spin text-sm">progress_activity</span>
+                                            Uploading files...
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Attachments List */}
+                                <div>
+                                    <h4 className="text-[10px] font-bold uppercase text-slate-500 tracking-widest mb-4 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-sm">attach_file</span>
+                                        Attached Files ({selectedProject.attachments?.length || 0})
+                                    </h4>
+
+                                    <div className="space-y-2">
+                                        {selectedProject.attachments && selectedProject.attachments.length > 0 ? (
+                                            selectedProject.attachments.map((file, idx) => (
+                                                <div key={idx} className="flex items-center gap-4 p-4 bg-white/5 border border-white/5 rounded-2xl hover:bg-white/[0.08] hover:border-white/10 transition-all group">
+                                                    <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400 shrink-0 shadow-inner">
+                                                        <span className="material-symbols-outlined">description</span>
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-bold text-white truncate">{file.name}</p>
+                                                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                                            {new Date(file.uploadedAt).toLocaleDateString()} • {file.size ? (file.size / 1024).toFixed(1) + ' KB' : 'Size unknown'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <a
+                                                            href={`/api${file.url}`}
+                                                            download
+                                                            target="_blank"
+                                                            rel="noreferrer"
+                                                            className="p-2 rounded-xl hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-400 transition-all"
+                                                            title="Download"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xl">download</span>
+                                                        </a>
+                                                        <button
+                                                            onClick={() => handleRemoveAttachment(file.url)}
+                                                            className="p-2 rounded-xl hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-all"
+                                                            title="Delete"
+                                                        >
+                                                            <span className="material-symbols-outlined text-xl">delete</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-12 border-2 border-dashed border-white/5 rounded-2xl">
+                                                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-4">
+                                                    <span className="material-symbols-outlined text-3xl text-slate-600">folder_off</span>
+                                                </div>
+                                                <p className="text-slate-500 text-sm font-medium">No files attached to this project yet.</p>
+                                                <p className="text-[10px] text-slate-600 uppercase font-bold tracking-widest mt-1">Upload files to get started</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                            </div>
+                            {/* Footer */}
+                            <div className="px-6 py-4 border-t border-white/5 bg-white/[0.02] flex justify-end">
+                                <button
+                                    onClick={() => setShowAttachmentsModal(false)}
+                                    className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all"
+                                >
+                                    Done
+                                </button>
                             </div>
                         </div>
                     </div>
