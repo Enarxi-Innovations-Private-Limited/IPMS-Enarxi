@@ -274,6 +274,7 @@ const projectAttachmentUpload = multer({
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
