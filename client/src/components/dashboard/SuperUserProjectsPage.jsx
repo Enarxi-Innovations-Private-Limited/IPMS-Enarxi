@@ -43,6 +43,8 @@ export default function SuperUserProjectsPage() {
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showTeamModal, setShowTeamModal] = useState(false);
     const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+    const [showAttachmentDeleteConfirm, setShowAttachmentDeleteConfirm] = useState(false);
+    const [fileToDelete, setFileToDelete] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [projectTasks, setProjectTasks] = useState([]);
@@ -293,16 +295,23 @@ export default function SuperUserProjectsPage() {
         }
     };
 
-    const handleRemoveAttachment = async (fileUrl) => {
-        if (!selectedProject || !window.confirm('Are you sure you want to remove this attachment?')) return;
+    const handleRemoveAttachment = (fileUrl) => {
+        setFileToDelete(fileUrl);
+        setShowAttachmentDeleteConfirm(true);
+    };
+
+    const confirmRemoveAttachment = async () => {
+        if (!selectedProject || !fileToDelete) return;
 
         try {
-            const filename = fileUrl.split('/').pop();
+            const filename = fileToDelete.split('/').pop();
             const res = await api.delete(`/projects/${selectedProject.id}/attachments/${filename}`);
             const updatedAttachments = res.data.attachments;
             setSelectedProject({ ...selectedProject, attachments: updatedAttachments });
             // Update in main list too
             setProjects(projects.map(p => p.id === selectedProject.id ? { ...p, attachments: updatedAttachments } : p));
+            setShowAttachmentDeleteConfirm(false);
+            setFileToDelete(null);
         } catch (err) {
             console.error('Failed to remove attachment:', err);
             setError('Failed to remove attachment');
@@ -1253,6 +1262,42 @@ export default function SuperUserProjectsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Attachment Delete Confirmation Modal */}
+            {showAttachmentDeleteConfirm && (
+                <div className="fixed inset-0 z-[10002] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => { setShowAttachmentDeleteConfirm(false); setFileToDelete(null); }}></div>
+                    <div className="relative bg-[#11141D] border border-white/10 rounded-2xl shadow-2xl p-8 w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="size-14 rounded-2xl bg-red-500/20 text-red-500 flex items-center justify-center shrink-0">
+                                <span className="material-symbols-outlined text-4xl">delete_forever</span>
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold text-white tracking-tight">Remove Attachment?</h3>
+                                <p className="text-slate-400 mt-2 text-sm leading-relaxed">
+                                    Are you sure you want to remove <span className="text-white font-bold">"{fileToDelete?.split('/').pop()}"</span>?
+                                    This will permanently delete the file from the project.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex gap-3 justify-end pt-2">
+                            <button
+                                onClick={() => { setShowAttachmentDeleteConfirm(false); setFileToDelete(null); }}
+                                className="px-6 py-2.5 rounded-xl border border-white/10 text-slate-300 font-bold hover:bg-white/5 transition-all text-xs uppercase tracking-widest"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmRemoveAttachment}
+                                className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
+                            >
+                                Confirm Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
         </SuperUserLayout >
     );
