@@ -680,14 +680,26 @@ const taskTemplates = {
         ],
     },
     SOFTWARE: {
-        'Product Development': [
-            { title: 'Requirement & PRD', order: 1 },
+        'IT Software Development': [
+            { title: 'User Flow Diagrams', order: 1 },
             { title: 'Wireframes', order: 2 },
-            { title: 'UI Design', order: 3 },
-            { title: 'Development', order: 4 },
-            { title: 'Client Validation', order: 5 },
-            { title: 'Final Review', order: 6 },
-            { title: 'Closure', order: 7 },
+            { title: 'UI/UX Visual Design', order: 3 },
+            { title: 'Design Approval', order: 4 },
+            { title: 'Backend Development', order: 5 },
+            { title: 'Web Frontend Development', order: 6 },
+            { title: 'Mobile App Development', order: 7 },
+            { title: 'API Integration', order: 8 },
+            { title: 'Internal QA', order: 9 },
+            { title: 'Bug Fixes', order: 10 },
+            { title: 'Staging Deployment', order: 11 },
+            { title: 'Client Demo', order: 12 },
+            { title: 'Final Changes', order: 13 },
+            { title: 'Production Deployment', order: 14 },
+            { title: 'Client Payment', order: 15 },
+            { title: 'Project Handover', order: 16 },
+            { title: 'Documentation Handover', order: 17 },
+            { title: 'Completion Certificate', order: 18 },
+            { title: 'Client Feedback', order: 19 },
         ],
     },
 };
@@ -854,7 +866,15 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
 app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
     try {
         const { name, description, department, managerId, startDate, deadline, endDate, budget, templateName, teamIds } = req.body;
+        console.log('Creating project:', { name, department, managerId, startDate, deadline, endDate });
+
         if (!name) return res.status(400).json({ message: 'Project name is required' });
+
+        // Ensure we have a deadline (either from deadline or endDate field)
+        const projectDeadline = deadline || endDate;
+        if (!projectDeadline) {
+            return res.status(400).json({ message: 'Project deadline/end date is required' });
+        }
 
         const project = await Project.create({
             name,
@@ -862,8 +882,8 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
             department: department || 'SOFTWARE',
             status: 'PLANNING',
             managerId: managerId || null,
-            startDate: startDate || '',
-            deadline: deadline || endDate,
+            startDate: startDate || new Date(),
+            deadline: projectDeadline,
             budget: budget || 0,
             templateUsed: templateName || '',
             teamIds: teamIds || [],
@@ -936,14 +956,15 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        const { name, description, department, status, deadline, endDate, teamIds, budget } = req.body;
+        const { name, description, department, status, deadline, endDate, teamIds, budget, managerId } = req.body;
         console.log('Updating project:', projectId);
-        console.log('Request body:', { name, description, department, status, deadline, teamIds, budget });
+        console.log('Request body:', { name, description, department, status, deadline, teamIds, budget, managerId });
         console.log('Current project status:', project.status);
 
         if (name) project.name = name;
         if (description !== undefined) project.description = description;
         if (department) project.department = department;
+        if (managerId !== undefined) project.managerId = managerId;
 
         // Only Super Users can update budget
         if (budget !== undefined && req.user.role === roles.SUPER_USER) {

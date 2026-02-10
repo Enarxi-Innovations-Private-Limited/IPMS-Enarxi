@@ -73,9 +73,7 @@ export default function SuperUserProjectsPage() {
         name: '',
         description: '',
         department: 'SOFTWARE',
-        status: 'PLANNING',
-        startDate: '',
-        endDate: '',
+        managerId: '',
         budget: '',
     });
 
@@ -182,7 +180,15 @@ export default function SuperUserProjectsPage() {
         try {
             setIsSubmitting(true);
             setFormError('');
-            await api.put(`/projects/${selectedProject.id}`, editForm);
+            // Only send fields that Super Admin wants to edit
+            const updatePayload = {
+                name: editForm.name,
+                description: editForm.description,
+                managerId: editForm.managerId,
+                budget: editForm.budget,
+                department: editForm.department
+            };
+            await api.put(`/projects/${selectedProject.id}`, updatePayload);
 
             // Upload new attachments if any
             if (editFiles.length > 0) {
@@ -325,8 +331,7 @@ export default function SuperUserProjectsPage() {
             description: project.description || '',
             department: project.department || 'SOFTWARE',
             status: project.status,
-            startDate: project.startDate?.split('T')[0] || '',
-            endDate: project.deadline?.split('T')[0] || '',
+            managerId: project.managerId || '',
             budget: project.budget || '',
         });
         setFormError('');
@@ -549,6 +554,9 @@ export default function SuperUserProjectsPage() {
                                             <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
                                                 <span className="material-symbols-outlined text-base">visibility</span>View Details
                                             </button>
+                                            <button onClick={() => openEditModal(project)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-colors" title="Edit Project">
+                                                <span className="material-symbols-outlined text-base">edit</span>
+                                            </button>
                                             <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors" title="Delete Project">
                                                 <span className="material-symbols-outlined text-base">delete</span>
                                             </button>
@@ -661,6 +669,7 @@ export default function SuperUserProjectsPage() {
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Start Date</label>
                                     <input
                                         type="date"
+                                        required
                                         min={new Date().toISOString().split('T')[0]}
                                         className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.startDate}
@@ -671,6 +680,7 @@ export default function SuperUserProjectsPage() {
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">End Date</label>
                                     <input
                                         type="date"
+                                        required
                                         min={createForm.startDate || new Date().toISOString().split('T')[0]}
                                         className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.endDate}
@@ -1227,6 +1237,141 @@ export default function SuperUserProjectsPage() {
                 )
             }
 
+
+
+            {/* Edit Project Modal */}
+            {showEditModal && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEditModal(false)}></div>
+                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
+                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <span className="material-symbols-outlined text-primary">edit</span>Edit Project
+                            </h2>
+                        </div>
+                        <form onSubmit={handleEditProject} className="p-6 space-y-4 overflow-y-auto flex-1">
+                            {/* Project Name */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Name *</label>
+                                <input type="text" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                            </div>
+
+                            {/* Description */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Description</label>
+                                <textarea className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={3} placeholder="Enter project description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}></textarea>
+                            </div>
+
+                            {/* Manager & Department */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
+                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
+                                        <option value="SOFTWARE">Software (IT)</option>
+                                        <option value="HARDWARE">Hardware</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Change Manager</label>
+                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.managerId} onChange={(e) => setEditForm({ ...editForm, managerId: e.target.value })}>
+                                        <option value="">Select Manager</option>
+                                        {managers.filter(m => !editForm.department || m.department === editForm.department || m.department === 'ALL').map(m => (
+                                            <option key={m.id} value={m.id}>{m.name} ({m.department})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+
+                            {/* Budget */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Budget (₹)</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    placeholder="Enter budget amount"
+                                    value={formatBudgetDisplay(editForm.budget)}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/,/g, '');
+                                        if (val === '' || (/^\d*\.?\d*$/.test(val) && parseFloat(val) <= 10000000)) {
+                                            setEditForm({ ...editForm, budget: val });
+                                        }
+                                    }}
+                                />
+                            </div>
+
+                            {/* Existing Attachments */}
+                            {existingAttachments.length > 0 && (
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Current Attachments</label>
+                                    <div className="space-y-2">
+                                        {existingAttachments.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-background-dark/30 px-3 py-2 rounded-lg border border-border-dark/50">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-primary text-base">description</span>
+                                                    <span className="text-white text-xs truncate max-w-[200px]">{file.name}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">
+                                                        <span className="material-symbols-outlined text-base">download</span>
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Add More Attachments */}
+                            <div>
+                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Add New Attachments</label>
+                                <div className="border border-dashed border-border-dark rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
+                                    <input
+                                        type="file"
+                                        multiple
+                                        className="hidden"
+                                        id="edit-attachments"
+                                        onChange={(e) => {
+                                            const files = Array.from(e.target.files);
+                                            setEditFiles(prev => [...prev, ...files]);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                    <label htmlFor="edit-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-background-dark border border-border-dark text-white text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
+                                        <span className="material-symbols-outlined text-base">add_circle</span>
+                                        Add Files
+                                    </label>
+                                </div>
+
+                                {editFiles.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                        {editFiles.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between bg-primary/10 px-3 py-2 rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-primary text-base">upload_file</span>
+                                                    <span className="text-white text-sm truncate max-w-[200px]">{file.name}</span>
+                                                </div>
+                                                <button type="button" onClick={() => setEditFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300">
+                                                    <span className="material-symbols-outlined text-base">close</span>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {formError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{formError}</div>}
+
+                            <div className="flex justify-end gap-3 pt-4">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
+                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {isSubmitting ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Updating...</> : <><span className="material-symbols-outlined text-lg">check</span>Save Changes</>}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Delete Confirmation Modal */}
             {showDeleteConfirm && (
