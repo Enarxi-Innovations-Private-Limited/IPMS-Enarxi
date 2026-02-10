@@ -155,7 +155,9 @@ export default function SuperUserProjectsPage() {
                 });
                 try {
                     await api.post(`/projects/${res.data.id}/attachments`, formData, {
-                        headers: { 'Content-Type': 'multipart/form-data' }
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        maxContentLength: Infinity,
+                        maxBodyLength: Infinity,
                     });
                 } catch (uploadErr) {
                     console.error('Failed to upload attachments:', uploadErr);
@@ -198,7 +200,9 @@ export default function SuperUserProjectsPage() {
                 });
                 try {
                     await api.post(`/projects/${selectedProject.id}/attachments`, formData, {
-                        headers: { 'Content-Type': 'multipart/form-data' }
+                        headers: { 'Content-Type': 'multipart/form-data' },
+                        maxContentLength: Infinity,
+                        maxBodyLength: Infinity,
                     });
                 } catch (uploadErr) {
                     console.error('Failed to upload attachments:', uploadErr);
@@ -286,7 +290,9 @@ export default function SuperUserProjectsPage() {
             });
 
             const res = await api.post(`/projects/${selectedProject.id}/attachments`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
+                headers: { 'Content-Type': 'multipart/form-data' },
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity,
             });
 
             const updatedAttachments = res.data.attachments;
