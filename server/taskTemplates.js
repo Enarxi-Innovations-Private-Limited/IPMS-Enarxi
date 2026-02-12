@@ -21,6 +21,20 @@ const taskTemplates = {
             { title: 'Client Documentation Handover (if Any)', order: 16 },
             { title: 'Client Feedback on Email', order: 17 },
         ],
+        'Hardware Production': [
+            { title: 'BOM Creation or UPDATE', order: 1 },
+            { title: 'PCB Procurement', order: 2 },
+            { title: 'Stocklist update', order: 3 },
+            { title: 'Stencil Procurement', order: 4 },
+            { title: 'Component Procurement', order: 5 },
+            { title: 'Procurement validation of all components', order: 6 },
+            { title: 'Assembly', order: 7 },
+            { title: 'Electrical Peripheral Testing', order: 8 },
+            { title: 'Quality Check and Inspection', order: 9 },
+            { title: 'Stickering and labeling', order: 10 },
+            { title: 'Conformal Coating', order: 11 },
+            { title: 'Shipment', order: 12 },
+        ],
     },
     SOFTWARE: {
         'IT Software Development': [
