@@ -26,12 +26,12 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['SUPER_USER', 'MANAGER', 'EMPLOYEE', 'INTERN', 'STOCK_ADMIN'],
+        enum: ['SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER'],
         required: true,
     },
     department: {
         type: String,
-        enum: ['SOFTWARE', 'HARDWARE', null],
+        enum: ['IT', 'HARDWARE', 'SOFTWARE', null],
         default: null,
     },
     createdAt: {

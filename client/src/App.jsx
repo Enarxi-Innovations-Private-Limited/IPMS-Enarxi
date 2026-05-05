@@ -12,22 +12,43 @@ import EmployeeTasksPage from './components/dashboard/EmployeeTasksPage.jsx';
 import InternDashboard from './components/dashboard/InternDashboard.jsx';
 import InternProjectsPage from './components/dashboard/InternProjectsPage.jsx';
 import InternTasksPage from './components/dashboard/InternTasksPage.jsx';
-import StockAdminDashboard from './components/dashboard/StockAdminDashboard.jsx';
 import ManagerDashboard from './components/dashboard/ManagerDashboard.jsx';
 import ManagerProjectsPage from './components/dashboard/ManagerProjectsPage.jsx';
 import ManagerTasksPage from './components/dashboard/ManagerTasksPage.jsx';
 import ManagerTeamPage from './components/dashboard/ManagerTeamPage.jsx';
-import InventoryPage from './components/stock/InventoryPage.jsx';
-import IssueReturnPage from './components/stock/IssueReturnPage.jsx';
-import MyIssuedItemsPage from './components/stock/MyIssuedItemsPage';
+import StockOverview from './components/inventory/StockOverview.jsx';
+import MaterialRequestPage from './components/inventory/MaterialRequestPage.jsx';
+import ProjectReturn from './components/inventory/ProjectReturn.jsx';
+import AdminMRRouting from './components/inventory/AdminMRRouting.jsx';
+import VendorManagement from './components/inventory/VendorManagement.jsx';
+import PurchasePlanning from './components/inventory/PurchasePlanning.jsx';
+import PurchaseOrdersPage from './components/inventory/PurchaseOrdersPage.jsx';
+import InventoryDashboard from './components/inventory/InventoryDashboard.jsx';
+import PurchaseInward from './components/inventory/PurchaseInward.jsx';
+import MasterDataManagement from './components/inventory/MasterDataManagement.jsx';
+import InventoryAudit from './components/inventory/InventoryAudit.jsx';
+import Traceability from './components/inventory/Traceability.jsx';
+import StockTransfer from './components/inventory/StockTransfer.jsx';
+import AdjustmentReview from './components/inventory/AdjustmentReview.jsx';
+import StoreDispatchPage from './components/inventory/StoreDispatchPage.jsx';
+import ClassificationsPage from './components/inventory/ClassificationsPage.jsx';
+import StockLocationsPage from './components/inventory/StockLocationsPage.jsx';
+import StockUploadsPage from './components/inventory/StockUploadsPage.jsx';
+import POApprovalsPage from './components/inventory/POApprovalsPage.jsx';
+import StoreDashboard from './components/inventory/StoreDashboard.jsx';
+import PurchaseDashboard from './components/inventory/PurchaseDashboard.jsx';
 import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
+  SUPER_ADMIN: '/super',
   SUPER_USER: '/super',
-  MANAGER: '/manager',
-  EMPLOYEE: '/employee',
+  MANAGER: '/engineer',
+  ENGINEER: '/engineer', // Legacy
+  EMPLOYEE: '/junior-engineer',
+  JUNIOR_ENGINEER: '/junior-engineer', // Legacy
   INTERN: '/intern',
-  STOCK_ADMIN: '/stock-admin',
+  STORE_MANAGER: '/store',
+  PURCHASE_MANAGER: '/purchase',
 };
 
 function App() {
@@ -38,7 +59,7 @@ function App() {
       <Route
         path="/super"
         element={
-          <ProtectedRoute allowedRoles={['SUPER_USER']}>
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
             <SuperUserDashboard />
           </ProtectedRoute>
         }
@@ -46,7 +67,7 @@ function App() {
       <Route
         path="/super/projects"
         element={
-          <ProtectedRoute allowedRoles={['SUPER_USER']}>
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
             <SuperUserProjectsPage />
           </ProtectedRoute>
         }
@@ -54,7 +75,7 @@ function App() {
       <Route
         path="/super/teams"
         element={
-          <ProtectedRoute allowedRoles={['SUPER_USER']}>
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
             <SuperUserTeamsPage />
           </ProtectedRoute>
         }
@@ -62,7 +83,7 @@ function App() {
       <Route
         path="/super/backups"
         element={
-          <ProtectedRoute allowedRoles={['SUPER_USER']}>
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
             <SuperUserBackupsPage />
           </ProtectedRoute>
         }
@@ -70,21 +91,157 @@ function App() {
       <Route
         path="/super/inventory"
         element={
-          <ProtectedRoute allowedRoles={['SUPER_USER']}>
-            <InventoryPage />
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StockOverview />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/employee"
+        path="/super/material-requests"
         element={
-          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <MaterialRequestPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/routing"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <AdminMRRouting />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/vendors"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <VendorManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/purchase-planning"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <PurchasePlanning />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/purchase-orders"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <PurchaseOrdersPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/inward"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <PurchaseInward />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/classifications"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <ClassificationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/locations"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StockLocationsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/uploads"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StockUploadsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/po-approvals"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <POApprovalsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/master-data"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <MasterDataManagement />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <InventoryDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/adjustments"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <AdjustmentReview />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/traceability"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <Traceability />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/audit"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <InventoryAudit />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/transfers"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StockTransfer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/adjustments"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <AdjustmentReview />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/junior-engineer"
+        element={
+          <ProtectedRoute allowedRoles={['JUNIOR_ENGINEER', 'EMPLOYEE']}>
             <EmployeeDashboard />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/employee/projects"
+        path="/junior-engineer/projects"
         element={
           <ProtectedRoute allowedRoles={['EMPLOYEE']}>
             <EmployeeProjectsPage />
@@ -92,7 +249,7 @@ function App() {
         }
       />
       <Route
-        path="/employee/tasks"
+        path="/junior-engineer/tasks"
         element={
           <ProtectedRoute allowedRoles={['EMPLOYEE']}>
             <EmployeeTasksPage />
@@ -100,18 +257,10 @@ function App() {
         }
       />
       <Route
-        path="/employee/inventory"
+        path="/junior-engineer/dispatches"
         element={
           <ProtectedRoute allowedRoles={['EMPLOYEE']}>
-            <InventoryPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/employee/my-items"
-        element={
-          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
-            <MyIssuedItemsPage />
+            <StoreDispatchPage />
           </ProtectedRoute>
         }
       />
@@ -140,33 +289,17 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/intern/inventory"
-        element={
-          <ProtectedRoute allowedRoles={['INTERN']}>
-            <InventoryPage />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/intern/my-items"
-        element={
-          <ProtectedRoute allowedRoles={['INTERN']}>
-            <MyIssuedItemsPage />
-          </ProtectedRoute>
-        }
-      />
 
       <Route
-        path="/manager"
+        path="/engineer"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['ENGINEER', 'MANAGER']}>
             <ManagerDashboard />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/manager/projects"
+        path="/engineer/projects"
         element={
           <ProtectedRoute allowedRoles={['MANAGER']}>
             <ManagerProjectsPage />
@@ -174,7 +307,7 @@ function App() {
         }
       />
       <Route
-        path="/manager/tasks"
+        path="/engineer/tasks"
         element={
           <ProtectedRoute allowedRoles={['MANAGER']}>
             <ManagerTasksPage />
@@ -182,40 +315,75 @@ function App() {
         }
       />
       <Route
-        path="/manager/team"
+        path="/engineer/team"
         element={
           <ProtectedRoute allowedRoles={['MANAGER']}>
             <ManagerTeamPage />
           </ProtectedRoute>
         }
       />
-
       <Route
-        path="/stock-admin"
+        path="/engineer/inventory"
         element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN']}>
-            <StockAdminDashboard />
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <StockOverview currentPage="inventory" />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/stock-admin/inventory"
+        path="/engineer/material-requests"
         element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN', 'MANAGER']}>
-            <InventoryPage />
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <MaterialRequestPage currentPage="material-requests" />
           </ProtectedRoute>
         }
       />
       <Route
-        path="/stock-admin/issue-return"
+        path="/engineer/inventory/returns"
         element={
-          <ProtectedRoute allowedRoles={['STOCK_ADMIN']}>
-            <IssueReturnPage />
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <ProjectReturn currentPage="returns" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/engineer/inventory/dispatches"
+        element={
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <StoreDispatchPage currentPage="inv-dispatches" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/engineer/inventory/ledger"
+        element={
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <InventoryAudit currentPage="inv-ledger" />
           </ProtectedRoute>
         }
       />
 
+      {/* Store Manager Routes */}
+      <Route path="/store" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreDashboard /></ProtectedRoute>} />
+      <Route path="/store/requests" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><AdminMRRouting /></ProtectedRoute>} />
+      <Route path="/store/inward" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><PurchaseInward /></ProtectedRoute>} />
+      <Route path="/store/dispatches" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreDispatchPage currentPage="store-dispatches" /></ProtectedRoute>} />
+      <Route path="/store/transfers" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockTransfer /></ProtectedRoute>} />
+      <Route path="/store/stock" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockOverview currentPage="store-stock" /></ProtectedRoute>} />
+      <Route path="/store/uploads" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockUploadsPage /></ProtectedRoute>} />
+      <Route path="/store/approvals" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><AdjustmentReview /></ProtectedRoute>} />
+      <Route path="/store/ledger" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-reports" /></ProtectedRoute>} />
+      <Route path="/store/locations" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockLocationsPage /></ProtectedRoute>} />
+      <Route path="/store/reports" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-reports" /></ProtectedRoute>} />
 
+      {/* Purchase Manager Routes */}
+      <Route path="/purchase" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchaseDashboard /></ProtectedRoute>} />
+      <Route path="/purchase/requests" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchasePlanning /></ProtectedRoute>} />
+      <Route path="/purchase/orders" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchaseOrdersPage /></ProtectedRoute>} />
+      <Route path="/purchase/approvals" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><POApprovalsPage /></ProtectedRoute>} />
+      <Route path="/purchase/vendors" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><VendorManagement /></ProtectedRoute>} />
+      <Route path="/purchase/items" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><MasterDataManagement /></ProtectedRoute>} />
+      <Route path="/purchase/stock" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><StockOverview currentPage="purchase-stock" /></ProtectedRoute>} />
 
       <Route path="/" element={<RoleRedirect />} />
 
@@ -235,7 +403,12 @@ function RoleRedirect() {
     clearAuth();
     return <Navigate to="/login" replace />;
   }
-  const path = ROLE_ROUTE_MAP[user.role] || '/login';
+  const path = ROLE_ROUTE_MAP[user.role];
+  if (!path) {
+    console.error('No route defined for role:', user.role);
+    clearAuth();
+    return <Navigate to="/login" replace />;
+  }
   return <Navigate to={path} replace />;
 }
 

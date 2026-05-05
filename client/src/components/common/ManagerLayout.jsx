@@ -15,6 +15,10 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+    const [isInventoryOpen, setIsInventoryOpen] = useState(
+        currentPage.startsWith('inv-') || 
+        ['inventory', 'material-requests', 'returns', 'inv-dispatches', 'inv-ledger'].includes(currentPage)
+    );
 
     const handleLogout = () => {
         clearAuth();
@@ -56,50 +60,129 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     };
 
     const navItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/manager' },
-        { id: 'projects', label: 'Projects', icon: 'folder', path: '/manager/projects' },
-        { id: 'team', label: 'Team', icon: 'group', path: '/manager/team' },
-        { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/stock-admin/inventory' },
+        { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/engineer' },
+        { id: 'projects', label: 'Projects', icon: 'folder', path: '/engineer/projects' },
+        { id: 'team', label: 'Team', icon: 'group', path: '/engineer/team' },
+    ];
+
+    const inventoryMenu = [
+        {
+            name: "OVERVIEW & STOCK",
+            items: [
+                { id: 'inventory', label: 'Current Stock', icon: 'warehouse', path: '/engineer/inventory' },
+            ]
+        },
+        {
+            name: "PROJECT OPERATIONS",
+            items: [
+                { id: 'material-requests', label: 'Material Requests', icon: 'shopping_cart', path: '/engineer/material-requests' },
+                { id: 'returns', label: 'Project Returns', icon: 'keyboard_return', path: '/engineer/inventory/returns' },
+            ]
+        },
+        {
+            name: "LOGISTICS & HISTORY",
+            items: [
+                { id: 'inv-dispatches', label: 'My Dispatches', icon: 'local_shipping', path: '/engineer/inventory/dispatches' },
+                { id: 'inv-ledger', label: 'Stock Ledger', icon: 'menu_book', path: '/engineer/inventory/ledger' },
+            ]
+        }
     ];
 
     return (
         <div className="flex h-screen w-full overflow-hidden">
             {/* Sidebar */}
             <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
-                <div className="flex flex-col gap-6 p-4">
-                    <div className="flex gap-3 px-2 mt-2">
-                        <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                            <span className="text-white font-bold text-lg">IP</span>
-                        </div>
-                        <div className="flex flex-col justify-center">
-                            <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
-                            <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
+                <div className="flex flex-col h-full">
+                    {/* Brand */}
+                    <div className="p-6">
+                        <div className="flex gap-3 px-2">
+                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                                <span className="text-white font-bold text-lg">IP</span>
+                            </div>
+                            <div className="flex flex-col justify-center">
+                                <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                                <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
+                            </div>
                         </div>
                     </div>
-                    <nav className="flex flex-col gap-2">
-                        {navItems.map((item) => (
-                            <a
-                                key={item.id}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${currentPage === item.id
-                                    ? 'bg-emerald-500/10 text-white border-l-4 border-emerald-500 shadow-sm'
-                                    : 'text-text-secondary hover:bg-surface-dark hover:text-white'
-                                    }`}
-                                href={item.path}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    navigate(item.path);
-                                }}
-                            >
-                                <span
-                                    className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'
+
+                    {/* Navigation */}
+                    <nav className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-6">
+                        {/* Main Apps */}
+                        <div className="space-y-1">
+                            <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Portal Apps</h2>
+                            {navItems.map((item) => (
+                                <a
+                                    key={item.id}
+                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
+                                        ? 'bg-emerald-500/10 text-white shadow-sm'
+                                        : 'text-text-secondary hover:bg-surface-dark hover:text-white'
                                         }`}
-                                    style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                                    href={item.path}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        navigate(item.path);
+                                    }}
                                 >
-                                    {item.icon}
+                                    {currentPage === item.id && <div className="absolute left-0 top-2 bottom-2 w-1 bg-emerald-500 rounded-r-full"></div>}
+                                    <span
+                                        className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'
+                                            }`}
+                                        style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                                    >
+                                        {item.icon}
+                                    </span>
+                                    <span className="text-sm font-medium">{item.label}</span>
+                                </a>
+                            ))}
+                        </div>
+
+                        {/* Inventory Section (Accordion) */}
+                        <div className="space-y-1">
+                            <button
+                                onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>inventory_2</span>
+                                    <span className="text-sm font-medium">Inventory System</span>
+                                </div>
+                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 ${isInventoryOpen ? 'rotate-180' : ''}`}>
+                                    expand_more
                                 </span>
-                                <span className="text-sm font-medium">{item.label}</span>
-                            </a>
-                        ))}
+                            </button>
+
+                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isInventoryOpen ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                                <div className="space-y-6 pl-3 border-l border-border-dark/50 ml-4 py-2">
+                                    {inventoryMenu.map((group) => (
+                                        <div key={group.name} className="space-y-1">
+                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-40">{group.name}</h3>
+                                            {group.items.map((subItem) => (
+                                                <a
+                                                    key={subItem.id}
+                                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
+                                                        ? 'text-emerald-400 font-bold'
+                                                        : 'text-text-secondary hover:text-white'
+                                                        }`}
+                                                    href={subItem.path}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        navigate(subItem.path);
+                                                    }}
+                                                >
+                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>
+                                                        {subItem.icon}
+                                                    </span>
+                                                    <span className="text-[13px]">{subItem.label}</span>
+                                                    {currentPage === subItem.id && <div className="absolute right-2 size-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"></div>}
+                                                </a>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </nav>
                 </div>
             </aside>
@@ -130,31 +213,83 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                             <span className="material-symbols-outlined">close</span>
                         </button>
                     </div>
-                    <nav className="flex flex-col gap-2">
-                        {navItems.map((item) => (
-                            <a
-                                key={item.id}
-                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${currentPage === item.id
-                                    ? 'bg-emerald-500/10 text-white border-l-4 border-emerald-500 shadow-sm'
-                                    : 'text-text-secondary hover:bg-surface-dark hover:text-white'
-                                    }`}
-                                href={item.path}
-                                onClick={(e) => {
-                                    e.preventDefault();
-                                    navigate(item.path);
-                                    setShowMobileSidebar(false);
-                                }}
-                            >
-                                <span
-                                    className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'
+                    <nav className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-6 space-y-6">
+                        {/* Main Apps */}
+                        <div className="space-y-1">
+                            <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Portal Apps</h2>
+                            {navItems.map((item) => (
+                                <a
+                                    key={item.id}
+                                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
+                                        ? 'bg-emerald-500/10 text-white shadow-sm'
+                                        : 'text-text-secondary hover:bg-surface-dark hover:text-white'
                                         }`}
-                                    style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                                    href={item.path}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        navigate(item.path);
+                                        setShowMobileSidebar(false);
+                                    }}
                                 >
-                                    {item.icon}
+                                    {currentPage === item.id && <div className="absolute left-0 top-2 bottom-2 w-1 bg-emerald-500 rounded-r-full"></div>}
+                                    <span
+                                        className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'
+                                            }`}
+                                        style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
+                                    >
+                                        {item.icon}
+                                    </span>
+                                    <span className="text-sm font-medium">{item.label}</span>
+                                </a>
+                            ))}
+                        </div>
+
+                        {/* Inventory Section (Accordion) */}
+                        <div className="space-y-1">
+                            <button
+                                onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
+                                    }`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>inventory_2</span>
+                                    <span className="text-sm font-medium">Inventory System</span>
+                                </div>
+                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 ${isInventoryOpen ? 'rotate-180' : ''}`}>
+                                    expand_more
                                 </span>
-                                <span className="text-sm font-medium">{item.label}</span>
-                            </a>
-                        ))}
+                            </button>
+
+                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isInventoryOpen ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
+                                <div className="space-y-6 pl-3 border-l border-border-dark/50 ml-4 py-2">
+                                    {inventoryMenu.map((group) => (
+                                        <div key={group.name} className="space-y-1">
+                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-40">{group.name}</h3>
+                                            {group.items.map((subItem) => (
+                                                <a
+                                                    key={subItem.id}
+                                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
+                                                        ? 'text-emerald-400 font-bold'
+                                                        : 'text-text-secondary hover:text-white'
+                                                        }`}
+                                                    href={subItem.path}
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        navigate(subItem.path);
+                                                        setShowMobileSidebar(false);
+                                                    }}
+                                                >
+                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>
+                                                        {subItem.icon}
+                                                    </span>
+                                                    <span className="text-[13px]">{subItem.label}</span>
+                                                </a>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
                     </nav>
                 </div>
             </aside>

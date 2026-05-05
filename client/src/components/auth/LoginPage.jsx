@@ -5,7 +5,11 @@ import { getCurrentUser, getToken, isTokenExpired, saveAuth } from '../../servic
 
 const ROLE_ROUTE_MAP = {
   SUPER_USER: '/super',
-  EMPLOYEE: '/employee',
+  SUPER_ADMIN: '/super',
+  ENGINEER: '/engineer',
+  MANAGER: '/engineer',
+  JUNIOR_ENGINEER: '/junior-engineer',
+  EMPLOYEE: '/junior-engineer',
   INTERN: '/intern',
 };
 
@@ -17,8 +21,8 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   useEffect(() => {
+
     const token = getToken();
     const user = getCurrentUser();
     if (token && user && !isTokenExpired(token)) {
@@ -148,12 +152,13 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-base tracking-wide shadow-[0_4px_14px_0_rgba(19,91,236,0.39)] transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-base tracking-wide shadow-[0_4px_14px_0_rgba(19,91,236,0.39)] transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-4"
                 >
                   <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
                 </button>
               </form>
+
 
               <div className="mt-8 pt-6 border-t border-[#324467]/50 flex items-center justify-between text-xs text-[#92a4c9]">
 

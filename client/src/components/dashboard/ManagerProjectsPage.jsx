@@ -1695,7 +1695,7 @@ export default function ManagerProjectsPage() {
                                                                 )}
                                                             </div>
                                                             <span className={`px-2 py-1 text-[10px] font-bold rounded uppercase ml-2 ${task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                                                    'bg-slate-700 text-slate-400'
+                                                                'bg-slate-700 text-slate-400'
                                                                 }`}>
                                                                 {task.status === 'NOT_STARTED' ? 'NOT STARTED' : task.status.replace('_', ' ')}
                                                             </span>
@@ -1777,6 +1777,6 @@ export default function ManagerProjectsPage() {
                 </div>
             )}
 
-        </ManagerLayout >
+        </ManagerLayout>
     );
 }

@@ -789,6 +789,6 @@ export default function EmployeeDashboard() {
           />
         )
       }
-    </EmployeeLayout >
+    </EmployeeLayout>
   );
 }

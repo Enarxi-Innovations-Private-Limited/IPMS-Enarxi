@@ -56,10 +56,10 @@ export default function EmployeeLayout({ children, currentPage = 'dashboard' }) 
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/employee' },
-    { id: 'projects', label: 'My Projects', icon: 'folder', path: '/employee/projects' },
-    { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/employee/inventory' },
-    { id: 'my-items', label: 'My Issued Items', icon: 'assignment_turned_in', path: '/employee/my-items' },
+    { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/junior-engineer' },
+    { id: 'projects', label: 'My Projects', icon: 'folder', path: '/junior-engineer/projects' },
+    { id: 'tasks', label: 'My Tasks', icon: 'task_alt', path: '/junior-engineer/tasks' },
+    { id: 'dispatches', label: 'Stock Dispatches', icon: 'local_shipping', path: '/junior-engineer/dispatches' },
   ];
 
   return (
@@ -73,7 +73,7 @@ export default function EmployeeLayout({ children, currentPage = 'dashboard' }) 
             </div>
             <div className="flex flex-col justify-center">
               <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
-              <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
+              <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Junior Engineer Portal</p>
             </div>
           </div>
           <nav className="flex flex-col gap-2">

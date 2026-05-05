@@ -21,10 +21,10 @@ export default function ManagerDashboard() {
     const [showTaskModal, setShowTaskModal] = useState(false);
 
     const getCurrentPage = () => {
-        if (location.pathname === '/manager' || location.pathname === '/manager/') return 'dashboard';
-        if (location.pathname === '/manager/projects') return 'projects';
-        if (location.pathname === '/manager/tasks') return 'tasks';
-        if (location.pathname === '/manager/team') return 'team';
+        if (location.pathname === '/engineer' || location.pathname === '/engineer/') return 'dashboard';
+        if (location.pathname === '/engineer/projects') return 'projects';
+        if (location.pathname === '/engineer/tasks') return 'tasks';
+        if (location.pathname === '/engineer/team') return 'team';
         return 'dashboard';
     };
 
@@ -98,7 +98,7 @@ export default function ManagerDashboard() {
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => navigate('/manager/projects')}
+                                onClick={() => navigate('/engineer/projects')}
                                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-lg shadow-emerald-900/50 hover:shadow-emerald-900/70 hover:scale-[1.02] transition-all"
                             >
                                 <span className="material-symbols-outlined text-lg">folder</span>
@@ -124,7 +124,7 @@ export default function ManagerDashboard() {
                             {/* Stats Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                                 <div
-                                    onClick={() => navigate('/manager/projects')}
+                                    onClick={() => navigate('/engineer/projects')}
                                     className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-emerald-500/50 hover:bg-surface-dark/80 transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -135,7 +135,7 @@ export default function ManagerDashboard() {
                                     <p className="text-text-secondary text-sm mt-1">{activeProjects} active</p>
                                 </div>
                                 <div
-                                    onClick={() => navigate('/manager/tasks')}
+                                    onClick={() => navigate('/engineer/tasks')}
                                     className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 hover:bg-surface-dark/80 transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -146,7 +146,7 @@ export default function ManagerDashboard() {
                                     <p className="text-text-secondary text-sm mt-1">{completedTasks} completed</p>
                                 </div>
                                 <div
-                                    onClick={() => navigate('/manager/team')}
+                                    onClick={() => navigate('/engineer/team')}
                                     className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-purple-500/50 hover:bg-surface-dark/80 transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
@@ -183,7 +183,7 @@ export default function ManagerDashboard() {
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => navigate('/manager/tasks', { state: { filter: 'DELAYED' } })}
+                                        onClick={() => navigate('/engineer/tasks', { state: { filter: 'DELAYED' } })}
                                         className="px-4 py-2 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition-colors text-sm"
                                     >
                                         Review Now
@@ -199,7 +199,7 @@ export default function ManagerDashboard() {
                                         Recent Projects
                                     </h2>
                                     <button
-                                        onClick={() => navigate('/manager/projects')}
+                                        onClick={() => navigate('/engineer/projects')}
                                         className="text-emerald-400 hover:text-emerald-300 text-sm font-medium"
                                     >
                                         View All →
@@ -229,7 +229,7 @@ export default function ManagerDashboard() {
                                                 const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
                                                 const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
                                                 return (
-                                                    <tr key={p.id} className="hover:bg-background-dark/30 transition-colors cursor-pointer" onClick={() => navigate(`/manager/projects?projectId=${p.id}`)}>
+                                                    <tr key={p.id} className="hover:bg-background-dark/30 transition-colors cursor-pointer" onClick={() => navigate(`/engineer/projects?projectId=${p.id}`)}>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <div className="text-white font-medium">{p.name}</div>
                                                             <div className="text-text-secondary text-sm mt-1">{p.description || 'No description'}</div>
@@ -365,7 +365,7 @@ export default function ManagerDashboard() {
                                     </table>
                                 </div>
                                 {/* View More Footer */}
-                                <div className="p-3 border-t border-border-dark bg-surface-dark hover:bg-background-dark/30 transition-colors flex justify-center cursor-pointer" onClick={() => navigate('/manager/tasks')}>
+                                <div className="p-3 border-t border-border-dark bg-surface-dark hover:bg-background-dark/30 transition-colors flex justify-center cursor-pointer" onClick={() => navigate('/engineer/tasks')}>
                                     <button className="text-emerald-400 text-sm font-medium flex items-center gap-1">
                                         View More Tasks
                                         <span className="material-symbols-outlined text-base">expand_more</span>

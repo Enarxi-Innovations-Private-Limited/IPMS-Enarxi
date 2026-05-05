@@ -560,7 +560,7 @@ export default function EmployeeProjectsPage() {
                         </div>
                     </div>
                 </div>
-            </EmployeeLayout >
+            </EmployeeLayout>
         );
     }
 

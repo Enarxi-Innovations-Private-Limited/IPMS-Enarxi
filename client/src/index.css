@@ -23,3 +23,36 @@ body {
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #2d313d; border-radius: 10px; }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f4455; }
+
+/* Print optimization for Inventory Documents */
+@media print {
+  .no-print, aside, header, .bottom-nav, button {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .bg-surface-dark, .bg-background-dark {
+    background: white !important;
+    border-color: #ddd !important;
+  }
+  .text-white, .text-text-secondary {
+    color: black !important;
+  }
+  .max-w-7xl, .max-w-4xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+  }
+}
+

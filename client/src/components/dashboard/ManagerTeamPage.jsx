@@ -112,13 +112,19 @@ export default function ManagerTeamPage() {
     });
 
     // Stats
-    const totalEmployees = teamMembers.filter(m => m.role === 'EMPLOYEE').length;
+    const totalEmployees = teamMembers.filter(m => ['MANAGER', 'EMPLOYEE'].includes(m.role)).length;
     const totalInterns = teamMembers.filter(m => m.role === 'INTERN').length;
 
     const getRoleBadgeColor = (role) => {
         switch (role) {
+            case 'ENGINEER':
+            case 'MANAGER': return 'bg-emerald-500/20 text-emerald-400';
+            case 'JUNIOR_ENGINEER':
             case 'EMPLOYEE': return 'bg-blue-500/20 text-blue-400';
             case 'INTERN': return 'bg-purple-500/20 text-purple-400';
+            case 'STORE_MANAGER':
+            case 'STOCK_ADMIN': return 'bg-amber-500/20 text-amber-400';
+            case 'PURCHASE_MANAGER': return 'bg-violet-500/20 text-violet-400';
             default: return 'bg-gray-500/20 text-gray-400';
         }
     };
@@ -132,7 +138,7 @@ export default function ManagerTeamPage() {
                         <ol className="inline-flex items-center space-x-2">
                             <li>
                                 <button
-                                    onClick={() => navigate('/manager')}
+                                    onClick={() => navigate('/engineer')}
                                     className="text-text-secondary hover:text-white text-sm font-medium transition-colors"
                                 >
                                     Dashboard

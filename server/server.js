@@ -1,7 +1,7 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const pathModule = require('path');
-require('dotenv').config({ path: pathModule.resolve(__dirname, '../.env') });
+require('dotenv').config({ path: pathModule.resolve(__dirname, '../.env'), override: true });
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -12,8 +12,7 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const connectDB = require('./db');
-const { User, Project, Task, Activity, Product, IssuedItem, Notification } = require('./models');
-const scraperService = require('./services/scraperService');
+const { User, Project, Task, Activity, Notification } = require('./models');
 
 const app = express();
 // CORS Configuration - Allow Production & Development
@@ -59,7 +58,75 @@ app.get('/api/test', (req, res) => {
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
-const roles = { SUPER_USER: 'SUPER_USER', MANAGER: 'MANAGER', EMPLOYEE: 'EMPLOYEE', INTERN: 'INTERN', STOCK_ADMIN: 'STOCK_ADMIN' };
+const INVENTORY_API_URL = process.env.INVENTORY_API_URL || 'http://localhost:3000';
+
+// ============================================================
+// INVENTORY PROXY — forwards /api/inventory/* to Inventory Tracker
+// ============================================================
+const proxyToInventory = async (req, res) => {
+    const startTime = Date.now();
+    const url = `${INVENTORY_API_URL}${req.originalUrl}`;
+    const userLabel = req.user ? `[${req.user.role}] ${req.user.name}` : '[unauthenticated]';
+
+    console.log(`\n🔀 [Proxy] ${req.method} ${req.originalUrl}`);
+    console.log(`   👤 User   : ${userLabel}`);
+    console.log(`   🌐 Target : ${url}`);
+    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+        console.log(`   📦 Body   :`, JSON.stringify(req.body).substring(0, 200));
+    }
+
+    try {
+        const response = await fetch(url, {
+            method: req.method,
+            headers: {
+                'content-type': 'application/json',
+                'x-user-id': req.user?._id?.toString() || '',
+                'x-user-role': req.user?.role || '',
+            },
+            body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
+        });
+
+        const elapsed = Date.now() - startTime;
+        const contentType = response.headers.get('content-type');
+
+        if (contentType && contentType.includes('application/json')) {
+            const data = await response.json();
+            const isSuccess = response.status >= 200 && response.status < 300;
+            if (isSuccess) {
+                const count = Array.isArray(data) ? `(${data.length} records)` : '';
+                console.log(`   ✅ Status : ${response.status} ${count} in ${elapsed}ms`);
+            } else {
+                console.error(`   ❌ Status : ${response.status} in ${elapsed}ms`);
+                console.error(`   ❌ Error  :`, JSON.stringify(data).substring(0, 300));
+            }
+            res.status(response.status).json(data);
+        } else {
+            const text = await response.text();
+            console.error(`   ❌ Status : ${response.status} (non-JSON) in ${elapsed}ms`);
+            console.error(`   ❌ Body   :`, text.substring(0, 400));
+            res.status(response.status).json({ message: 'Inventory service error', details: text.substring(0, 200) });
+        }
+    } catch (err) {
+        const elapsed = Date.now() - startTime;
+        console.error(`   💥 CRASH  : ${err.message} after ${elapsed}ms`);
+        console.error(`   💥 Stack  :`, err.stack);
+        res.status(500).json({ message: 'Inventory service unavailable', error: err.message });
+    }
+};
+
+
+const roles = {
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    SUPER_USER: 'SUPER_USER',
+    MANAGER: 'MANAGER',
+    EMPLOYEE: 'EMPLOYEE',
+    INTERN: 'INTERN',
+    STORE_MANAGER: 'STORE_MANAGER',
+    PURCHASE_MANAGER: 'PURCHASE_MANAGER',
+    ENGINEER: 'ENGINEER', // Legacy
+    JUNIOR_ENGINEER: 'JUNIOR_ENGINEER', // Legacy
+    STOCK_ADMIN: 'STOCK_ADMIN' // Legacy
+};
 
 // Helper to validate ObjectId
 const isValidObjectId = (id) => {
@@ -277,31 +344,52 @@ const projectAttachmentUpload = multer({
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// General request logger
+app.use((req, res, next) => {
+    if (!req.path.startsWith('/api/inventory')) {
+        console.log(`📨 [${req.method}] ${req.path}`);
+    }
+    next();
+});
+
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        console.warn(`🚫 [Auth] No token — ${req.method} ${req.path}`);
         return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
         const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET);
         const user = await User.findById(decoded.id);
-        if (!user) return res.status(401).json({ message: 'User not found' });
+        if (!user) {
+            console.warn(`🚫 [Auth] User not found for token — ${req.method} ${req.path}`);
+            return res.status(401).json({ message: 'User not found' });
+        }
         req.user = user;
+        req.user.role = (user.role || '').toUpperCase().replace(/\s+/g, '_'); // normalize case and spaces
         next();
     } catch (err) {
-        console.error('Auth error:', err.message);
+        console.error(`🚫 [Auth] Invalid token — ${err.message} — ${req.method} ${req.path}`);
         return res.status(401).json({ message: 'Invalid token' });
     }
 };
 
 const requireRole = (...allowedRoles) => (req, res, next) => {
-    if (!allowedRoles.includes(req.user.role)) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const allowed = allowedRoles.map(r => r.toUpperCase());
+    if (!allowed.includes(userRole)) {
+        console.warn(`🚫 [Role] ${req.user.role} (normalized: ${userRole}) not in [${allowedRoles.join(',')}] — ${req.path}`);
         return res.status(403).json({ message: 'Forbidden' });
     }
+    // Normalize the role on the user object for downstream use
+    req.user.role = userRole;
     next();
 };
+
+// ✅ INVENTORY PROXY — uses app.use() to avoid path-to-regexp issues with wildcards
+app.use('/api/inventory', authMiddleware, proxyToInventory);
 
 // Helper to log activity
 const logActivity = async (type, message, userId, userName, targetId, targetName) => {
@@ -359,6 +447,9 @@ app.put('/api/auth/change-password', authMiddleware, async (req, res) => {
     res.json({ message: 'Password changed successfully' });
 });
 
+
+
+
 // ============ NOTIFICATION ROUTES ============
 app.get('/api/notifications', authMiddleware, async (req, res) => {
     try {
@@ -400,12 +491,12 @@ app.put('/api/notifications/read-all', authMiddleware, async (req, res) => {
 });
 
 // ============ USER ROUTES ============
-app.get('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER, roles.EMPLOYEE, roles.STOCK_ADMIN), async (req, res) => {
+app.get('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.MANAGER, roles.EMPLOYEE), async (req, res) => {
     let query = {};
 
-    if (req.user.role === roles.SUPER_USER) {
-        // SuperUsers see all non-super users (managers, employees, interns, stock admins)
-        query.role = { $in: ['MANAGER', 'EMPLOYEE', 'INTERN', 'STOCK_ADMIN'] };
+    if (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) {
+        // Super Admins see all non-super users
+        query.role = { $in: ['MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER'] };
     } else if (req.user.role === roles.MANAGER && req.user.department) {
         // Managers see only employees and interns from their department
         query.role = { $in: ['EMPLOYEE', 'INTERN'] };
@@ -416,6 +507,7 @@ app.get('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGE
     }
 
     const users = await User.find(query).select('-passwordHash');
+    console.log(`🔍 [API Users]: Found ${users.length} users. Departments:`, users.map(u => `${u.name}: ${u.department || 'null'}`).join(', '));
     res.json(users.map(u => ({
         id: u._id,
         name: u.name,
@@ -426,7 +518,7 @@ app.get('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGE
     })));
 });
 
-app.get('/api/users/:userId/details', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/users/:userId/details', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
 
@@ -452,7 +544,7 @@ app.get('/api/users/:userId/details', authMiddleware, requireRole(roles.SUPER_US
 });
 
 // Get next employee ID (for display in create form)
-app.get('/api/users/next-id', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/users/next-id', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const lastUser = await User.findOne({ employeeId: { $regex: /^EMP-\d+$/ } })
             .sort({ employeeId: -1 })
@@ -474,7 +566,7 @@ app.get('/api/users/next-id', authMiddleware, requireRole(roles.SUPER_USER), asy
 });
 
 // Get User Performance Statistics
-app.get('/api/users/:userId/performance', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.get('/api/users/:userId/performance', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER, roles.MANAGER), async (req, res) => {
     try {
         const { userId } = req.params;
         if (!isValidObjectId(userId)) {
@@ -485,7 +577,7 @@ app.get('/api/users/:userId/performance', authMiddleware, requireRole(roles.SUPE
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         // Managers can only view performance of users in their department
-        if (req.user.role === roles.MANAGER && user.department !== req.user.department) {
+        if ((req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) && user.department !== req.user.department) {
             return res.status(403).json({ message: 'Cannot view performance of users outside your department' });
         }
 
@@ -569,12 +661,17 @@ app.get('/api/users/:userId/performance', authMiddleware, requireRole(roles.SUPE
     }
 });
 
-app.post('/api/users', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.post('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { name, email, role, department, password, employeeId: manualId } = req.body;
 
         if (!name || !email || !role || !password) {
             return res.status(400).json({ message: 'Name, email, role, and password are required' });
+        }
+
+        // 🔒 SECURITY RESTRICTION: Prevent creation of Super Admins
+        if (role === 'SUPER_ADMIN' || role === 'SUPER_USER') {
+            return res.status(403).json({ message: 'Security Alert: Creation of Super Admin roles is strictly prohibited.' });
         }
 
         let employeeId = manualId;
@@ -621,11 +718,10 @@ app.post('/api/users', authMiddleware, requireRole(roles.SUPER_USER), async (req
     }
 });
 
-app.put('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.put('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role === roles.SUPER_USER) return res.status(403).json({ message: 'Cannot edit super user' });
-    if (user.role === roles.STOCK_ADMIN) return res.status(403).json({ message: 'Cannot edit stock admin user' });
+    if (user.role === roles.SUPER_USER || user.role === roles.SUPER_ADMIN) return res.status(403).json({ message: 'Cannot edit super user' });
 
     const { name, email, role, department, password } = req.body;
     if (email && email !== user.email) {
@@ -634,7 +730,21 @@ app.put('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER), asy
         user.email = email;
     }
     if (name) user.name = name;
-    if (role && ['MANAGER', 'EMPLOYEE', 'INTERN'].includes(role)) user.role = role;
+    
+    if (role) {
+        // 🔒 SECURITY RESTRICTION: Prevent promoting to Super Admin
+        if (role === 'SUPER_ADMIN' || role === 'SUPER_USER') {
+            return res.status(403).json({ message: 'Security Alert: Promotion to Super Admin role is strictly prohibited.' });
+        }
+        
+        const allowedRoles = ['MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER'];
+        if (allowedRoles.includes(role)) {
+            user.role = role;
+        } else {
+            return res.status(400).json({ message: 'Invalid role specified' });
+        }
+    }
+
     if (department !== undefined) user.department = department;
     if (password) user.passwordHash = bcrypt.hashSync(password, 10);
     await user.save();
@@ -642,11 +752,10 @@ app.put('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER), asy
     res.json({ id: user._id, name: user.name, email: user.email, employeeId: user.employeeId, role: user.role, department: user.department });
 });
 
-app.delete('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.delete('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
     if (user.role === roles.SUPER_USER) return res.status(403).json({ message: 'Cannot delete super user' });
-    if (user.role === roles.STOCK_ADMIN) return res.status(403).json({ message: 'Cannot delete stock admin user' });
 
     await logActivity('USER_DELETED', `User ${user.name} (${user.employeeId}) was removed`, req.user._id, req.user.name, user._id, user.name);
     await Project.updateMany({ teamIds: user._id }, { $pull: { teamIds: user._id } });
@@ -674,9 +783,9 @@ app.get('/api/task-templates/:department', authMiddleware, async (req, res) => {
 
 app.get('/api/projects', authMiddleware, async (req, res) => {
     let query = {};
-    if (req.user.role === roles.SUPER_USER || req.user.role === roles.STOCK_ADMIN) {
+    if (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) {
         // Super users and Stock Admins see all projects
-    } else if (req.user.role === roles.MANAGER) {
+    } else if (req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) {
         // Managers see projects they manage OR are assigned to
         query.$or = [
             { managerId: req.user._id },
@@ -689,7 +798,7 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
     const projects = await Project.find(query)
         .populate('managerId', 'name')
         .populate('teamIds', 'name employeeId');
-    const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
+    const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
 
     const projectsWithStats = await Promise.all(projects.map(async (p) => {
         const taskCount = await Task.countDocuments({ projectId: p._id });
@@ -789,7 +898,7 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
     const project = await Project.findById(req.params.projectId).populate('managerId', 'name');
     if (!project) return res.status(404).json({ message: 'Project not found' });
 
-    const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
+    const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
 
     res.json({
         id: project._id,
@@ -893,7 +1002,7 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
     }
 });
 
-app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
     try {
         const { projectId } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -961,7 +1070,7 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
 });
 
 // Upload attachments to a project
-app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER, roles.EMPLOYEE, roles.INTERN), projectAttachmentUpload.array('attachments', 10), async (req, res) => {
+app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER, roles.JUNIOR_ENGINEER, roles.INTERN), projectAttachmentUpload.array('attachments', 10), async (req, res) => {
     try {
         const { projectId } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1011,7 +1120,7 @@ app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(rol
 });
 
 // Delete an attachment from a project (moves to backup instead of permanent delete)
-app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
     try {
         const { projectId, filename } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1403,7 +1512,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
 
         if (status) {
             console.log(`Updating project ${projectId} status to ${status} by ${req.user.name}`);
-            if (req.user.role === roles.MANAGER && status === 'COMPLETED') {
+            if (req.user.role === roles.ENGINEER && status === 'COMPLETED') {
                 project.status = 'WAITING_APPROVAL';
                 // Notify Super Users
                 const superUsers = await User.find({ role: roles.SUPER_USER });
@@ -1471,7 +1580,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
     let query = {};
     if (req.user.role === roles.SUPER_USER) {
         // Super users see all tasks
-    } else if (req.user.role === roles.MANAGER && req.user.department) {
+    } else if (req.user.role === roles.ENGINEER && req.user.department) {
         // Managers see tasks from projects in their department
         const deptProjects = await Project.find({ department: req.user.department }).select('_id');
         const projectIds = deptProjects.map(p => p._id);
@@ -1481,7 +1590,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
         query.assigneeId = req.user._id;
     }
     const tasks = await Task.find(query).populate('projectId', 'name projectCode');
-    const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
+    const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
 
     res.json(tasks.map(t => ({
         id: t._id,
@@ -1524,8 +1633,8 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
         }
 
         // Check permissions
-        const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
-        const isManager = req.user.role === roles.MANAGER;
+        const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
+        const isManager = req.user.role === roles.ENGINEER;
         const isSuperUser = req.user.role === roles.SUPER_USER;
 
         // Employees/Interns can only view their own tasks
@@ -1699,7 +1808,7 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 });
 
 // Delete Task
-app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
     console.log(`Received DELETE request for task: ${req.params.taskId}`);
     try {
         const { taskId } = req.params;
@@ -1717,7 +1826,7 @@ app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, r
         // Optionally check ownership/project management here if strictly required,
         // but requireRole(MANAGER) covers the basic 'Manager can delete' requirement.
         // For stricter control:
-        if (req.user.role === roles.MANAGER && task.projectId) {
+        if (req.user.role === roles.ENGINEER && task.projectId) {
             const project = await Project.findById(task.projectId);
             // If manager is not the manager of this project
             if (project && project.managerId && project.managerId.toString() !== req.user._id.toString()) {
@@ -1771,8 +1880,8 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         }
 
         if (status) {
-            const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
-            const isManager = req.user.role === roles.MANAGER;
+            const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
+            const isManager = req.user.role === roles.ENGINEER;
             const isSuperUser = req.user.role === roles.SUPER_USER;
 
             // Manager or Super User can directly update any status (no approval needed for them)
@@ -2561,7 +2670,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, requireRole(roles.SUP
 });
 
 // ============ ACTIVITY ROUTES ============
-app.get('/api/activity-logs', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/activity-logs', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const activities = await Activity.find().sort({ timestamp: -1 }).limit(50);
         res.json(activities.map(a => ({
@@ -2599,691 +2708,33 @@ app.get('/api/activities', authMiddleware, async (req, res) => {
     }
 });
 
-// ============ STOCK MANAGEMENT ROUTES ============
-
-// -------- Product Routes --------
-// Get all products with filters
-app.get('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN, roles.MANAGER, roles.SUPER_USER, roles.EMPLOYEE, roles.INTERN), async (req, res) => {
-    try {
-        const { category, status, search, lowStock } = req.query;
-        let query = {};
-
-        if (category && category !== 'ALL') {
-            query.category = category;
-        }
-
-        if (search) {
-            query.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { partNumber: { $regex: search, $options: 'i' } },
-                { description: { $regex: search, $options: 'i' } }
-            ];
-        }
-
-        if (lowStock === 'true') {
-            query.$expr = { $lte: ['$quantity', '$minQuantity'] };
-        }
-
-        const products = await Product.find(query).sort({ createdAt: -1 });
-
-        res.json(products.map(p => ({
-            id: p._id,
-            partNumber: p.partNumber,
-            name: p.name,
-            category: p.category,
-            description: p.description,
-            specifications: p.specifications,
-            quantity: p.quantity,
-            minQuantity: p.minQuantity,
-            maxQuantity: p.maxQuantity,
-            reorderPoint: p.reorderPoint,
-            unitPrice: p.unitPrice,
-            totalValue: p.totalValue,
-            stockStatus: p.stockStatus,
-            supplier: null,
-            location: p.location,
-            lastRestocked: p.lastRestocked,
-            createdAt: p.createdAt,
-            updatedAt: p.updatedAt,
-        })));
-    } catch (err) {
-        console.error('❌ [Load Products]: Error:', err);
-        res.status(500).json({ message: 'Failed to load products', error: err.message });
-    }
-});
-
-// Get product statistics
-app.get('/api/stock/products/stats', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const totalItems = await Product.countDocuments();
-        const products = await Product.find();
-
-        let totalValue = 0;
-        let lowStock = 0;
-        let outOfStock = 0;
-
-        products.forEach(p => {
-            totalValue += p.totalValue;
-            if (p.quantity === 0) outOfStock++;
-            else if (p.quantity <= p.minQuantity) lowStock++;
-        });
-
-        const issuedItems = await IssuedItem.countDocuments({ status: 'ISSUED' });
-
-        res.json({
-            totalItems,
-            totalValue: Math.round(totalValue),
-            lowStock,
-            outOfStock,
-            issuedItems,
-        });
-    } catch (err) {
-        console.error('❌ [Load Stats]: Error:', err);
-        res.status(500).json({ message: 'Failed to load statistics', error: err.message });
-    }
-});
-
-// Create product
-app.post('/api/stock/products', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const { partNumber, name, category, brand, footprint, description, specifications, quantity, unitPrice, supplier } = req.body;
-
-        if (!partNumber || !name || !category) {
-            return res.status(400).json({ message: 'Part number, name, and category are required' });
-        }
-
-        const existing = await Product.findOne({ partNumber: partNumber.toUpperCase() });
-        if (existing) {
-            return res.status(400).json({ message: 'Part number already exists' });
-        }
-
-        const product = await Product.create({
-            partNumber: partNumber.toUpperCase(),
-            name,
-            category,
-            brand: brand || '',
-            footprint: footprint || '',
-            description: description || '',
-            specifications: specifications || {},
-            quantity: quantity || 0,
-            unitPrice: unitPrice || 0,
-            supplier: supplier || null,
-            createdBy: req.user._id,
-        });
-
-        await logActivity('PRODUCT_CREATED', `Product ${name} (${partNumber}) was added to inventory`, req.user._id, req.user.name, product._id, name);
-
-        res.status(201).json({
-            id: product._id,
-            partNumber: product.partNumber,
-            name: product.name,
-            message: 'Product created successfully',
-        });
-    } catch (err) {
-        console.error('❌ [Create Product]: Error:', err);
-        res.status(500).json({ message: 'Failed to create product', error: err.message });
-    }
-});
-
-// Update product
-app.put('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        if (!isValidObjectId(req.params.id)) {
-            return res.status(400).json({ message: 'Invalid product ID' });
-        }
-
-        const product = await Product.findById(req.params.id);
-        if (!product) {
-            return res.status(404).json({ message: 'Product not found' });
-        }
-
-        const { name, category, brand, footprint, description, specifications, quantity, unitPrice, supplier } = req.body;
-
-        if (name) product.name = name;
-        if (category) product.category = category;
-        if (brand !== undefined) product.brand = brand;
-        if (footprint !== undefined) product.footprint = footprint;
-        if (description !== undefined) product.description = description;
-        if (specifications !== undefined) product.specifications = specifications;
-        if (quantity !== undefined) {
-            product.quantity = quantity;
-            product.lastRestocked = new Date();
-        }
-        if (unitPrice !== undefined) product.unitPrice = unitPrice;
-        if (supplier !== undefined) product.supplier = supplier;
-
-        await product.save();
-        res.json({ message: 'Product updated successfully', id: product._id });
-    } catch (err) {
-        console.error('❌ [Update Product]: Error:', err);
-        res.status(500).json({ message: 'Failed to update product', error: err.message });
-    }
-});
-
-// Delete product
-app.delete('/api/stock/products/:id', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        if (!isValidObjectId(req.params.id)) {
-            return res.status(400).json({ message: 'Invalid product ID' });
-        }
-
-        const product = await Product.findById(req.params.id);
-        if (!product) {
-            return res.status(404).json({ message: 'Product not found' });
-        }
-
-        // Check if product is issued
-        const issuedCount = await IssuedItem.countDocuments({ product: product._id, status: 'ISSUED' });
-        if (issuedCount > 0) {
-            return res.status(400).json({ message: 'Cannot delete product with issued items' });
-        }
-
-        await Product.deleteOne({ _id: product._id });
-        res.json({ message: 'Product deleted successfully' });
-    } catch (err) {
-        console.error('❌ [Delete Product]: Error:', err);
-        res.status(500).json({ message: 'Failed to delete product', error: err.message });
-    }
-});
-
-// Issue products to project
-app.post('/api/stock/issue', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-        const { projectId, items, issuedTo } = req.body;
-
-        if (!projectId || !items || !Array.isArray(items) || items.length === 0 || !issuedTo) {
-            return res.status(400).json({ message: 'Project, items, and issuedTo (Team Member) are required' });
-        }
-
-        const project = await Project.findById(projectId);
-        if (!project) {
-            return res.status(404).json({ message: 'Project not found' });
-        }
-
-        const issuedItems = [];
-
-        for (const item of items) {
-            const { productId, quantity } = item;
-            const qty = parseInt(quantity);
-            if (!productId || !qty || qty <= 0) continue;
-
-            const product = await Product.findById(productId).session(session);
-            if (!product) {
-                throw new Error(`Product not found: ${productId}`);
-            }
-
-            if (product.quantity < qty) {
-                throw new Error(`Insufficient stock for product: ${product.name}. Available: ${product.quantity}, Requested: ${qty}`);
-            }
-
-            product.quantity -= qty;
-            await product.save({ session });
-
-            const issuedItem = await IssuedItem.create([{
-                project: projectId,
-                product: productId,
-                quantity: qty,
-                issuedTo: issuedTo,
-                issuedBy: req.user._id,
-                status: 'ISSUED'
-            }], { session });
-
-            issuedItems.push(issuedItem[0]);
-        }
-
-        await session.commitTransaction();
-        session.endSession();
-
-        await logActivity('STOCK_ISSUED', `Issued ${issuedItems.length} items to project ${project.projectCode}`, req.user._id, req.user.name, project._id, project.name);
-
-        res.status(201).json({ message: 'Items issued successfully', count: issuedItems.length });
-    } catch (err) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('❌ [Issue Stock]: Error:', err);
-        res.status(400).json({ message: err.message });
-    }
-});
-
-// Get issued items for a project
-app.get('/api/stock/issue/project/:projectId', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const items = await IssuedItem.find({ project: req.params.projectId })
-            .populate('product', 'name partNumber brand footprint unitPrice')
-            .populate('issuedBy', 'name')
-            .sort({ issuedAt: -1 });
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch issued items', error: err.message });
-    }
-});
-
-// Mark item as CONSUMED (Employee)
-app.post('/api/stock/issued/:id/consume', authMiddleware, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const issuedItem = await IssuedItem.findById(id);
-
-        if (!issuedItem) {
-            return res.status(404).json({ message: 'Item not found' });
-        }
-
-        if (issuedItem.issuedTo.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: 'Not authorized to modify this item' });
-        }
-
-        if (issuedItem.status !== 'ISSUED') {
-            return res.status(400).json({ message: 'Item is not in ISSUED state' });
-        }
-
-        issuedItem.status = 'CONSUMED';
-        await issuedItem.save();
-
-        await logActivity('STOCK_CONSUMED', `Consumed ${issuedItem.quantity} items of product ${issuedItem.product}`, req.user._id, req.user.name, issuedItem.project, 'Project');
-
-        res.json({ message: 'Item marked as consumed' });
-    } catch (err) {
-        console.error('❌ [Consume Item]: Error:', err);
-        res.status(500).json({ message: 'Failed to mark item as consumed', error: err.message });
-    }
-});
-
-// Request Return (Employee)
-app.post('/api/stock/issued/:id/request-return', authMiddleware, async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { condition, remarks } = req.body;
-
-        const issuedItem = await IssuedItem.findById(id);
-
-        if (!issuedItem) {
-            return res.status(404).json({ message: 'Item not found' });
-        }
-
-        if (issuedItem.issuedTo.toString() !== req.user._id.toString()) {
-            return res.status(403).json({ message: 'Not authorized to modify this item' });
-        }
-
-        if (issuedItem.status !== 'ISSUED') {
-            return res.status(400).json({ message: 'Item is not in ISSUED state' });
-        }
-
-        issuedItem.status = 'RETURN_REQUESTED';
-        issuedItem.returnCondition = condition || 'GOOD';
-        issuedItem.remarks = remarks || '';
-        await issuedItem.save();
-
-        await logActivity('RETURN_REQUESTED', `Requested return for ${issuedItem.quantity} items`, req.user._id, req.user.name, issuedItem.project, 'Project');
-
-        res.json({ message: 'Return requested successfully' });
-    } catch (err) {
-        console.error('❌ [Request Return]: Error:', err);
-        res.status(500).json({ message: 'Failed to request return', error: err.message });
-    }
-});
-
-// Get ALL issued items
-app.get('/api/stock/issued', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const items = await IssuedItem.find()
-            .populate('project', 'name projectCode')
-            .populate('product', 'name partNumber brand category')
-            .populate('issuedBy', 'name')
-            .populate('issuedTo', 'name')
-            .sort({ issuedAt: -1 });
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch issued items', error: err.message });
-    }
-});
-
-// Get My Issued Items (Employee/Intern)
-app.get('/api/stock/issued/my-items', authMiddleware, async (req, res) => {
-    try {
-        const items = await IssuedItem.find({
-            issuedTo: req.user._id,
-            status: { $in: ['ISSUED', 'RETURN_REQUESTED'] }
-        })
-            .populate('project', 'name projectCode')
-            .populate('product', 'name partNumber brand category image')
-            .populate('issuedBy', 'name')
-            .sort({ issuedAt: -1 });
-        res.json(items);
-    } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch your items', error: err.message });
-    }
-});
-
-// Return an issued item
-app.post('/api/stock/return/:id', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-    try {
-        const { id } = req.params;
-        const { condition = 'GOOD', remarks = '' } = req.body; // Default good
-
-        const issuedItem = await IssuedItem.findById(id).session(session);
-        if (!issuedItem) {
-            throw new Error('Issued item not found');
-        }
-
-        if (issuedItem.status === 'RETURNED' || issuedItem.status === 'CONSUMED') {
-            throw new Error('Item already returned or consumed');
-        }
-
-        issuedItem.status = 'RETURNED';
-        issuedItem.returnedAt = new Date();
-        issuedItem.returnCondition = condition;
-        issuedItem.remarks = remarks;
-        await issuedItem.save({ session });
-
-        // Restore stock ONLY if condition is GOOD
-        const product = await Product.findById(issuedItem.product).session(session);
-        if (product && condition === 'GOOD') {
-            product.quantity += issuedItem.quantity;
-            product.lastRestocked = new Date(); // Treat return as restock? Or separate field? keeping it simple
-            await product.save({ session });
-        }
-
-        await session.commitTransaction();
-        session.endSession();
-
-        await logActivity('STOCK_RETURNED', `Returned ${issuedItem.quantity} items of product ${product?.name} (${condition})`, req.user._id, req.user.name, issuedItem.project, 'Project');
-
-        res.json({ message: 'Item returned successfully' });
-    } catch (err) {
-        await session.abortTransaction();
-        session.endSession();
-        console.error('❌ [Return Item]: Error:', err);
-        res.status(400).json({ message: err.message });
-    }
-});
-
-
-
-
-
-
-// -------- Excel Import Routes --------
-// Upload and import Excel file
-app.post('/api/stock/import/excel', authMiddleware, requireRole(roles.STOCK_ADMIN), upload.single('file'), async (req, res) => {
-    try {
-        if (!req.file) {
-            return res.status(400).json({ message: 'No file uploaded' });
-        }
-
-        const workbook = xlsx.readFile(req.file.path);
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const data = xlsx.utils.sheet_to_json(worksheet);
-
-        if (data.length === 0) {
-            fs.unlinkSync(req.file.path); // Clean up uploaded file
-            return res.status(400).json({ message: 'Excel file is empty' });
-        }
-
-        const results = {
-            success: 0,
-            failed: 0,
-            errors: [],
-        };
-
-        for (let i = 0; i < data.length; i++) {
-            const row = data[i];
-            try {
-                // Map Excel columns to database fields
-                const partNumber = row['Part Number'] || row['PartNumber'] || row['partNumber'];
-                const name = row['Name'] || row['name'];
-                const category = row['Category'] || row['category'];
-                const quantity = parseInt(row['Quantity'] || row['quantity'] || 0);
-                const unitPrice = parseFloat(row['Unit Price'] || row['UnitPrice'] || row['unitPrice'] || 0);
-                const minQuantity = parseInt(row['Min Quantity'] || row['MinQuantity'] || row['minQuantity'] || 10);
-                const description = row['Description'] || row['description'] || '';
-                const specifications = row['Specifications'] || row['specifications'] || '';
-
-                if (!partNumber || !name || !category) {
-                    results.errors.push({ row: i + 2, error: 'Missing required fields (Part Number, Name, Category)' });
-                    results.failed++;
-                    continue;
-                }
-
-                // Check if product already exists
-                const existing = await Product.findOne({ partNumber: partNumber.toString().toUpperCase() });
-                if (existing) {
-                    results.errors.push({ row: i + 2, error: `Part number ${partNumber} already exists` });
-                    results.failed++;
-                    continue;
-                }
-
-                // Parse specifications if it's a string
-                let specsMap = {};
-                if (specifications && typeof specifications === 'string') {
-                    specifications.split(',').forEach(spec => {
-                        const [key, value] = spec.split(':').map(s => s.trim());
-                        if (key && value) {
-                            specsMap[key] = value;
-                        }
-                    });
-                }
-
-                await Product.create({
-                    partNumber: partNumber.toString().toUpperCase(),
-                    name,
-                    category: category.toUpperCase().replace(/\s+/g, '_'),
-                    description,
-                    specifications: specsMap,
-                    quantity,
-                    minQuantity,
-                    unitPrice,
-                    createdBy: req.user._id,
-                });
-
-                results.success++;
-            } catch (err) {
-                results.errors.push({ row: i + 2, error: err.message });
-                results.failed++;
-            }
-        }
-
-        // Clean up uploaded file
-        fs.unlinkSync(req.file.path);
-
-        await logActivity('EXCEL_IMPORT', `Imported ${results.success} products from Excel`, req.user._id, req.user.name, null, null);
-
-        res.json({
-            message: `Import completed: ${results.success} products imported, ${results.failed} failed`,
-            results,
-        });
-    } catch (err) {
-        console.error('❌ [Import Excel]: Error:', err);
-        if (req.file && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
-        res.status(500).json({ message: 'Failed to import Excel file', error: err.message });
-    }
-});
-
-// Download Excel template
-app.get('/api/stock/import/template', authMiddleware, requireRole(roles.STOCK_ADMIN), (req, res) => {
-    try {
-        const templateData = [
-            {
-                'Part Number': 'RES-001',
-                'Name': '100 Ohm Resistor',
-                'Category': 'RESISTOR',
-                'Description': '1/4W Carbon Film Resistor',
-                'Specifications': 'Resistance:100R, Tolerance:5%, Power:0.25W',
-                'Quantity': 100,
-                'Min Quantity': 20,
-                'Unit Price': 0.50,
-            },
-            {
-                'Part Number': 'CAP-001',
-                'Name': '100uF Capacitor',
-                'Category': 'CAPACITOR',
-                'Description': 'Electrolytic Capacitor',
-                'Specifications': 'Capacitance:100uF, Voltage:16V, Type:Electrolytic',
-                'Quantity': 50,
-                'Min Quantity': 10,
-                'Unit Price': 2.00,
-            },
-        ];
-
-        const worksheet = xlsx.utils.json_to_sheet(templateData);
-        const workbook = xlsx.utils.book_new();
-        xlsx.utils.book_append_sheet(workbook, worksheet, 'Products');
-
-        const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-
-        res.setHeader('Content-Disposition', 'attachment; filename=stock_import_template.xlsx');
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.send(buffer);
-    } catch (err) {
-        console.error('❌ [Generate Template]: Error:', err);
-        res.status(500).json({ message: 'Failed to generate template', error: err.message });
-    }
-});
-
-// -------- AI Recommendations Routes --------
-// Get AI purchase recommendations
-app.post('/api/stock/ai/recommendations', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const recommendations = [];
-
-        // Get all products
-        const products = await Product.find();
-
-        for (const product of products) {
-            let reason = '';
-            let priority = 0;
-            let suggestedQuantity = 0;
-
-            // Rule 1: Out of stock (highest priority)
-            if (product.quantity === 0) {
-                reason = 'Out of stock - immediate action required';
-                priority = 10;
-                suggestedQuantity = product.reorderPoint * 2;
-            }
-            // Rule 2: Below minimum quantity
-            else if (product.quantity <= product.minQuantity) {
-                reason = 'Stock below minimum threshold';
-                priority = 8;
-                suggestedQuantity = product.reorderPoint - product.quantity;
-            }
-            // Rule 3: At or below reorder point
-            else if (product.quantity <= product.reorderPoint) {
-                reason = 'Approaching reorder point';
-                priority = 6;
-                suggestedQuantity = product.reorderPoint;
-            }
-
-            if (priority > 0) {
-                const estimatedCost = suggestedQuantity * product.unitPrice;
-
-                recommendations.push({
-                    product: {
-                        id: product._id,
-                        partNumber: product.partNumber,
-                        name: product.name,
-                        category: product.category,
-                        currentStock: product.quantity,
-                        minQuantity: product.minQuantity,
-                        reorderPoint: product.reorderPoint,
-                    },
-                    reason,
-                    priority,
-                    suggestedQuantity,
-                    estimatedCost,
-                    supplier: null,
-                });
-            }
-        }
-
-        // Sort by priority (highest first)
-        recommendations.sort((a, b) => b.priority - a.priority);
-
-        res.json({
-            totalRecommendations: recommendations.length,
-            recommendations: recommendations.slice(0, 20), // Return top 20
-            totalEstimatedCost: recommendations.reduce((sum, r) => sum + r.estimatedCost, 0),
-        });
-    } catch (err) {
-        console.error('❌ [Generate Recommendations]: Error:', err);
-        res.status(500).json({ message: 'Failed to generate recommendations', error: err.message });
-    }
-});
-
-// Get AI insights
-app.get('/api/stock/ai/insights', authMiddleware, requireRole(roles.STOCK_ADMIN), async (req, res) => {
-    try {
-        const products = await Product.find();
-        const issuedItems = await IssuedItem.find({ status: 'ISSUED' });
-
-        // Calculate insights
-        const totalValue = products.reduce((sum, p) => sum + p.totalValue, 0);
-        const avgStockLevel = products.reduce((sum, p) => sum + p.quantity, 0) / products.length;
-
-        // Most issued products (last 30 days)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-        const recentIssues = await IssuedItem.find({
-            issueDate: { $gte: thirtyDaysAgo },
-        });
-
-        const issueCounts = {};
-        recentIssues.forEach(item => {
-            const key = item.productName;
-            issueCounts[key] = (issueCounts[key] || 0) + item.quantity;
-        });
-
-        const topIssued = Object.entries(issueCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name, count]) => ({ productName: name, issuedQuantity: count }));
-
-        // Categories distribution
-        const categoryCounts = {};
-        products.forEach(p => {
-            categoryCounts[p.category] = (categoryCounts[p.category] || 0) + 1;
-        });
-
-        res.json({
-            summary: {
-                totalProducts: products.length,
-                totalValue: Math.round(totalValue),
-                avgStockLevel: Math.round(avgStockLevel),
-                totalIssued: issuedItems.length,
-            },
-            topIssued,
-            categoryDistribution: categoryCounts,
-            insights: [
-                {
-                    type: 'warning',
-                    message: `${products.filter(p => p.quantity <= p.minQuantity).length} products below minimum stock`,
-                },
-                {
-                    type: 'info',
-                    message: `${issuedItems.length} items currently issued to employees`,
-                },
-            ],
-        });
-    } catch (err) {
-        console.error('❌ [Generate Insights]: Error:', err);
-        res.status(500).json({ message: 'Failed to generate insights', error: err.message });
-    }
-});
-
-
-
 // ============ START SERVER ============
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
     try {
         await connectDB();
+
+        // ── Role Normalization Migration ─────────────────────────────
+        // Normalize all stored roles to uppercase so queries work correctly
+        // regardless of how they were originally saved (e.g. 'Manager' → 'MANAGER')
+        try {
+            const allUsers = await User.find({});
+            const needsUpdate = allUsers.filter(u => u.role && u.role !== u.role.toUpperCase());
+            if (needsUpdate.length > 0) {
+                await Promise.all(needsUpdate.map(u =>
+                    User.updateOne({ _id: u._id }, { $set: { role: u.role.toUpperCase() } })
+                ));
+                console.log(`✅ [Migration] Normalized ${needsUpdate.length} user role(s) to uppercase`);
+                needsUpdate.forEach(u => console.log(`   • ${u.name}: "${u.role}" → "${u.role.toUpperCase()}"`));
+            } else {
+                console.log('✅ [Migration] All user roles already uppercase — no changes needed');
+            }
+        } catch (migErr) {
+            console.error('⚠️  [Migration] Role normalization failed (non-fatal):', migErr.message);
+        }
+        // ─────────────────────────────────────────────────────────────
+
         app.listen(PORT, () => {
             console.log(`\n🚀 Server running on http://localhost:${PORT}`);
         });

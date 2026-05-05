@@ -12,6 +12,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState(currentPage.startsWith('inv-') || currentPage.startsWith('inventory'));
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
@@ -60,15 +61,57 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/super' },
     { id: 'projects', label: 'Projects', icon: 'folder', path: '/super/projects' },
     { id: 'teams', label: 'Team Members', icon: 'group', path: '/super/teams' },
-    { id: 'inventory', label: 'Inventory', icon: 'inventory_2', path: '/super/inventory' },
     { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
+  ];
+
+  const inventoryMenu = [
+    {
+      name: "OVERVIEW",
+      items: [
+        { id: 'inv-dashboard', label: 'Dashboard', icon: 'dashboard', path: '/super/inventory/dashboard' }
+      ]
+    },
+    {
+      name: "ADMIN SETUP",
+      items: [
+        { id: 'inv-classifications', label: 'Classifications', icon: 'category', path: '/super/inventory/classifications' },
+        { id: 'inv-vendors', label: 'Vendors', icon: 'store', path: '/super/inventory/vendors' },
+        { id: 'inv-item-master', label: 'Item Master', icon: 'inventory', path: '/super/inventory/master-data' },
+        { id: 'inv-locations', label: 'Stock Locations', icon: 'location_on', path: '/super/inventory/locations' },
+        { id: 'inv-proj-requests', label: 'Project Requests', icon: 'assignment', path: '/super/material-requests' },
+      ]
+    },
+    {
+      name: "STORE",
+      items: [
+        { id: 'inv-store-reqs', label: 'Store Requests', icon: 'shopping_cart', path: '/super/inventory/routing' },
+        { id: 'inv-inward', label: 'Store Inward', icon: 'input', path: '/super/inventory/inward' },
+        { id: 'inv-uploads', label: 'Stock Uploads', icon: 'upload', path: '/super/inventory/uploads' },
+        { id: 'inv-approvals', label: 'Stock Approvals', icon: 'check_circle', path: '/super/inventory/adjustments' },
+      ]
+    },
+    {
+      name: "PURCHASE",
+      items: [
+        { id: 'inv-purch-reqs', label: 'Purchase Requests', icon: 'request_quote', path: '/super/inventory/purchase-planning' },
+        { id: 'inv-purch-orders', label: 'Purchase Orders', icon: 'receipt', path: '/super/inventory/purchase-orders' },
+        { id: 'inv-po-approvals', label: 'PO Approvals', icon: 'fact_check', path: '/super/inventory/po-approvals' },
+      ]
+    },
+    {
+      name: "STOCK REPORTS",
+      items: [
+        { id: 'inv-current-stock', label: 'Current Stock', icon: 'warehouse', path: '/super/inventory' },
+        { id: 'inv-ledger', label: 'Stock Ledger', icon: 'menu_book', path: '/super/inventory/audit' },
+      ]
+    }
   ];
 
   return (
     <div className="flex h-screen w-full overflow-hidden">
       {/* Sidebar */}
       <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex flex-col gap-6 p-4 h-full overflow-hidden">
           <div className="flex gap-3 px-2 mt-2">
             <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-primary flex items-center justify-center">
               <span className="text-white font-bold text-lg">IP</span>
@@ -78,7 +121,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
               <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
             </div>
           </div>
-          <nav className="flex flex-col gap-2">
+          <nav className="flex-1 flex flex-col gap-2 overflow-y-auto pb-6 custom-scrollbar pr-2">
             {navItems.map((item) => (
               <a
                 key={item.id}
@@ -102,6 +145,60 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                 <span className="text-sm font-medium">{item.label}</span>
               </a>
             ))}
+
+            {/* Inventory Accordion Menu */}
+            <div className="flex flex-col mt-2">
+              <button
+                onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
+                  currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
+                    ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
+                    : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`material-symbols-outlined transition-colors ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory') ? 'text-primary' : 'group-hover:text-primary'}`}>
+                    inventory_2
+                  </span>
+                  <span className="text-sm font-medium">Inventory</span>
+                </div>
+                <span className={`material-symbols-outlined transition-transform duration-200 ${isInventoryExpanded ? 'rotate-180 text-white' : ''}`}>
+                  expand_more
+                </span>
+              </button>
+              
+              {isInventoryExpanded && (
+                <div className="flex flex-col gap-4 mt-2 ml-4 pl-4 border-l border-border-dark">
+                  {inventoryMenu.map((category, idx) => (
+                    <div key={idx} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold text-text-secondary/70 uppercase tracking-wider mb-1">
+                        {category.name}
+                      </span>
+                      {category.items.map(subItem => (
+                        <a
+                          key={subItem.id}
+                          href={subItem.path}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigate(subItem.path);
+                          }}
+                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${
+                            currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
+                              ? 'text-primary font-medium'
+                              : 'text-text-secondary hover:text-white'
+                          }`}
+                        >
+                          <span className={`material-symbols-outlined text-[18px] ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '') ? 'text-primary' : 'text-text-secondary/70 group-hover:text-white'}`}>
+                            {subItem.icon}
+                          </span>
+                          <span className="text-sm">{subItem.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
         </div>
       </aside>
@@ -114,7 +211,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
 
       {/* Mobile Sidebar */}
       <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
-        <div className="flex flex-col gap-6 p-4">
+        <div className="flex flex-col gap-6 p-4 h-full overflow-hidden">
           <div className="flex items-center justify-between px-2 mt-2">
             <div className="flex gap-3">
               <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-primary flex items-center justify-center">
@@ -132,7 +229,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
-          <nav className="flex flex-col gap-2">
+          <nav className="flex-1 flex flex-col gap-2 overflow-y-auto pb-6 custom-scrollbar pr-2">
             {navItems.map((item) => (
               <a
                 key={item.id}
@@ -157,6 +254,61 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                 <span className="text-sm font-medium">{item.label}</span>
               </a>
             ))}
+
+            {/* Inventory Accordion Menu (Mobile) */}
+            <div className="flex flex-col mt-2">
+              <button
+                onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
+                  currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
+                    ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
+                    : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span className={`material-symbols-outlined transition-colors ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory') ? 'text-primary' : 'group-hover:text-primary'}`}>
+                    inventory_2
+                  </span>
+                  <span className="text-sm font-medium">Inventory</span>
+                </div>
+                <span className={`material-symbols-outlined transition-transform duration-200 ${isInventoryExpanded ? 'rotate-180 text-white' : ''}`}>
+                  expand_more
+                </span>
+              </button>
+              
+              {isInventoryExpanded && (
+                <div className="flex flex-col gap-4 mt-2 ml-4 pl-4 border-l border-border-dark">
+                  {inventoryMenu.map((category, idx) => (
+                    <div key={idx} className="flex flex-col gap-1">
+                      <span className="text-[10px] font-bold text-text-secondary/70 uppercase tracking-wider mb-1">
+                        {category.name}
+                      </span>
+                      {category.items.map(subItem => (
+                        <a
+                          key={subItem.id}
+                          href={subItem.path}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigate(subItem.path);
+                            setShowMobileSidebar(false);
+                          }}
+                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${
+                            currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
+                              ? 'text-primary font-medium'
+                              : 'text-text-secondary hover:text-white'
+                          }`}
+                        >
+                          <span className={`material-symbols-outlined text-[18px] ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '') ? 'text-primary' : 'text-text-secondary/70 group-hover:text-white'}`}>
+                            {subItem.icon}
+                          </span>
+                          <span className="text-sm">{subItem.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </nav>
         </div>
       </aside>

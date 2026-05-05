@@ -9,7 +9,7 @@ export default defineConfig({
   envDir: path.resolve(__dirname, '..'),
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 5173,
     proxy: {
       '/api/uploads': {
         target: 'http://localhost:5000',

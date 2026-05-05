@@ -35,8 +35,16 @@ export default function SuperUserTeamsPage() {
 
     const getRoleBadgeColor = (role) => {
         switch (role) {
+            case 'SUPER_ADMIN':
+            case 'SUPER_USER': return 'bg-rose-500/20 text-rose-400';
+            case 'ENGINEER':
+            case 'MANAGER': return 'bg-emerald-500/20 text-emerald-400';
+            case 'JUNIOR_ENGINEER':
             case 'EMPLOYEE': return 'bg-blue-500/20 text-blue-400';
             case 'INTERN': return 'bg-purple-500/20 text-purple-400';
+            case 'STORE_MANAGER':
+            case 'STOCK_ADMIN': return 'bg-amber-500/20 text-amber-400';
+            case 'PURCHASE_MANAGER': return 'bg-violet-500/20 text-violet-400';
             default: return 'bg-gray-500/20 text-gray-400';
         }
     };
@@ -94,8 +102,10 @@ export default function SuperUserTeamsPage() {
         try {
             setLoading(true);
             const res = await api.get('/users');
+            console.log('🚀 LOADED TEAM MEMBERS FROM API:', res.data);
             setTeamMembers(res.data);
         } catch (err) {
+            console.error('Failed to load team members:', err);
             setError(err.response?.data?.message || 'Failed to load team members');
         } finally {
             setLoading(false);
@@ -212,9 +222,7 @@ export default function SuperUserTeamsPage() {
 
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [allTasks, setAllTasks] = useState([]);
-    const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SOFTWARE, HARDWARE
-
-    // ... existing ... 
+    const [statusFilter, setStatusFilter] = useState('ALL'); // ALL, SOFTWARE, HARDWARE, IT
 
     const handleOpenStatusModal = async () => {
         try {
@@ -275,18 +283,19 @@ export default function SuperUserTeamsPage() {
     // Filter team members
     const filteredMembers = teamMembers.filter((m) => {
         const matchesSearch = searchQuery === '' ||
-            m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            m.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            m.employeeId.toLowerCase().includes(searchQuery.toLowerCase());
+            m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            m.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            m.employeeId?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesDept = filterDepartment === 'ALL' || m.department === filterDepartment;
-        const matchesRole = filterRole === 'ALL' || m.role === filterRole;
+        const matchesRole = filterRole === 'ALL' || m.role?.toUpperCase() === filterRole.toUpperCase();
         return matchesSearch && matchesDept && matchesRole;
     });
 
     // Separate team members by department (managers included in their respective teams)
     const softwareTeam = filteredMembers.filter((m) => m.department === 'SOFTWARE');
     const hardwareTeam = filteredMembers.filter((m) => m.department === 'HARDWARE');
-    const unassignedTeam = filteredMembers.filter((m) => !m.department);
+    const itTeam = filteredMembers.filter((m) => m.department === 'IT');
+    const unassignedTeam = filteredMembers.filter((m) => !m.department || (m.department !== 'SOFTWARE' && m.department !== 'HARDWARE' && m.department !== 'IT'));
 
     const formatTimeAgo = (timestamp) => {
         if (!timestamp) return 'Unknown';
@@ -474,6 +483,7 @@ export default function SuperUserTeamsPage() {
                                 <option value="ALL">All Departments</option>
                                 <option value="SOFTWARE">Software</option>
                                 <option value="HARDWARE">Hardware</option>
+                                <option value="IT">IT & Infrastructure</option>
                             </select>
                             <select
                                 className="px-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
@@ -484,7 +494,8 @@ export default function SuperUserTeamsPage() {
                                 <option value="MANAGER">Manager</option>
                                 <option value="EMPLOYEE">Employee</option>
                                 <option value="INTERN">Intern</option>
-                                <option value="STOCK_ADMIN">Stock Admin</option>
+                                <option value="STORE_MANAGER">Stock Manager</option>
+                                <option value="PURCHASE_MANAGER">Purchase Manager</option>
                             </select>
                         </div>
                     </div>
@@ -507,7 +518,8 @@ export default function SuperUserTeamsPage() {
                                 <>
                                     {renderTeamSection('Software Team', softwareTeam, 'code', 'text-blue-400')}
                                     {renderTeamSection('Hardware Team', hardwareTeam, 'memory', 'text-amber-400')}
-                                    {unassignedTeam.length > 0 && renderTeamSection('Unassigned', unassignedTeam, 'help', 'text-gray-400')}
+                                    {renderTeamSection('IT Team', itTeam, 'terminal', 'text-emerald-400')}
+                                    {unassignedTeam.length > 0 && renderTeamSection('Unassigned / No Department', unassignedTeam, 'help_outline', 'text-gray-400')}
                                 </>
                             )}
                         </div>
@@ -593,6 +605,8 @@ export default function SuperUserTeamsPage() {
                                         <option value="MANAGER">Manager</option>
                                         <option value="EMPLOYEE">Employee</option>
                                         <option value="INTERN">Intern</option>
+                                        <option value="STORE_MANAGER">Stock Manager</option>
+                                        <option value="PURCHASE_MANAGER">Purchase Manager</option>
                                     </select>
                                 </div>
                                 <div>
@@ -600,6 +614,7 @@ export default function SuperUserTeamsPage() {
                                     <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.department} onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}>
                                         <option value="SOFTWARE">Software</option>
                                         <option value="HARDWARE">Hardware</option>
+                                        <option value="IT">IT & Infrastructure</option>
                                     </select>
                                 </div>
                             </div>
@@ -651,6 +666,8 @@ export default function SuperUserTeamsPage() {
                                         <option value="MANAGER">Manager</option>
                                         <option value="EMPLOYEE">Employee</option>
                                         <option value="INTERN">Intern</option>
+                                        <option value="STORE_MANAGER">Stock Manager</option>
+                                        <option value="PURCHASE_MANAGER">Purchase Manager</option>
                                     </select>
                                 </div>
                                 <div>
@@ -658,6 +675,7 @@ export default function SuperUserTeamsPage() {
                                     <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
                                         <option value="SOFTWARE">Software</option>
                                         <option value="HARDWARE">Hardware</option>
+                                        <option value="IT">IT & Infrastructure</option>
                                     </select>
                                 </div>
                             </div>
@@ -701,7 +719,7 @@ export default function SuperUserTeamsPage() {
                                             <h3 className="text-xl font-bold text-white">{userDetails.name}</h3>
                                             <p className="text-text-secondary">{userDetails.email}</p>
                                             <div className="flex gap-2 mt-1">
-                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${userDetails.role === 'EMPLOYEE' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{userDetails.role}</span>
+                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${['ENGINEER', 'MANAGER'].includes(userDetails.role) ? 'bg-emerald-500/20 text-emerald-400' : ['JUNIOR_ENGINEER', 'EMPLOYEE'].includes(userDetails.role) ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>{userDetails.role}</span>
                                                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${userDetails.department === 'SOFTWARE' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-amber-500/20 text-amber-400'}`}>{userDetails.department || 'Unassigned'}</span>
                                             </div>
                                         </div>
@@ -859,7 +877,7 @@ export default function SuperUserTeamsPage() {
                         {/* Status Filters - Segmented Control */}
                         <div className="px-6 py-4 border-b border-border-dark">
                             <div className="bg-background-dark p-1 rounded-xl flex">
-                                {['ALL', 'SOFTWARE', 'HARDWARE'].map(dept => (
+                                {['ALL', 'SOFTWARE', 'HARDWARE', 'IT'].map(dept => (
                                     <button
                                         key={dept}
                                         onClick={() => setStatusFilter(dept)}
@@ -868,7 +886,7 @@ export default function SuperUserTeamsPage() {
                                             : 'text-text-secondary hover:text-white hover:bg-surface-dark/50'
                                             }`}
                                     >
-                                        {dept === 'ALL' ? 'All' : dept === 'SOFTWARE' ? 'Software' : 'Hardware'}
+                                        {dept === 'ALL' ? 'All' : dept === 'SOFTWARE' ? 'Software' : dept === 'HARDWARE' ? 'Hardware' : 'IT'}
                                     </button>
                                 ))}
                             </div>

@@ -2,11 +2,15 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { getCurrentUser, getToken, isTokenExpired } from '../../services/authService.js';
 
 const ROLE_ROUTE_MAP = {
+  SUPER_ADMIN: '/super',
   SUPER_USER: '/super',
-  MANAGER: '/manager',
-  EMPLOYEE: '/employee',
+  MANAGER: '/engineer',
+  ENGINEER: '/engineer',
+  EMPLOYEE: '/junior-engineer',
+  JUNIOR_ENGINEER: '/junior-engineer',
   INTERN: '/intern',
-  STOCK_ADMIN: '/stock-admin',
+  STORE_MANAGER: '/store',
+  PURCHASE_MANAGER: '/purchase',
 };
 
 export default function ProtectedRoute({ children, allowedRoles }) {

@@ -106,7 +106,7 @@ export default function SuperUserProjectsPage() {
             const res = await api.get('/users');
             setUsers(res.data);
             // Filter managers for the manager dropdown
-            setManagers(res.data.filter(u => u.role === 'MANAGER'));
+            setManagers(res.data.filter(u => u.role?.toUpperCase() === 'MANAGER'));
         } catch (err) {
             console.error('Failed to load users:', err);
         }
