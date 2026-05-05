@@ -359,6 +359,98 @@ app.put('/api/auth/change-password', authMiddleware, async (req, res) => {
     res.json({ message: 'Password changed successfully' });
 });
 
+// ============ MICROSOFT AUTH ROUTES ============
+const MS_CLIENT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
+const MS_CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET;
+const MS_TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const MS_REDIRECT_URI = process.env.MS_REDIRECT_URI || 'http://localhost:5000/api/auth/microsoft/callback';
+
+app.get('/api/auth/microsoft', (req, res) => {
+    if (!MS_CLIENT_ID || !MS_TENANT_ID) {
+        return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent('Microsoft login is not configured on the server.')}`);
+    }
+    const authUrl = `https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MS_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(MS_REDIRECT_URI)}&response_mode=query&scope=User.Read&prompt=select_account`;
+    res.redirect(authUrl);
+});
+
+app.get('/api/auth/microsoft/callback', async (req, res) => {
+    const { code, error, error_description } = req.query;
+
+    if (error) {
+        console.error('Microsoft Auth Error:', error, error_description);
+        return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(error_description || 'Microsoft login failed')}`);
+    }
+
+    if (!code) {
+        return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent('No authorization code provided')}`);
+    }
+
+    try {
+        const tokenResponse = await fetch(`https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                client_id: MS_CLIENT_ID,
+                client_secret: MS_CLIENT_SECRET,
+                code,
+                redirect_uri: MS_REDIRECT_URI,
+                grant_type: 'authorization_code'
+            })
+        });
+
+        const tokenData = await tokenResponse.json();
+
+        if (!tokenResponse.ok) {
+            throw new Error(tokenData.error_description || 'Failed to exchange code for token');
+        }
+
+        const accessToken = tokenData.access_token;
+
+        const userResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        const userData = await userResponse.json();
+
+        if (!userResponse.ok) {
+            throw new Error(userData.error?.message || 'Failed to fetch user data');
+        }
+
+        const email = userData.mail || userData.userPrincipalName;
+
+        if (!email) {
+            throw new Error('No email address found in Microsoft account');
+        }
+
+        const user = await User.findOne({ email: { $regex: new RegExp('^' + email + '$', 'i') } });
+
+        if (!user) {
+            return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(`No IPMS account found for email: ${email}. Please contact your administrator.`)}`);
+        }
+
+        const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+
+        await logActivity('LOGIN_MICROSOFT', `${user.name} logged in via Microsoft`, user._id, user.name, null, null);
+
+        const userObj = {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            employeeId: user.employeeId,
+            role: user.role,
+            department: user.department
+        };
+
+        const redirectUrl = `${FRONTEND_URL}/login?token=${encodeURIComponent(token)}&user=${encodeURIComponent(JSON.stringify(userObj))}`;
+        res.redirect(redirectUrl);
+
+    } catch (err) {
+        console.error('Microsoft Callback Error:', err);
+        return res.redirect(`${FRONTEND_URL}/login?error=${encodeURIComponent(err.message || 'Authentication error')}`);
+    }
+});
+
 // ============ NOTIFICATION ROUTES ============
 app.get('/api/notifications', authMiddleware, async (req, res) => {
     try {

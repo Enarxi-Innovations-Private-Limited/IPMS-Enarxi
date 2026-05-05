@@ -19,6 +19,28 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // Check for Microsoft login callback params
+    const params = new URLSearchParams(window.location.search);
+    const tokenFromUrl = params.get('token');
+    const userParam = params.get('user');
+    const errorParam = params.get('error');
+
+    if (tokenFromUrl && userParam) {
+      try {
+        const userObj = JSON.parse(decodeURIComponent(userParam));
+        saveAuth(tokenFromUrl, userObj);
+        const path = ROLE_ROUTE_MAP[userObj.role] || '/';
+        navigate(path, { replace: true });
+        return; // Exit early to prevent duplicate redirects
+      } catch (err) {
+        setError('Failed to process Microsoft login.');
+      }
+    }
+
+    if (errorParam) {
+      setError(decodeURIComponent(errorParam));
+    }
+
     const token = getToken();
     const user = getCurrentUser();
     if (token && user && !isTokenExpired(token)) {
@@ -154,6 +176,24 @@ export default function LoginPage() {
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
                 </button>
               </form>
+
+              <div className="flex items-center gap-4 mt-2 mb-2">
+                <div className="h-px bg-[#324467] flex-1"></div>
+                <span className="text-xs font-semibold text-[#92a4c9] uppercase tracking-wider">or continue with</span>
+                <div className="h-px bg-[#324467] flex-1"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const baseUrl = api.defaults.baseURL.replace(/\/$/, '');
+                  window.location.href = `${baseUrl}/auth/microsoft`;
+                }}
+                className="w-full flex items-center justify-center gap-3 h-12 rounded-lg bg-white hover:bg-gray-100 text-[#192233] font-bold text-base tracking-wide transition-all transform active:scale-[0.98] border border-transparent hover:border-[#324467] mb-4"
+              >
+                <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" alt="Microsoft" className="w-5 h-5" />
+                <span>Sign in with Microsoft</span>
+              </button>
 
               <div className="mt-8 pt-6 border-t border-[#324467]/50 flex items-center justify-between text-xs text-[#92a4c9]">
 

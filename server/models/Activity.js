@@ -4,10 +4,12 @@ const activitySchema = new mongoose.Schema({
     type: {
         type: String,
         required: true,
-        enum: ['LOGIN', 'USER_CREATED', 'USER_UPDATED', 'USER_DELETED',
-            'PROJECT_CREATED', 'PROJECT_UPDATED', 'PROJECT_DELETED',
+        enum: ['LOGIN', 'LOGIN_MICROSOFT', 'LOGIN_GOOGLE', 'LOGIN_GITHUB',
+            'USER_CREATED', 'USER_UPDATED', 'USER_DELETED',
+            'PROJECT_CREATED', 'PROJECT_UPDATED', 'PROJECT_DELETED', 'PROJECT_STATUS_UPDATED',
             'TASK_CREATED', 'TASK_UPDATED', 'TASK_DELETED', 'TASK_TRANSFERRED',
-            'STOCK_ISSUED', 'STOCK_RETURNED'],
+            'PRODUCT_CREATED', 'EXCEL_IMPORT',
+            'STOCK_ISSUED', 'STOCK_CONSUMED', 'RETURN_REQUESTED', 'STOCK_RETURNED'],
     },
     message: {
         type: String,
