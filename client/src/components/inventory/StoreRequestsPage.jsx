@@ -62,7 +62,7 @@ export default function StoreRequestsPage() {
             await inventoryService.confirmStoreRequest({
                 batchId: getEntityId(selectedBatch),
                 lineIds,
-                confirmed: lineIds
+                confirmedIdsArray: lineIds
             });
             notifySuccess('Stock availability confirmed.');
             fetchRequests();
@@ -206,14 +206,14 @@ export default function StoreRequestsPage() {
                                         </div>
 
                                         <div className="space-y-4 pt-6 border-t border-border-dark">
-                                            {selectedBatch.status === 'PENDING' && (
+                                            {['PENDING', 'SHORTAGE_REPORTED'].includes(selectedBatch.status) && (
                                                 <button
                                                     onClick={handleConfirmAllAvailable}
                                                     disabled={processing}
                                                     className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-black uppercase tracking-[0.1em] py-4 rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2"
                                                 >
                                                     <span className="material-symbols-outlined font-bold">inventory</span>
-                                                    {processing ? 'Confirming...' : 'Confirm Available Stock'}
+                                                    {processing ? 'Confirming...' : selectedBatch.status === 'SHORTAGE_REPORTED' ? 'Reconfirm Available Stock' : 'Confirm Available Stock'}
                                                 </button>
                                             )}
                                             <div>

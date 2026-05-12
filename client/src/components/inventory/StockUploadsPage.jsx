@@ -141,7 +141,7 @@ export default function StockUploadsPage() {
 
         try {
             setLoading(true);
-            const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'STORE_MANAGER'].includes(user?.role);
+            const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'ADMIN'].includes(user?.role);
             
             await inventoryService.submitStockAdjustment({
                 batchType: 'RECONCILIATION',
@@ -154,7 +154,7 @@ export default function StockUploadsPage() {
                 }))
             });
 
-            notifySuccess(isAdmin ? 'Stock adjustment applied directly.' : 'Batch submitted for approval.');
+            notifySuccess(isAdmin ? 'Stock adjustment applied directly.' : 'Batch submitted for admin approval.');
             setFile(null);
             setPreviewData([]);
             // Refresh local stock data

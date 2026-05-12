@@ -110,7 +110,7 @@ const MaterialRequestSchema = new mongoose.Schema({
     engineerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     status: { 
         type: String, 
-        enum: ['DRAFT', 'SUBMITTED', 'ROUTED', 'CANCELLED'], 
+        enum: ['DRAFT', 'SUBMITTED', 'ROUTED', 'COMPLETED', 'CANCELLED'], 
         default: 'DRAFT' 
     },
     notes: String,

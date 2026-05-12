@@ -273,6 +273,45 @@ async function updateStoreBatchStatus(batch, session = null) {
     await batch.save({ session });
 }
 
+async function issueReservedStock(itemId, quantity, referenceId, userId, session = null) {
+    let remaining = quantity;
+    const balances = await StockBalance.find({ 
+        itemId, 
+        reservedQuantity: { $gt: 0 } 
+    }).sort({ reservedQuantity: -1, updatedAt: 1 }).session(session);
+
+    for (const balance of balances) {
+        if (remaining <= 0.0001) break;
+        
+        const onHand = Number(balance.quantityOnHand || 0);
+        const reserved = Number(balance.reservedQuantity || 0);
+        const issueHere = Math.min(reserved, onHand, remaining);
+
+        if (issueHere > 0) {
+            balance.quantityOnHand -= issueHere;
+            balance.reservedQuantity -= issueHere;
+            await balance.save({ session });
+
+            await StockMovement.create([{
+                itemId,
+                locationId: balance.locationId,
+                movementType: 'STOCK_DISPATCHED',
+                quantityChange: -issueHere,
+                referenceType: 'DispatchBatch',
+                referenceId: String(referenceId),
+                remarks: `Dispatched ${issueHere} NOS to engineer`,
+                createdById: userId
+            }], { session });
+
+            remaining -= issueHere;
+        }
+    }
+
+    if (remaining > 0.0001) {
+        throw new Error(`Insufficient reserved stock to dispatch ${quantity} NOS. Remaining shortage: ${remaining.toFixed(2)}`);
+    }
+}
+
 function normalizeId(value) {
     return value ? String(value) : '';
 }
@@ -284,6 +323,63 @@ async function getCurrentAvailableStock(itemId, session = null) {
         const reserved = Number(balance.reservedQuantity || 0);
         return total + Math.max(0, onHand - reserved);
     }, 0);
+}
+
+async function getCurrentReservedStock(itemId, session = null) {
+    const balances = await StockBalance.find({ itemId }).session(session);
+    return balances.reduce((total, balance) => total + Number(balance.reservedQuantity || 0), 0);
+}
+
+async function checkMRCompletion(mrId, session = null) {
+    try {
+        const mr = await MaterialRequest.findById(mrId).session(session);
+        if (!mr) return;
+
+        // Find all Store batches for this MR
+        const storeBatches = await StoreRequestBatch.find({ materialRequestId: mrId }).session(session);
+        const storeBatchIds = storeBatches.map(b => b._id);
+
+        // Find all Acknowledged dispatches for these store batches
+        const dispatches = await DispatchBatch.find({ 
+            storeRequestId: { $in: storeBatchIds },
+            status: 'ACKNOWLEDGED'
+        }).session(session);
+
+        // Map item requirements
+        const requirements = new Map();
+        mr.lines.forEach(line => {
+            const itemId = String(line.itemId);
+            requirements.set(itemId, (requirements.get(itemId) || 0) + line.requiredQuantity);
+        });
+
+        // Map acknowledged dispatches
+        const fulfilled = new Map();
+        dispatches.forEach(d => {
+            d.lines.forEach(line => {
+                const itemId = String(line.itemId);
+                fulfilled.set(itemId, (fulfilled.get(itemId) || 0) + line.dispatchedQuantity);
+            });
+        });
+
+        // Verify if all requirements are met
+        let allFulfilled = true;
+        for (const [itemId, required] of requirements.entries()) {
+            const received = fulfilled.get(itemId) || 0;
+            if (received < (required - 0.0001)) {
+                allFulfilled = false;
+                break;
+            }
+        }
+
+        if (allFulfilled && mr.status !== 'COMPLETED') {
+            mr.status = 'COMPLETED';
+            await mr.save({ session });
+            console.log(`✅ [MR Completion] Material Request ${mr.requestNumber} marked as COMPLETED.`);
+            await logInvActivity('INV_MR_COMPLETE', `Material Request ${mr.requestNumber} fully fulfilled and acknowledged`, null, 'System', mr._id, mr.requestNumber);
+        }
+    } catch (err) {
+        console.error('❌ [MR Completion Check Error]:', err);
+    }
 }
 
 async function buildPurchasePlanningRows() {
@@ -845,57 +941,6 @@ router.get('/stock/current', async (req, res) => {
     }
 });
 
-// --- Legacy Compatibility Aliases ---
-
-router.get('/dashboard-stats', async (req, res) => {
-    try {
-        const role = req.user.role;
-        const userId = req.user._id;
-
-        const [
-            pendingMRs,
-            shortageLines,
-            pendingStockApps,
-            pendingPOApps,
-            storeBatches,
-            purchaseBatches,
-            purchaseOrders,
-            dispatches,
-            recentMovements
-        ] = await Promise.all([
-            MaterialRequest.find({ status: 'SUBMITTED' }).populate('projectId engineerId').limit(10),
-            StoreRequestBatch.find({ "lines.status": 'SHORTAGE_REPORTED' }).populate('materialRequestId lines.itemId').limit(10),
-            StockAdjustmentBatch.find({ status: 'SUBMITTED' }).populate('uploadedById').limit(10),
-            PurchaseOrder.find({ status: 'PENDING_ADMIN_APPROVAL' }).populate('vendorId createdById').limit(10),
-            StoreRequestBatch.find({ status: { $in: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED'] } }).populate('materialRequestId routedById').limit(10),
-            PurchaseRequestBatch.find({ status: 'PENDING' }).populate('materialRequestId routedById').limit(10),
-            PurchaseOrder.find({ status: { $in: ['DRAFT', 'REJECTED', 'APPROVED', 'PLACED'] } }).populate('vendorId createdById').limit(10),
-            DispatchBatch.find({ status: 'DISPATCHED' }).populate('storeRequestId dispatchedById').limit(10),
-            StockMovement.find().populate('itemId locationId createdById').sort({ createdAt: -1 }).limit(10)
-        ]);
-
-        res.json({
-            pendingMRs,
-            shortageLines,
-            pendingStockApps,
-            pendingPOApps,
-            storeBatches,
-            purchaseBatches,
-            purchaseOrders,
-            dispatches,
-            recentMovements,
-            counts: {
-                mrs: pendingMRs.length,
-                stockApps: pendingStockApps.length,
-                poApps: pendingPOApps.length,
-                store: storeBatches.length,
-                purchase: purchaseBatches.length
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-});
 
 router.get('/inventory/ledger', async (req, res) => {
     try {
@@ -932,57 +977,6 @@ router.get('/inventory/low-stock', async (req, res) => {
     }
 });
 
-// --- Legacy Compatibility Aliases ---
-
-router.get('/dashboard-stats', async (req, res) => {
-    try {
-        const role = req.user.role;
-        const userId = req.user._id;
-
-        const [
-            pendingMRs,
-            shortageLines,
-            pendingStockApps,
-            pendingPOApps,
-            storeBatches,
-            purchaseBatches,
-            purchaseOrders,
-            dispatches,
-            recentMovements
-        ] = await Promise.all([
-            MaterialRequest.find({ status: 'SUBMITTED' }).populate('projectId engineerId').limit(10),
-            StoreRequestBatch.find({ "lines.status": 'SHORTAGE_REPORTED' }).populate('materialRequestId lines.itemId').limit(10),
-            StockAdjustmentBatch.find({ status: 'SUBMITTED' }).populate('uploadedById').limit(10),
-            PurchaseOrder.find({ status: 'PENDING_ADMIN_APPROVAL' }).populate('vendorId createdById').limit(10),
-            StoreRequestBatch.find({ status: { $in: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED'] } }).populate('materialRequestId routedById').limit(10),
-            PurchaseRequestBatch.find({ status: 'PENDING' }).populate('materialRequestId routedById').limit(10),
-            PurchaseOrder.find({ status: { $in: ['DRAFT', 'REJECTED', 'APPROVED', 'PLACED'] } }).populate('vendorId createdById').limit(10),
-            DispatchBatch.find({ status: 'DISPATCHED' }).populate('storeRequestId dispatchedById').limit(10),
-            StockMovement.find().populate('itemId locationId createdById').sort({ createdAt: -1 }).limit(10)
-        ]);
-
-        res.json({
-            pendingMRs,
-            shortageLines,
-            pendingStockApps,
-            pendingPOApps,
-            storeBatches,
-            purchaseBatches,
-            purchaseOrders,
-            dispatches,
-            recentMovements,
-            counts: {
-                mrs: pendingMRs.length,
-                stockApps: pendingStockApps.length,
-                poApps: pendingPOApps.length,
-                store: storeBatches.length,
-                purchase: purchaseBatches.length
-            }
-        });
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-});
 
 router.get('/inventory/ledger', async (req, res) => {
     try {
@@ -1032,7 +1026,7 @@ router.post('/submitStockAdjustment', async (req, res) => {
         }
         const currentRole = (req.user.role || '').toUpperCase().replace(/\s+/g, '_');
         console.log(`DEBUG: submitStockAdjustment - User: ${req.user.name}, Role: ${currentRole}`);
-        const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'ADMIN', 'STORE_MANAGER'].includes(currentRole);
+        const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'ADMIN'].includes(currentRole);
 
         const batch = await StockAdjustmentBatch.create({
             batchType,
@@ -1152,10 +1146,179 @@ router.post('/approveStockAdjustment', async (req, res) => {
         await batch.save();
 
         await logAudit('StockAdjustmentBatch', batch._id, 'APPROVE', before, batch.toObject(), req);
-        await logInvActivity('INV_STOCK_APPROVE', `Stock adjustment batch ${batch._id} approved`, req.user._id, req.user.name, batch._id, 'Stock Batch');
+        await logInvActivity('INV_STOCK_ADJUST', `Stock batch ${batch._id} approved`, req.user._id, req.user.name, batch._id, 'Stock Batch');
         res.json(batch);
     } catch (err) {
         res.status(400).json({ message: err.message });
+    }
+});
+
+router.post('/confirmStoreAvailability', async (req, res) => {
+    const session = await mongoose.startSession();
+    try {
+        if (!requireAnyRole(req, res, [roles.STORE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        
+        const {
+            batchId,
+            lineIds,
+            confirmedIds,
+            confirmedIdsArray,
+            confirmed,
+            actualQuantities,
+            reasons
+        } = req.body;
+        const confirmedIdValues = [
+            ...(Array.isArray(confirmedIds) ? confirmedIds : []),
+            ...(Array.isArray(confirmedIdsArray) ? confirmedIdsArray : []),
+            ...(Array.isArray(confirmed) ? confirmed : [])
+        ];
+        const confirmedIdSet = new Set(confirmedIdValues.map((id) => String(id)));
+
+        if (!batchId) return res.status(400).json({ message: "Batch ID is required." });
+        if (!lineIds || !lineIds.length) return res.status(400).json({ message: "No line IDs provided." });
+
+        await session.withTransaction(async () => {
+            const batch = await StoreRequestBatch.findById(batchId).session(session);
+            if (!batch) throw new Error("Store request batch not found.");
+
+            let hasShortage = false;
+
+            for (const lineId of lineIds) {
+                const line = batch.lines.id(lineId);
+                if (!line) continue;
+
+                const requestedQuantity = Number(line.requestedQuantity || 0);
+                const previousConfirmedQuantity = Number(line.confirmedQuantity || 0);
+                const isConfirmed = confirmedIdSet.has(String(lineId));
+                
+                const actualQuantity = isConfirmed 
+                    ? requestedQuantity 
+                    : Number(actualQuantities?.[lineId] || 0);
+                
+                const reason = reasons?.[lineId];
+
+                if (!Number.isFinite(actualQuantity) || actualQuantity < 0 || actualQuantity > requestedQuantity) {
+                    throw new Error(`Actual quantity for item ${lineId} must be between zero and requested (${requestedQuantity}).`);
+                }
+
+                const shortageQuantity = requestedQuantity - actualQuantity;
+                const status = shortageQuantity > 0 ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
+
+                if (shortageQuantity > 0) {
+                    hasShortage = true;
+                }
+
+                // RESERVATION ADJUSTMENT LOGIC:
+                // When a Store Request is routed, the full quantity is reserved.
+                // If the Store Manager reports a shortage, we must release the reserved quantity for that shortage amount.
+                const previousReservedTarget = line.status === 'PENDING'
+                    ? requestedQuantity
+                    : previousConfirmedQuantity;
+                const confirmationIncrease = actualQuantity - previousReservedTarget;
+                
+                if (confirmationIncrease < 0) {
+                    // Manager reduced confirmed quantity (increased shortage) -> Release reservation
+                    await releaseItemReservation(line.itemId, Math.abs(confirmationIncrease), session);
+                } else if (confirmationIncrease > 0) {
+                    // Manager increased confirmed quantity (reduced shortage) -> Reserve more if available
+                    // If stock is already sitting in reserved due to an earlier mismatch, reuse it.
+                    const available = await getCurrentAvailableStock(line.itemId, session);
+                    const reserved = await getCurrentReservedStock(line.itemId, session);
+                    if (available < confirmationIncrease && reserved < actualQuantity) {
+                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousConfirmedQuantity} NOS available/reserved total.`);
+                    }
+                    if (available >= confirmationIncrease) {
+                        await reserveItemQuantity(line.itemId, confirmationIncrease, session);
+                    }
+                }
+
+                line.confirmedQuantity = actualQuantity;
+                line.shortageQuantity = shortageQuantity;
+                line.pendingQuantity = actualQuantity;
+                line.status = status;
+                line.shortageReason = shortageQuantity > 0 ? (reason || "Store reported lower physical availability.") : null;
+            }
+
+            batch.status = hasShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
+            await batch.save({ session });
+        });
+
+        res.json({ success: true, message: "Store availability confirmed successfully." });
+    } catch (err) {
+        console.error('❌ [Confirm Store Availability Error]:', err);
+        res.status(400).json({ message: err.message });
+    } finally {
+        await session.endSession();
+    }
+});
+
+router.post('/dispatchConfirmedStoreRequest', async (req, res) => {
+    const session = await mongoose.startSession();
+    try {
+        if (!requireAnyRole(req, res, [roles.STORE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+
+        const { batchId, storeRemarks } = req.body;
+        if (!batchId) return res.status(400).json({ message: "Store request batch ID is required." });
+
+        let dispatchResult;
+
+        await session.withTransaction(async () => {
+            const batch = await StoreRequestBatch.findById(batchId).session(session);
+            if (!batch) throw new Error("Store request batch not found.");
+
+            // Filter lines that are confirmed but not yet dispatched
+            const dispatchableLines = batch.lines.filter(l => l.status === 'CONFIRMED' && Number(l.pendingQuantity || 0) > 0);
+            
+            if (!dispatchableLines.length) {
+                throw new Error("No confirmed pending items are available for dispatch in this batch.");
+            }
+
+            const dispatchCount = await DispatchBatch.countDocuments().session(session);
+            const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+            const dispatchNumber = `DSP-${stamp}-${(dispatchCount + 1).toString().padStart(4, '0')}`;
+
+            const dispatch = new DispatchBatch({
+                dispatchNumber,
+                storeRequestId: batch._id,
+                status: 'DISPATCHED',
+                dispatchedById: req.user._id,
+                storeRemarks: storeRemarks || null,
+                lines: []
+            });
+
+            for (const line of dispatchableLines) {
+                const quantity = Number(line.pendingQuantity || 0);
+                if (quantity <= 0) continue;
+
+                // Move from Reserved to Dispatched (decrements both onHand and reservedQuantity)
+                await issueReservedStock(line.itemId, quantity, dispatch._id, req.user._id, session);
+
+                dispatch.lines.push({
+                    storeRequestLineId: String(line._id),
+                    itemId: line.itemId,
+                    dispatchedQuantity: quantity
+                });
+                
+                line.pendingQuantity = 0; // Fully dispatched
+            }
+
+            await dispatch.save({ session });
+
+            // Check if any lines in the batch still have pending store quantities
+            const remainingPending = batch.lines.some(l => Number(l.pendingQuantity || 0) > 0);
+            batch.status = remainingPending ? 'IN_DISPATCH' : 'DISPATCHED';
+
+            await batch.save({ session });
+            dispatchResult = dispatch;
+        });
+
+        await logInvActivity('INV_DISPATCH', `Stock dispatched via ${dispatchResult.dispatchNumber}`, req.user._id, req.user.name, dispatchResult._id, dispatchResult.dispatchNumber);
+        res.json(dispatchResult);
+    } catch (err) {
+        console.error('❌ [Dispatch Error]:', err);
+        res.status(400).json({ message: err.message });
+    } finally {
+        await session.endSession();
     }
 });
 
@@ -1227,6 +1390,15 @@ router.post('/acknowledgeDispatch', async (req, res) => {
         dispatch.engineerRemarks = engineerRemarks;
         
         await dispatch.save();
+        
+        // Trigger MR completion check
+        if (dispatch.status === 'ACKNOWLEDGED') {
+            const d = await DispatchBatch.findById(dispatch._id).populate('storeRequestId');
+            if (d?.storeRequestId?.materialRequestId) {
+                await checkMRCompletion(d.storeRequestId.materialRequestId);
+            }
+        }
+        
         res.json(dispatch);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -1774,6 +1946,15 @@ router.post('/store/dispatch/acknowledge', async (req, res) => {
         dispatch.acknowledgedAt = new Date();
         dispatch.engineerRemarks = remarks;
         await dispatch.save();
+        
+        // Trigger MR completion check
+        if (dispatch.status === 'ACKNOWLEDGED') {
+            const d = await DispatchBatch.findById(dispatch._id).populate('storeRequestId');
+            if (d?.storeRequestId?.materialRequestId) {
+                await checkMRCompletion(d.storeRequestId.materialRequestId);
+            }
+        }
+        
         res.json(dispatch);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -2729,299 +2910,6 @@ router.get('/store/requests', async (req, res) => {
         })));
     } catch (err) {
         res.status(500).json({ message: err.message });
-    }
-});
-
-router.post('/confirmStoreAvailability', async (req, res) => {
-    try {
-        if (!requireAnyRole(req, res, [roles.STORE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
-
-        const { batchId, lineIds } = req.body;
-        const confirmedIds = new Set(req.body.confirmed || []);
-        
-        const batch = await StoreRequestBatch.findById(batchId);
-        if (!batch) return res.status(404).json({ message: 'Batch not found' });
-        const beforeBatch = batch.toObject();
-
-        let hasShortage = false;
-
-        for (const lineId of lineIds) {
-            const line = batch.lines.id(lineId);
-            const isConfirmed = confirmedIds.has(lineId);
-            const actualQty = isConfirmed ? line.requestedQuantity : Number(req.body[`actual:${lineId}`] || 0);
-            
-            line.confirmedQuantity = actualQty;
-            line.shortageQuantity = line.requestedQuantity - actualQty;
-            line.pendingQuantity = actualQty;
-            line.status = line.shortageQuantity > 0 ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
-            line.shortageReason = req.body[`reason:${lineId}`];
-
-            if (line.shortageQuantity > 0) hasShortage = true;
-
-            // Reserve the confirmed quantity
-            if (actualQty > 0) {
-                // Find a location with stock to reserve from
-                // For simplicity, we find the first location with enough stock.
-                // In a real system, we'd allow the store manager to pick locations.
-                const balance = await StockBalance.findOne({ itemId: line.itemId, quantityOnHand: { $gte: actualQty } });
-                if (balance) {
-                    balance.reservedQuantity += actualQty;
-                    await balance.save();
-                    
-                    await StockMovement.create({
-                        itemId: line.itemId,
-                        locationId: balance.locationId,
-                        movementType: 'STOCK_RESERVED',
-                        quantityChange: 0, // Quantity on hand doesn't change yet
-                        remarks: `Reserved ${actualQty} for MR ${batch.batchNumber}`,
-                        createdById: req.user._id
-                    });
-                }
-            }
-        }
-
-        batch.status = hasShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
-        await batch.save();
-
-        await logAudit('StoreRequestBatch', batch._id, 'UPDATE', beforeBatch, batch.toObject(), req, { action: 'CONFIRM_AVAILABILITY' });
-        await logInvActivity('INV_STORE_CONFIRM', `Store confirmed availability for ${batch.batchNumber}`, req.user._id, req.user.name, batch._id, batch.batchNumber);
-        res.json(batch);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-router.post('/amendStoreShortageLine', async (req, res) => {
-    try {
-        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
-
-        const lineId = req.body.lineId || req.body.amendLineId;
-        if (!lineId) {
-            return res.status(400).json({ message: 'Material request line is required.' });
-        }
-
-        const request = await MaterialRequest.findOne({ 'lines._id': lineId });
-        if (!request) {
-            return res.status(404).json({ message: 'Material request line not found.' });
-        }
-
-        const line = request.lines.id(lineId);
-        const storeBatch = await StoreRequestBatch.findOne({ materialRequestId: request._id, 'lines.materialRequestLineId': String(lineId) });
-        const storeLine = storeBatch?.lines.find(
-            (item) => normalizeId(item.materialRequestLineId) === normalizeId(lineId) &&
-                item.source === 'STOCK' &&
-                item.status === 'SHORTAGE_REPORTED'
-        );
-
-        if (!line || !storeBatch || !storeLine) {
-            return res.status(400).json({ message: 'Only shortage lines returned by Store can be amended.' });
-        }
-
-        const availableQuantity = Number(storeLine.confirmedQuantity || 0);
-        const requiredQuantity = Number(line.requiredQuantity || 0);
-        const purchaseQuantity = Math.max(0, requiredQuantity - availableQuantity);
-
-        await reconcileStorePhysicalCount(
-            line.itemId,
-            availableQuantity,
-            availableQuantity,
-            normalizeId(storeLine._id),
-            req.user._id
-        );
-
-        const beforeLine = line.toObject();
-        line.plannedStoreQuantity = availableQuantity;
-        line.plannedPurchaseQuantity = purchaseQuantity;
-        line.status = availableQuantity > 0 && purchaseQuantity > 0
-            ? 'PARTIALLY_ROUTED'
-            : purchaseQuantity > 0
-                ? 'ROUTED_TO_PURCHASE'
-                : 'ROUTED_TO_STORE';
-        line.adminRemarks = `Store confirmed ${availableQuantity}. Balance ${purchaseQuantity} moved to Purchase.`;
-        await request.save();
-
-        await logAudit('MaterialRequestLine', line._id, 'UPDATE', beforeLine, line.toObject(), req, { requestId: request._id, action: 'AMEND_SHORTAGE' });
-
-        const beforeStoreLine = { ...storeLine.toObject() };
-        storeLine.requestedQuantity = availableQuantity;
-        storeLine.pendingQuantity = availableQuantity;
-        storeLine.confirmedQuantity = availableQuantity;
-        storeLine.shortageQuantity = 0;
-        storeLine.status = 'CONFIRMED';
-        storeLine.shortageReason = null;
-        await updateStoreBatchStatus(storeBatch);
-
-        await logAudit('StoreRequestLine', storeLine._id, 'UPDATE', beforeStoreLine, storeLine.toObject(), req, { batchId: storeBatch._id, action: 'AMEND_SHORTAGE' });
-
-        let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ['PENDING', 'IN_PO'] } });
-        if (!purchaseBatch && purchaseQuantity > 0) {
-            const batchCount = await PurchaseRequestBatch.countDocuments();
-            purchaseBatch = new PurchaseRequestBatch({
-                batchNumber: `PRB-${new Date().getTime()}-${batchCount + 1}`,
-                materialRequestId: request._id,
-                routedById: req.user._id,
-                status: 'PENDING',
-                lines: []
-            });
-        }
-
-        if (purchaseBatch) {
-            const existingPurchaseLine = purchaseBatch.lines.find((item) => normalizeId(item.materialRequestLineId) === normalizeId(lineId));
-
-            if (purchaseQuantity > 0) {
-                if (existingPurchaseLine) {
-                    existingPurchaseLine.requiredQuantity = purchaseQuantity;
-                    existingPurchaseLine.pendingQuantity = purchaseQuantity;
-                    existingPurchaseLine.purchaseRemarks = line.adminRemarks;
-                } else {
-                    purchaseBatch.lines.push({
-                        materialRequestLineId: normalizeId(lineId),
-                        itemId: line.itemId,
-                        requiredQuantity: purchaseQuantity,
-                        pendingQuantity: purchaseQuantity,
-                        purchaseRemarks: line.adminRemarks
-                    });
-                }
-            } else if (existingPurchaseLine) {
-                existingPurchaseLine.pendingQuantity = 0;
-                existingPurchaseLine.requiredQuantity = 0;
-                existingPurchaseLine.purchaseRemarks = line.adminRemarks;
-            }
-
-            purchaseBatch.status = 'PENDING';
-            await purchaseBatch.save();
-        }
-
-        await logInvActivity(
-            'INV_MR_ROUTE',
-            `Admin amended shortage for line ${line.rowNumber} in MR ${request.requestNumber}`,
-            req.user._id,
-            req.user.name,
-            request._id,
-            request.requestNumber
-        );
-
-        res.json({
-            success: true,
-            requestId: request._id,
-            lineId,
-            availableQuantity,
-            purchaseQuantity
-        });
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-router.post('/dispatchConfirmedStoreRequest', async (req, res) => {
-    try {
-        if (!requireAnyRole(req, res, [roles.STORE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
-        const { batchId, storeRemarks } = req.body;
-        const batch = await StoreRequestBatch.findById(batchId);
-        if (!batch) return res.status(404).json({ message: 'Batch not found' });
-        const beforeBatch = batch.toObject();
-
-        const dispatchCount = await DispatchBatch.countDocuments();
-        const dispatchNumber = `DSP-${new Date().getTime()}-${dispatchCount + 1}`;
-        
-        const dispatchLines = [];
-
-        for (const line of batch.lines) {
-            if (line.status !== 'CONFIRMED' || line.pendingQuantity <= 0) continue;
-
-            const qty = line.pendingQuantity;
-            
-            // Release reservation and decrement on-hand
-            const balance = await StockBalance.findOne({ itemId: line.itemId, reservedQuantity: { $gte: qty } });
-            if (balance) {
-                balance.quantityOnHand -= qty;
-                balance.reservedQuantity -= qty;
-                await balance.save();
-
-                await StockMovement.create({
-                    itemId: line.itemId,
-                    locationId: balance.locationId,
-                    movementType: 'STOCK_DISPATCHED',
-                    quantityChange: -qty,
-                    referenceType: 'DispatchBatch',
-                    referenceId: dispatchNumber,
-                    remarks: `Dispatched to engineer`,
-                    createdById: req.user._id
-                });
-            }
-
-            dispatchLines.push({
-                storeRequestLineId: line._id,
-                itemId: line.itemId,
-                dispatchedQuantity: qty
-            });
-
-            line.pendingQuantity = 0;
-        }
-
-        const dispatch = await DispatchBatch.create({
-            dispatchNumber,
-            storeRequestId: batch._id,
-            dispatchedById: req.user._id,
-            storeRemarks,
-            lines: dispatchLines
-        });
-
-        batch.status = 'DISPATCHED';
-        await batch.save();
-
-        await logAudit('DispatchBatch', dispatch._id, 'CREATE', null, dispatch.toObject(), req, { dispatchNumber });
-        await logAudit('StoreRequestBatch', batch._id, 'UPDATE', beforeBatch, batch.toObject(), req, { action: 'DISPATCH', dispatchNumber });
-        await logInvActivity('INV_DISPATCH', `Stock dispatched. DSP: ${dispatchNumber}`, req.user._id, req.user.name, dispatch._id, dispatchNumber);
-        res.json(dispatch);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
-    }
-});
-
-router.get('/dispatches', async (req, res) => {
-    try {
-        const dispatches = await DispatchBatch.find()
-            .populate({
-                path: 'storeRequestId',
-                populate: {
-                    path: 'materialRequestId',
-                    populate: { path: 'projectId', select: 'name projectCode' }
-                }
-            })
-            .populate('lines.itemId')
-            .sort({ dispatchedAt: -1 });
-        
-        // Flatten for frontend compatibility
-        const mapped = dispatches.map(d => ({
-            ...d.toObject(),
-            storeRequest: d.storeRequestId,
-            id: d._id
-        }));
-        res.json(mapped);
-    } catch (err) {
-        res.status(500).json({ message: err.message });
-    }
-});
-
-router.post('/dispatches/:id/acknowledge', async (req, res) => {
-    try {
-        const { remarks } = req.body;
-        const dispatch = await DispatchBatch.findById(req.params.id);
-        if (!dispatch) return res.status(404).json({ message: 'Dispatch not found' });
-        const beforeDispatch = dispatch.toObject();
-
-        dispatch.status = 'ACKNOWLEDGED';
-        dispatch.acknowledgedById = req.user._id;
-        dispatch.acknowledgedAt = new Date();
-        dispatch.engineerRemarks = remarks;
-        await dispatch.save();
-
-        await logAudit('DispatchBatch', dispatch._id, 'UPDATE', beforeDispatch, dispatch.toObject(), req, { action: 'ACKNOWLEDGE_DISPATCH' });
-        await logInvActivity('INV_DISPATCH_ACK', `Dispatch ${dispatch.dispatchNumber} acknowledged by engineer`, req.user._id, req.user.name, dispatch._id, dispatch.dispatchNumber);
-        res.json(dispatch);
-    } catch (err) {
-        res.status(400).json({ message: err.message });
     }
 });
 
