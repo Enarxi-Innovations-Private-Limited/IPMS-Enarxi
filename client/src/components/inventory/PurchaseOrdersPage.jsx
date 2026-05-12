@@ -1,19 +1,38 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function PurchaseOrdersPage() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [reviewRemarks, setReviewRemarks] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
+    const [expectedDeliveryDate, setExpectedDeliveryDate] = useState('');
+    const [vendorDocumentNote, setVendorDocumentNote] = useState('');
 
     useEffect(() => {
         fetchOrders();
     }, []);
+
+    useEffect(() => {
+        if (!selectedOrder) {
+            setExpectedDeliveryDate('');
+            setVendorDocumentNote('');
+            return;
+        }
+
+        setExpectedDeliveryDate(
+            selectedOrder.expectedDeliveryDate
+                ? new Date(selectedOrder.expectedDeliveryDate).toISOString().slice(0, 10)
+                : ''
+        );
+        setVendorDocumentNote(selectedOrder.vendorDocumentNote || '');
+    }, [selectedOrder]);
 
     const fetchOrders = async () => {
         try {
@@ -29,19 +48,19 @@ export default function PurchaseOrdersPage() {
 
     const handleReview = async (orderId, decision) => {
         if (decision === 'REJECTED' && !reviewRemarks) {
-            alert('Please provide remarks for rejection');
+            notifyError('Please provide remarks for rejection');
             return;
         }
 
         try {
             setProcessing(true);
             await inventoryService.reviewPO(orderId, decision, reviewRemarks);
-            alert(`Purchase Order ${decision.toLowerCase()} successfully`);
+            notifySuccess(`Purchase Order ${decision.toLowerCase()} successfully`);
             setReviewRemarks('');
             setSelectedOrder(null);
             fetchOrders();
         } catch (err) {
-            alert(err.response?.data?.message || 'Review failed');
+            notifyError(err.response?.data?.message || 'Review failed');
         } finally {
             setProcessing(false);
         }
@@ -50,12 +69,30 @@ export default function PurchaseOrdersPage() {
     const handleMarkPlaced = async (orderId) => {
         try {
             setProcessing(true);
-            await inventoryService.markPOPlaced({ purchaseOrderId: orderId });
-            alert('Purchase Order marked as PLACED');
+            await inventoryService.markPOPlaced({
+                purchaseOrderId: orderId,
+                expectedDeliveryDate: expectedDeliveryDate || null,
+                vendorDocumentNote: vendorDocumentNote.trim() || null,
+            });
+            notifySuccess('Purchase Order marked as PLACED');
             setSelectedOrder(null);
             fetchOrders();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to mark as placed');
+            notifyError(err.response?.data?.message || 'Failed to mark as placed');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleSubmitForApproval = async (orderId) => {
+        try {
+            setProcessing(true);
+            await inventoryService.submitPOForApproval(orderId);
+            notifySuccess('Purchase Order submitted for admin approval.');
+            setSelectedOrder(null);
+            fetchOrders();
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to submit PO for approval');
         } finally {
             setProcessing(false);
         }
@@ -117,7 +154,7 @@ export default function PurchaseOrdersPage() {
                             ) : (
                                 filteredOrders.map(order => (
                                     <button 
-                                        key={order.id}
+                                        key={order._id || order.id}
                                         onClick={() => setSelectedOrder(order)}
                                         className={`w-full text-left p-4 rounded-xl border transition-all ${
                                             selectedOrder?.id === order.id 
@@ -192,7 +229,7 @@ export default function PurchaseOrdersPage() {
                                             </thead>
                                             <tbody className="divide-y divide-border-dark">
                                                 {selectedOrder.lines?.map(line => (
-                                                    <tr key={line.id}>
+                                                    <tr key={line._id || line.id}>
                                                         <td className="py-4">
                                                             <div className="text-white font-medium">{line.item?.name}</div>
                                                             <div className="text-text-secondary text-xs">{line.item?.itemCode}</div>
@@ -238,6 +275,25 @@ export default function PurchaseOrdersPage() {
                                             </div>
                                         )}
 
+                                        {(selectedOrder.status === 'DRAFT' || selectedOrder.status === 'REJECTED') && (
+                                            <div className="bg-background-dark/50 border border-amber-500/20 rounded-xl p-6">
+                                                <h4 className="text-white font-bold mb-4 flex items-center gap-2">
+                                                    <span className="material-symbols-outlined text-amber-400">approval</span>
+                                                    Submit For Approval
+                                                </h4>
+                                                <p className="text-text-secondary text-sm mb-6">
+                                                    This purchase order matches the tracker flow only after it is formally submitted into the admin approval queue.
+                                                </p>
+                                                <button
+                                                    disabled={processing}
+                                                    onClick={() => handleSubmitForApproval(selectedOrder.id)}
+                                                    className="w-full bg-amber-500 text-black font-black py-3 rounded-xl uppercase tracking-widest hover:bg-amber-400 transition-all disabled:opacity-50 shadow-lg shadow-amber-500/20"
+                                                >
+                                                    Submit to Admin Queue
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {/* Action Section for Approved POs */}
                                         {selectedOrder.status === 'APPROVED' && (
                                             <div className="bg-background-dark/50 border border-blue-500/20 rounded-xl p-6">
@@ -246,6 +302,27 @@ export default function PurchaseOrdersPage() {
                                                     Execution Action
                                                 </h4>
                                                 <p className="text-text-secondary text-sm mb-6">Confirm that this Purchase Order has been officially sent to the vendor.</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                    <div>
+                                                        <label className="block text-[10px] text-text-secondary uppercase font-bold mb-2 tracking-widest">Expected Delivery</label>
+                                                        <input
+                                                            type="date"
+                                                            value={expectedDeliveryDate}
+                                                            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
+                                                            className="w-full bg-surface-dark border border-border-dark rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-400"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[10px] text-text-secondary uppercase font-bold mb-2 tracking-widest">Vendor Note</label>
+                                                        <input
+                                                            type="text"
+                                                            value={vendorDocumentNote}
+                                                            onChange={(e) => setVendorDocumentNote(e.target.value)}
+                                                            placeholder="PO email ref / vendor doc note"
+                                                            className="w-full bg-surface-dark border border-border-dark rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-400"
+                                                        />
+                                                    </div>
+                                                </div>
                                                 <button 
                                                     disabled={processing}
                                                     onClick={() => handleMarkPlaced(selectedOrder.id)}

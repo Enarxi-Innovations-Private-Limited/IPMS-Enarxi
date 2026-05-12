@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function AdjustmentReview() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [batches, setBatches] = useState([]);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
@@ -34,11 +36,11 @@ export default function AdjustmentReview() {
             } else {
                 await inventoryService.rejectStockAdjustment(id, remarks);
             }
-            alert(`Batch ${decision.toLowerCase()}d successfully!`);
+            notifySuccess(`Batch ${decision.toLowerCase()}d successfully.`);
             setRemarks('');
             fetchBatches();
         } catch (err) {
-            alert(err.response?.data?.message || 'Action failed');
+            notifyError(err.response?.data?.message || 'Action failed');
         } finally {
             setProcessing(false);
         }

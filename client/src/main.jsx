@@ -4,11 +4,14 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import './responsive.css';
 import App from './App.jsx';
+import { AppNotificationProvider } from './components/common/AppNotificationProvider.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
-      <App />
+      <AppNotificationProvider>
+        <App />
+      </AppNotificationProvider>
     </BrowserRouter>
   </StrictMode>
 );

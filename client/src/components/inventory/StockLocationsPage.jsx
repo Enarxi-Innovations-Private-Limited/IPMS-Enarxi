@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function StockLocationsPage() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [locations, setLocations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -36,8 +38,9 @@ export default function StockLocationsPage() {
             setShowModal(false);
             setFormData({ locationCode: '', name: '', description: '' });
             fetchLocations();
+            notifySuccess('Location created successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to create location');
+            notifyError(err.response?.data?.message || 'Failed to create location');
         }
     };
 
@@ -71,7 +74,7 @@ export default function StockLocationsPage() {
                                 <p className="text-text-secondary">Start by adding a warehouse or storage zone.</p>
                             </div>
                         ) : locations.map(loc => (
-                            <div key={loc.id} className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
+                            <div key={loc._id || loc.id} className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-3xl -mr-12 -mt-12 group-hover:bg-primary/10 transition-all"></div>
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">

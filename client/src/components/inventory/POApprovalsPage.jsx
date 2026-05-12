@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function POApprovalsPage() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -30,19 +32,19 @@ export default function POApprovalsPage() {
     const handleReview = async (decision) => {
         if (!selectedOrder) return;
         if (!remarks && decision === 'REJECT') {
-            alert('Please provide remarks for rejection.');
+            notifyError('Please provide remarks for rejection.');
             return;
         }
 
         try {
             setProcessing(true);
             await inventoryService.reviewPO(selectedOrder.id, decision, remarks);
-            alert(`Purchase Order ${decision === 'APPROVE' ? 'Approved' : 'Rejected'} successfully.`);
+            notifySuccess(`Purchase Order ${decision === 'APPROVE' ? 'Approved' : 'Rejected'} successfully.`);
             setSelectedOrder(null);
             setRemarks('');
             fetchOrders();
         } catch (err) {
-            alert(err.response?.data?.message || 'Review failed');
+            notifyError(err.response?.data?.message || 'Review failed');
         } finally {
             setProcessing(false);
         }
@@ -54,7 +56,7 @@ export default function POApprovalsPage() {
             const res = await inventoryService.getPurchaseOrderDetails(order.id);
             setSelectedOrder(res.data);
         } catch (err) {
-            alert('Failed to load order details');
+            notifyError('Failed to load order details');
         } finally {
             setProcessing(false);
         }

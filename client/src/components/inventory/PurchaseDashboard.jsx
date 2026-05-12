@@ -54,6 +54,8 @@ export default function PurchaseDashboard() {
         DRAFT: { label: 'Draft', color: 'bg-slate-500/20 text-slate-400' },
         PENDING_ADMIN_APPROVAL: { label: 'Awaiting Approval', color: 'bg-amber-500/20 text-amber-400' },
         APPROVED: { label: 'Approved', color: 'bg-emerald-500/20 text-emerald-400' },
+        PLACED: { label: 'Order Placed', color: 'bg-blue-500/20 text-blue-400' },
+        RECEIVED: { label: 'Received', color: 'bg-teal-500/20 text-teal-400' },
         REJECTED: { label: 'Rejected', color: 'bg-red-500/20 text-red-400' },
         CLOSED: { label: 'Closed', color: 'bg-slate-700/50 text-slate-500' },
     };

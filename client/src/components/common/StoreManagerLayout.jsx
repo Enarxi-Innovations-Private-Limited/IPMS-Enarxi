@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getCurrentUser } from '../../services/authService.js';
 import api from '../../services/api.js';
@@ -15,15 +15,60 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-    const [isStoreOpen, setIsStoreOpen] = useState(
-        ['store-requests', 'store-inward', 'store-uploads'].includes(currentPage)
-    );
-    const [isAdminSetupOpen, setIsAdminSetupOpen] = useState(
-        ['store-locations'].includes(currentPage)
-    );
-    const [isReportsOpen, setIsReportsOpen] = useState(
-        ['store-reports'].includes(currentPage)
-    );
+    const sidebarRef = useRef(null);
+
+    // Persistence for scroll position
+    useEffect(() => {
+        const sidebar = sidebarRef.current;
+        if (sidebar) {
+            const savedScroll = sessionStorage.getItem('sm_sidebar_scroll');
+            if (savedScroll) {
+                sidebar.scrollTop = parseInt(savedScroll, 10);
+            }
+
+            const handleScroll = () => {
+                sessionStorage.setItem('sm_sidebar_scroll', sidebar.scrollTop);
+            };
+
+            sidebar.addEventListener('scroll', handleScroll);
+            return () => sidebar.removeEventListener('scroll', handleScroll);
+        }
+    }, []);
+    const [isStoreOpen, setIsStoreOpen] = useState(() => {
+        const saved = localStorage.getItem('sm_store_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['store-requests', 'store-inward', 'store-uploads'].includes(currentPage);
+    });
+
+    const [isAdminSetupOpen, setIsAdminSetupOpen] = useState(() => {
+        const saved = localStorage.getItem('sm_admin_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['store-locations'].includes(currentPage);
+    });
+
+    const [isReportsOpen, setIsReportsOpen] = useState(() => {
+        const saved = localStorage.getItem('sm_reports_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['store-reports'].includes(currentPage);
+    });
+
+    const toggleStore = () => {
+        const newState = !isStoreOpen;
+        setIsStoreOpen(newState);
+        localStorage.setItem('sm_store_expanded', newState);
+    };
+
+    const toggleAdmin = () => {
+        const newState = !isAdminSetupOpen;
+        setIsAdminSetupOpen(newState);
+        localStorage.setItem('sm_admin_expanded', newState);
+    };
+
+    const toggleReports = () => {
+        const newState = !isReportsOpen;
+        setIsReportsOpen(newState);
+        localStorage.setItem('sm_reports_expanded', newState);
+    };
 
     const handleLogout = () => {
         clearAuth();
@@ -71,7 +116,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     };
 
     const overviewMenu = [
-        { id: 'store-dashboard', label: 'Dashboard', icon: 'dashboard', path: '/store' },
+        { id: 'store-dashboard', label: 'Overview', icon: 'dashboard', path: '/store' },
     ];
 
     const adminSetupMenu = [
@@ -81,11 +126,13 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     const storeMenu = [
         { id: 'store-requests', label: 'Store Requests', icon: 'assignment', path: '/store/requests' },
         { id: 'store-inward', label: 'Store Inward', icon: 'input', path: '/store/inward' },
+        { id: 'store-dispatches', label: 'Store Dispatches', icon: 'local_shipping', path: '/store/dispatches' },
         { id: 'store-uploads', label: 'Stock Uploads', icon: 'upload', path: '/store/uploads' },
     ];
 
     const reportsMenu = [
-        { id: 'store-reports', label: 'Stock Reports', icon: 'bar_chart', path: '/store/reports' },
+        { id: 'store-stock', label: 'Current Stock', icon: 'inventory_2', path: '/store/stock' },
+        { id: 'store-ledger', label: 'Stock Ledger', icon: 'history', path: '/store/ledger' },
     ];
 
     const SidebarContent = ({ onNavigate }) => (
@@ -104,7 +151,10 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
             </div>
 
             {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-4">
+            <nav 
+                ref={sidebarRef}
+                className="flex-1 flex flex-col gap-6 overflow-y-auto custom-scrollbar px-4 pb-10"
+            >
                 {/* Overview */}
                 <div className="space-y-1">
                     <div className="px-3 py-2 flex items-center justify-between group cursor-default">
@@ -127,7 +177,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 {/* Admin Setup */}
                 <div className="space-y-1">
                     <button
-                        onClick={() => setIsAdminSetupOpen(!isAdminSetupOpen)}
+                        onClick={toggleAdmin}
                         className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isAdminSetupOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Admin Setup</span>
@@ -152,7 +202,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 {/* Store */}
                 <div className="space-y-1">
                     <button
-                        onClick={() => setIsStoreOpen(!isStoreOpen)}
+                        onClick={toggleStore}
                         className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isStoreOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Store</span>
@@ -177,7 +227,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 {/* Stock Reports */}
                 <div className="space-y-1">
                     <button
-                        onClick={() => setIsReportsOpen(!isReportsOpen)}
+                        onClick={toggleReports}
                         className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isReportsOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Stock Reports</span>

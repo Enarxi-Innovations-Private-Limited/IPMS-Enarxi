@@ -1,9 +1,23 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
+
+const getEntityId = (value) => value?.id || value?._id || '';
+const getPendingQuantity = (line) => Math.max(0, Number(line?.orderQuantity || 0) - Number(line?.receivedQuantity || 0));
+
+const normalizeOpenOrder = (order) => {
+    const openLines = (order?.lines || []).filter((line) => getPendingQuantity(line) > 0);
+    return {
+        ...order,
+        id: getEntityId(order),
+        lines: openLines,
+    };
+};
 
 export default function PurchaseInward() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [orders, setOrders] = useState([]);
     const [locations, setLocations] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -18,8 +32,16 @@ export default function PurchaseInward() {
                     inventoryService.getPurchaseOrders(),
                     inventoryService.getLocations()
                 ]);
-                setOrders(poRes.data.filter(o => o.status === 'PLACED'));
+                const openOrders = (poRes.data || [])
+                    .filter((order) => order.status === 'PLACED')
+                    .map(normalizeOpenOrder)
+                    .filter((order) => order.lines.length > 0);
+                setOrders(openOrders);
                 setLocations(locRes.data);
+                if (selectedOrder) {
+                    const refreshedSelected = openOrders.find((order) => getEntityId(order) === getEntityId(selectedOrder));
+                    setSelectedOrder(refreshedSelected || null);
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -31,21 +53,23 @@ export default function PurchaseInward() {
 
     const handleReceive = async (e) => {
         e.preventDefault();
-        const formData = new FormData(e.target);
-        const lineIds = selectedOrder.lines.map(l => l.id);
+        const form = e.target;
+        const lineIds = (selectedOrder.lines || [])
+            .map((line) => getEntityId(line))
+            .filter(Boolean);
         
         const payload = {
-            purchaseOrderId: selectedOrder.id,
-            locationId: formData.get('locationId'),
-            documentNote: formData.get('documentNote'),
-            remarks: formData.get('remarks'),
+            purchaseOrderId: getEntityId(selectedOrder),
+            locationId: form.locationId.value,
+            documentNote: form.documentNote.value,
+            remarks: form.remarks.value,
             lineIds: lineIds
         };
 
         lineIds.forEach(id => {
-            payload[`receive:${id}`] = formData.get(`qty-${id}`);
+            payload[`receive:${id}`] = form[`qty-${id}`].value;
             // Capture serial numbers if present
-            const serials = formData.get(`serials-${id}`);
+            const serials = form[`serials-${id}`]?.value;
             if (serials) {
                 payload[`serials:${id}`] = serials;
             }
@@ -54,12 +78,16 @@ export default function PurchaseInward() {
         try {
             setReceiving(true);
             await inventoryService.receivePO(payload);
-            alert('Goods received successfully!');
+            notifySuccess('Goods received successfully.');
             setSelectedOrder(null);
             const poRes = await inventoryService.getPurchaseOrders();
-            setOrders(poRes.data.filter(o => o.status === 'PLACED'));
+            const openOrders = (poRes.data || [])
+                .filter((order) => order.status === 'PLACED')
+                .map(normalizeOpenOrder)
+                .filter((order) => order.lines.length > 0);
+            setOrders(openOrders);
         } catch (err) {
-            alert(err.response?.data?.message || 'Inward failed');
+            notifyError(err.response?.data?.message || 'Inward failed');
         } finally {
             setReceiving(false);
         }
@@ -86,10 +114,10 @@ export default function PurchaseInward() {
                             ) : (
                                 orders.map(order => (
                                     <button 
-                                        key={order.id}
+                                        key={getEntityId(order)}
                                         onClick={() => setSelectedOrder(order)}
                                         className={`w-full text-left p-4 rounded-xl border transition-all ${
-                                            selectedOrder?.id === order.id 
+                                            getEntityId(selectedOrder) === getEntityId(order)
                                             ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10' 
                                             : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'
                                         }`}
@@ -123,7 +151,7 @@ export default function PurchaseInward() {
                                                 <select name="locationId" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary" required>
                                                     <option value="">Select storage bin/rack...</option>
                                                     {locations.map(loc => (
-                                                        <option key={loc.id} value={loc.id}>{loc.name} ({loc.locationCode})</option>
+                                                        <option key={getEntityId(loc)} value={getEntityId(loc)}>{loc.name} ({loc.locationCode})</option>
                                                     ))}
                                                 </select>
                                             </div>
@@ -135,8 +163,10 @@ export default function PurchaseInward() {
 
                                         <div className="space-y-4">
                                             <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest">Line Items</h4>
-                                            {selectedOrder.lines?.map(line => (
-                                                <div key={line.id} className="bg-background-dark/30 border border-border-dark rounded-xl p-4">
+                                            {selectedOrder.lines?.map(line => {
+                                                const lineId = getEntityId(line);
+                                                return (
+                                                <div key={lineId} className="bg-background-dark/30 border border-border-dark rounded-xl p-4">
                                                     <div className="flex justify-between items-start mb-4">
                                                         <div>
                                                             <div className="text-white font-bold">{line.item?.name}</div>
@@ -144,7 +174,7 @@ export default function PurchaseInward() {
                                                         </div>
                                                         <div className="text-right">
                                                             <div className="text-text-secondary text-[10px] uppercase font-bold">Pending</div>
-                                                            <div className="text-white font-black">{line.orderQuantity - line.receivedQuantity} {line.item?.uom}</div>
+                                                            <div className="text-white font-black">{getPendingQuantity(line)} {line.item?.uom}</div>
                                                         </div>
                                                     </div>
                                                     
@@ -153,10 +183,10 @@ export default function PurchaseInward() {
                                                             <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1">Qty to Receive</label>
                                                             <input 
                                                                 type="number" 
-                                                                name={`qty-${line.id}`}
+                                                                name={`qty-${lineId}`}
                                                                 className="w-full bg-background-dark border border-border-dark rounded-lg p-2 text-emerald-400 font-bold outline-none focus:border-emerald-500"
-                                                                defaultValue={line.orderQuantity - line.receivedQuantity}
-                                                                max={line.orderQuantity - line.receivedQuantity}
+                                                                defaultValue={getPendingQuantity(line)}
+                                                                max={getPendingQuantity(line)}
                                                                 min="0"
                                                                 required
                                                             />
@@ -166,7 +196,7 @@ export default function PurchaseInward() {
                                                                 <label className="block text-[9px] font-bold text-amber-500 uppercase mb-1">Serial Numbers (Comma separated)</label>
                                                                 <input 
                                                                     type="text" 
-                                                                    name={`serials-${line.id}`}
+                                                                    name={`serials-${lineId}`}
                                                                     placeholder="e.g. SN1001, SN1002"
                                                                     className="w-full bg-background-dark border border-amber-500/30 rounded-lg p-2 text-white text-sm outline-none focus:border-amber-500"
                                                                 />
@@ -174,7 +204,7 @@ export default function PurchaseInward() {
                                                         )}
                                                     </div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
 
                                         <div>

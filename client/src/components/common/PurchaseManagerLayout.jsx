@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getCurrentUser } from '../../services/authService.js';
 import api from '../../services/api.js';
@@ -15,15 +15,60 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-    const [isProcurementOpen, setIsProcurementOpen] = useState(
-        ['purchase-requests', 'purchase-orders', 'purchase-approvals'].includes(currentPage)
-    );
-    const [isVendorOpen, setIsVendorOpen] = useState(
-        ['purchase-vendors', 'purchase-items'].includes(currentPage)
-    );
-    const [isStockOpen, setIsStockOpen] = useState(
-        ['purchase-stock'].includes(currentPage)
-    );
+    const sidebarRef = useRef(null);
+
+    // Persistence for scroll position
+    useEffect(() => {
+        const sidebar = sidebarRef.current;
+        if (sidebar) {
+            const savedScroll = sessionStorage.getItem('pm_sidebar_scroll');
+            if (savedScroll) {
+                sidebar.scrollTop = parseInt(savedScroll, 10);
+            }
+
+            const handleScroll = () => {
+                sessionStorage.setItem('pm_sidebar_scroll', sidebar.scrollTop);
+            };
+
+            sidebar.addEventListener('scroll', handleScroll);
+            return () => sidebar.removeEventListener('scroll', handleScroll);
+        }
+    }, []);
+    const [isProcurementOpen, setIsProcurementOpen] = useState(() => {
+        const saved = localStorage.getItem('pm_proc_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['purchase-requests', 'purchase-orders', 'purchase-approvals'].includes(currentPage);
+    });
+
+    const [isVendorOpen, setIsVendorOpen] = useState(() => {
+        const saved = localStorage.getItem('pm_vendor_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['purchase-vendors'].includes(currentPage);
+    });
+
+    const [isStockOpen, setIsStockOpen] = useState(() => {
+        const saved = localStorage.getItem('pm_stock_expanded');
+        if (saved !== null) return saved === 'true';
+        return ['purchase-stock'].includes(currentPage);
+    });
+
+    const toggleProc = () => {
+        const newState = !isProcurementOpen;
+        setIsProcurementOpen(newState);
+        localStorage.setItem('pm_proc_expanded', newState);
+    };
+
+    const toggleVendor = () => {
+        const newState = !isVendorOpen;
+        setIsVendorOpen(newState);
+        localStorage.setItem('pm_vendor_expanded', newState);
+    };
+
+    const toggleStock = () => {
+        const newState = !isStockOpen;
+        setIsStockOpen(newState);
+        localStorage.setItem('pm_stock_expanded', newState);
+    };
 
     const handleLogout = () => {
         clearAuth();
@@ -80,17 +125,16 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
 
     const vendorMenu = [
         { id: 'purchase-vendors', label: 'Vendors', icon: 'store', path: '/purchase/vendors' },
-        { id: 'purchase-items', label: 'Item Master', icon: 'inventory', path: '/purchase/items' },
     ];
 
     const stockMenu = [
         { id: 'purchase-stock', label: 'Current Stock', icon: 'warehouse', path: '/purchase/stock' },
     ];
 
-    const renderAccordion = ({ label, icon, isOpen, setOpen, items, groupLabel }) => (
+    const renderAccordion = ({ label, icon, isOpen, onToggle, items, groupLabel }) => (
         <div className="space-y-1">
             <button
-                onClick={() => setOpen(!isOpen)}
+                onClick={onToggle}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'}`}
             >
                 <div className="flex items-center gap-3">
@@ -131,7 +175,10 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                 </div>
             </div>
 
-            <nav className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-5">
+            <nav 
+                ref={sidebarRef}
+                className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-5"
+            >
                 {/* Overview */}
                 <div>
                     <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Overview</h2>
@@ -149,17 +196,17 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
 
                 {renderAccordion({
                     label: 'Procurement', icon: 'shopping_cart_checkout',
-                    isOpen: isProcurementOpen, setOpen: setIsProcurementOpen,
+                    isOpen: isProcurementOpen, onToggle: toggleProc,
                     items: procurementMenu, groupLabel: 'PURCHASE FLOW'
                 })}
                 {renderAccordion({
                     label: 'Vendor & Items', icon: 'store',
-                    isOpen: isVendorOpen, setOpen: setIsVendorOpen,
+                    isOpen: isVendorOpen, onToggle: toggleVendor,
                     items: vendorMenu, groupLabel: 'MASTER DATA'
                 })}
                 {renderAccordion({
                     label: 'Stock Visibility', icon: 'warehouse',
-                    isOpen: isStockOpen, setOpen: setIsStockOpen,
+                    isOpen: isStockOpen, onToggle: toggleStock,
                     items: stockMenu, groupLabel: 'READ ONLY'
                 })}
             </nav>

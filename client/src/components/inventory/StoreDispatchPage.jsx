@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout.js';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const currentPage = propCurrentPage || 'store-dispatches';
     const [dispatches, setDispatches] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -33,12 +35,12 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
         try {
             setAcknowledging(true);
             await inventoryService.confirmDispatch(dispatchId, remarks);
-            alert('Receipt acknowledged successfully!');
+            notifySuccess('Receipt acknowledged successfully.');
             setRemarks('');
             setSelectedDispatch(null);
             fetchDispatches();
         } catch (err) {
-            alert(err.response?.data?.message || 'Acknowledgment failed');
+            notifyError(err.response?.data?.message || 'Acknowledgment failed');
         } finally {
             setAcknowledging(false);
         }

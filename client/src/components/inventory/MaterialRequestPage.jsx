@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout.js';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const currentPage = propCurrentPage || 'material-requests';
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -25,11 +27,11 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                 setLoading(true);
                 const [reqRes, projRes, itemsRes] = await Promise.all([
                     inventoryService.getMaterialRequests(),
-                    api.get('/projects'), // Fetch PM projects
+                    inventoryService.getProjects(),
                     inventoryService.getItems()
                 ]);
                 setRequests(reqRes.data);
-                setProjects(projRes.data.filter(p => p.status === 'ACTIVE'));
+                setProjects(projRes.data.filter(p => ['ACTIVE', 'PLANNING'].includes(p.status)));
                 setItems(itemsRes.data);
             } catch (err) {
                 setError('Failed to load data. Please check connections.');
@@ -67,8 +69,9 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
             // Refresh requests
             const res = await inventoryService.getMaterialRequests();
             setRequests(res.data);
+            notifySuccess('Material request submitted successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Submission failed');
+            notifyError(err.response?.data?.message || 'Submission failed');
         } finally {
             setLoading(false);
         }
@@ -171,7 +174,7 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                                 >
                                     <option value="">Choose a hardware project...</option>
                                     {projects.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                        <option key={p._id || p.id} value={p._id || p.id}>{p.name}</option>
                                     ))}
                                 </select>
                             </div>
@@ -194,7 +197,7 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                                             >
                                                 <option value="">Select component...</option>
                                                 {items.map(i => (
-                                                    <option key={i.id} value={i.itemCode}>{i.name} ({i.itemCode})</option>
+                                                    <option key={i._id || i.id} value={i.itemCode}>{i.name} ({i.itemCode})</option>
                                                 ))}
                                             </select>
                                         </div>

@@ -27,6 +27,14 @@ const VendorSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 
+const ItemVendorSkuSchema = new mongoose.Schema({
+    itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+    vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
+    sku: String
+}, { timestamps: true });
+
+ItemVendorSkuSchema.index({ itemId: 1, vendorId: 1 }, { unique: true });
+
 const ItemSchema = new mongoose.Schema({
     itemCode: { type: String, required: true, unique: true },
     classificationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Classification', required: true },
@@ -35,6 +43,7 @@ const ItemSchema = new mongoose.Schema({
     uom: { type: String, default: 'Nos' },
     description: String,
     isActive: { type: Boolean, default: true },
+    // Legacy embedded skuMappings retained for backward compatibility
     skuMappings: [{
         vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' },
         sku: String
@@ -47,9 +56,11 @@ const StockLocationSchema = new mongoose.Schema({
     locationCode: { type: String, required: true, unique: true },
     name: { type: String, required: true },
     label: String,
+    notes: String,
     address: String,
     description: String,
     isDefault: { type: Boolean, default: false },
+    isActive: { type: Boolean, default: true },
     status: { type: String, default: 'ACTIVE' }
 }, { timestamps: true });
 
@@ -82,9 +93,14 @@ const StockMovementSchema = new mongoose.Schema({
     quantityChange: { type: Number, required: true },
     referenceType: String,
     referenceId: String,
+    serialNumbers: [String],
     remarks: String,
     createdById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, { timestamps: true });
+
+StockMovementSchema.index({ itemId: 1 });
+StockMovementSchema.index({ locationId: 1 });
+StockMovementSchema.index({ referenceType: 1, referenceId: 1 });
 
 // --- Material Request Workflow ---
 
@@ -117,6 +133,10 @@ const MaterialRequestSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+MaterialRequestSchema.index({ projectId: 1 });
+MaterialRequestSchema.index({ engineerId: 1 });
+MaterialRequestSchema.index({ status: 1 });
+
 // --- Store Workflow ---
 
 const StoreRequestBatchSchema = new mongoose.Schema({
@@ -131,7 +151,7 @@ const StoreRequestBatchSchema = new mongoose.Schema({
     routedAt: { type: Date, default: Date.now },
     notes: String,
     lines: [{
-        materialRequestLineId: String, // Reference to MR line array element ID
+        materialRequestLineId: String,
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
         requestedQuantity: { type: Number, required: true },
         pendingQuantity: { type: Number, required: true },
@@ -144,9 +164,12 @@ const StoreRequestBatchSchema = new mongoose.Schema({
         },
         source: { type: String, enum: ['STOCK', 'PURCHASE_INWARD'], default: 'STOCK' },
         shortageReason: String,
-        storeRemarks: String
+        storeRemarks: String,
+        purchaseInwardLineId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseInwardBatch' }
     }]
 }, { timestamps: true });
+
+StoreRequestBatchSchema.index({ status: 1 });
 
 const DispatchBatchSchema = new mongoose.Schema({
     dispatchNumber: { type: String, required: true, unique: true },
@@ -161,16 +184,20 @@ const DispatchBatchSchema = new mongoose.Schema({
     lines: [{
         storeRequestLineId: String,
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
-        dispatchedQuantity: { type: Number, required: true }
+        dispatchedQuantity: { type: Number, required: true },
+        serialNumbers: [String]
     }]
 }, { timestamps: true });
+
+DispatchBatchSchema.index({ storeRequestId: 1 });
+DispatchBatchSchema.index({ status: 1 });
 
 // --- Purchase Workflow ---
 
 const PurchaseRequestBatchSchema = new mongoose.Schema({
     batchNumber: { type: String, required: true, unique: true },
     materialRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialRequest', required: true },
-    status: { type: String, enum: ['PENDING', 'IN_PO', 'ORDERED', 'CANCELLED'], default: 'PENDING' },
+    status: { type: String, enum: ['PENDING', 'IN_PO', 'ORDERED', 'RECEIVED', 'CANCELLED'], default: 'PENDING' },
     routedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     routedAt: { type: Date, default: Date.now },
     lines: [{
@@ -182,12 +209,31 @@ const PurchaseRequestBatchSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+PurchaseRequestBatchSchema.index({ status: 1 });
+
+// --- Purchase Plan Line (Normalized, matches original PurchasePlanLine model) ---
+const PurchasePlanLineSchema = new mongoose.Schema({
+    purchaseRequestLineId: { type: String, required: true },
+    itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+    vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor' },
+    requestedQuantity: { type: Number, required: true },
+    orderQuantity: { type: Number, default: 0 },
+    rate: { type: Number },
+    gstPercent: { type: Number, default: 18 },
+    sku: String,
+    remarks: String
+}, { timestamps: true });
+
+PurchasePlanLineSchema.index({ purchaseRequestLineId: 1 }, { unique: true });
+PurchasePlanLineSchema.index({ itemId: 1 });
+PurchasePlanLineSchema.index({ vendorId: 1 });
+
 const PurchaseOrderSchema = new mongoose.Schema({
     poNumber: { type: String, required: true, unique: true },
     vendorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Vendor', required: true },
     status: { 
         type: String, 
-        enum: ['DRAFT', 'PENDING_ADMIN_APPROVAL', 'APPROVED', 'REJECTED', 'PLACED'],
+        enum: ['DRAFT', 'PENDING_ADMIN_APPROVAL', 'APPROVED', 'REJECTED', 'PLACED', 'RECEIVED'],
         default: 'DRAFT' 
     },
     createdById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -195,6 +241,12 @@ const PurchaseOrderSchema = new mongoose.Schema({
     approvedAt: Date,
     placedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     placedAt: Date,
+    submittedForApprovalAt: Date,
+    rejectedAt: Date,
+    expectedDeliveryDate: Date,
+    vendorDocumentNote: String,
+    paymentTerms: String,
+    deliveryTerms: String,
     adminRemarks: String,
     notes: String,
     lines: [{
@@ -213,6 +265,21 @@ const PurchaseOrderSchema = new mongoose.Schema({
     }]
 }, { timestamps: true });
 
+PurchaseOrderSchema.index({ vendorId: 1 });
+PurchaseOrderSchema.index({ status: 1 });
+
+// --- Purchase Order Line Allocation (Normalized, matches original) ---
+const PurchaseOrderLineAllocationSchema = new mongoose.Schema({
+    purchaseOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
+    purchaseOrderLineId: { type: String, required: true },
+    purchaseRequestLineId: { type: String, required: true },
+    orderedQuantity: { type: Number, required: true },
+    receivedQuantity: { type: Number, default: 0 }
+}, { timestamps: true });
+
+PurchaseOrderLineAllocationSchema.index({ purchaseOrderLineId: 1, purchaseRequestLineId: 1 }, { unique: true });
+PurchaseOrderLineAllocationSchema.index({ purchaseRequestLineId: 1 });
+
 const PurchaseInwardBatchSchema = new mongoose.Schema({
     inwardNumber: { type: String, required: true, unique: true },
     purchaseOrderId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseOrder', required: true },
@@ -225,13 +292,61 @@ const PurchaseInwardBatchSchema = new mongoose.Schema({
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
         locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockLocation', required: true },
         receivedQuantity: { type: Number, required: true },
-        serials: [String]
+        serials: [String],
+        serialNumbers: [String]
     }]
 }, { timestamps: true });
+
+PurchaseInwardBatchSchema.index({ purchaseOrderId: 1 });
+
+const AuditLogSchema = new mongoose.Schema({
+    actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    actorRole: String,
+    entityType: { type: String, required: true },
+    entityId: { type: String, required: true },
+    action: { type: String, enum: ['CREATE', 'UPDATE', 'DELETE', 'IMPORT', 'APPROVE', 'REJECT', 'HOLD'], required: true },
+    before: mongoose.Schema.Types.Mixed,
+    after: mongoose.Schema.Types.Mixed,
+    remarks: String,
+    // Legacy compat fields
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userName: String,
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} }
+}, { timestamps: true });
+
+AuditLogSchema.index({ entityType: 1, entityId: 1 });
+AuditLogSchema.index({ actorUserId: 1 });
+
+// --- Stock Adjustment & Reconciliation ---
+
+const StockAdjustmentBatchSchema = new mongoose.Schema({
+    batchType: { type: String, enum: ['MANUAL_ADDITION', 'RECONCILIATION'], default: 'RECONCILIATION' },
+    status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'REJECTED'], default: 'DRAFT' },
+    reason: String,
+    uploadedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    approvedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    adminRemarks: String,
+    submittedAt: Date,
+    approvedAt: Date,
+    rejectedAt: Date,
+    lines: [{
+        itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+        locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockLocation', required: true },
+        systemQuantity: { type: Number, default: 0 },
+        uploadedQuantity: { type: Number, required: true },
+        adjustmentQuantity: { type: Number, required: true },
+        rowNumber: Number,
+        remarks: String
+    }]
+}, { timestamps: true });
+
+StockAdjustmentBatchSchema.index({ status: 1 });
+StockAdjustmentBatchSchema.index({ batchType: 1 });
 
 module.exports = {
     Classification: mongoose.model('Classification', ClassificationSchema),
     Vendor: mongoose.model('Vendor', VendorSchema),
+    ItemVendorSku: mongoose.model('ItemVendorSku', ItemVendorSkuSchema),
     Item: mongoose.model('Item', ItemSchema),
     StockLocation: mongoose.model('StockLocation', StockLocationSchema),
     StockBalance: mongoose.model('StockBalance', StockBalanceSchema),
@@ -240,6 +355,10 @@ module.exports = {
     StoreRequestBatch: mongoose.model('StoreRequestBatch', StoreRequestBatchSchema),
     DispatchBatch: mongoose.model('DispatchBatch', DispatchBatchSchema),
     PurchaseRequestBatch: mongoose.model('PurchaseRequestBatch', PurchaseRequestBatchSchema),
+    PurchasePlanLine: mongoose.model('PurchasePlanLine', PurchasePlanLineSchema),
     PurchaseOrder: mongoose.model('PurchaseOrder', PurchaseOrderSchema),
-    PurchaseInwardBatch: mongoose.model('PurchaseInwardBatch', PurchaseInwardBatchSchema)
+    PurchaseOrderLineAllocation: mongoose.model('PurchaseOrderLineAllocation', PurchaseOrderLineAllocationSchema),
+    PurchaseInwardBatch: mongoose.model('PurchaseInwardBatch', PurchaseInwardBatchSchema),
+    StockAdjustmentBatch: mongoose.model('StockAdjustmentBatch', StockAdjustmentBatchSchema),
+    AuditLog: mongoose.model('AuditLog', AuditLogSchema)
 };

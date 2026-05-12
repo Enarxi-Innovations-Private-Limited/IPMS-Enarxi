@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function StockTransfer() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [stock, setStock] = useState([]);
     const [locations, setLocations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -21,7 +23,7 @@ export default function StockTransfer() {
             try {
                 setLoading(true);
                 const [stockRes, locRes] = await Promise.all([
-                    inventoryService.getCurrentStock(),
+                    inventoryService.getItems(),
                     inventoryService.getLocations()
                 ]);
                 setStock(stockRes.data);
@@ -38,16 +40,17 @@ export default function StockTransfer() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (formData.fromLocationId === formData.toLocationId) {
-            return alert('Source and destination locations must be different.');
+            notifyError('Source and destination locations must be different.');
+            return;
         }
 
         try {
             setTransferring(true);
             await inventoryService.transferStock(formData);
-            alert('Stock transfer completed successfully!');
+            notifySuccess('Stock transfer completed successfully.');
             setFormData({ itemId: '', fromLocationId: '', toLocationId: '', quantity: 0, remarks: '' });
         } catch (err) {
-            alert(err.response?.data?.message || 'Transfer failed');
+            notifyError(err.response?.data?.message || 'Transfer failed');
         } finally {
             setTransferring(false);
         }
@@ -74,7 +77,7 @@ export default function StockTransfer() {
                                 >
                                     <option value="">Choose item to transfer...</option>
                                     {stock.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name} ({s.itemCode})</option>
+                                        <option key={s.id || s._id} value={s.id || s._id}>{s.name} ({s.itemCode})</option>
                                     ))}
                                 </select>
                             </div>
@@ -89,7 +92,7 @@ export default function StockTransfer() {
                                 >
                                     <option value="">Source location...</option>
                                     {locations.map(loc => (
-                                        <option key={loc.id} value={loc.id}>{loc.name} ({loc.locationCode})</option>
+                                        <option key={loc.id || loc._id} value={loc.id || loc._id}>{loc.name} ({loc.locationCode})</option>
                                     ))}
                                 </select>
                             </div>
@@ -104,7 +107,7 @@ export default function StockTransfer() {
                                 >
                                     <option value="">Destination location...</option>
                                     {locations.map(loc => (
-                                        <option key={loc.id} value={loc.id}>{loc.name} ({loc.locationCode})</option>
+                                        <option key={loc.id || loc._id} value={loc.id || loc._id}>{loc.name} ({loc.locationCode})</option>
                                     ))}
                                 </select>
                             </div>

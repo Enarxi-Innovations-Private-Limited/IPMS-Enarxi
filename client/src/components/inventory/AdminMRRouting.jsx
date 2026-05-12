@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function AdminMRRouting() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [requests, setRequests] = useState([]);
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [selectedLines, setSelectedLines] = useState([]);
@@ -13,16 +15,32 @@ export default function AdminMRRouting() {
     useEffect(() => {
         fetchRequests();
         setSelectedLines([]);
-    }, [selectedRequest?.id]);
+    }, [selectedRequest?._id, selectedRequest?.id]);
+
+    const getId = (value) => value?._id || value?.id || '';
 
     const fetchRequests = async () => {
         try {
             setLoading(true);
             const res = await inventoryService.getMaterialRequests();
-            // Show all requests, but highlight those that need routing
-            setRequests(res.data);
+            setRequests(res.data || []);
         } catch (err) {
             console.error(err);
+            notifyError(err.response?.data?.message || 'Failed to load material requests');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSelectRequest = async (requestSummary) => {
+        try {
+            setLoading(true);
+            const requestId = getId(requestSummary);
+            const res = await inventoryService.getMaterialRequestDetails(requestId);
+            setSelectedRequest(res.data);
+            setSelectedLines([]);
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to load request details');
         } finally {
             setLoading(false);
         }
@@ -37,12 +55,12 @@ export default function AdminMRRouting() {
                 plannedPurchaseQuantity: purchaseQty,
                 adminRemarks: 'Routed via IPMS Admin Portal'
             });
-            // Refresh details
-            const res = await inventoryService.getMaterialRequestDetails(selectedRequest.id);
+            const res = await inventoryService.getMaterialRequestDetails(getId(selectedRequest));
             setSelectedRequest(res.data);
             fetchRequests();
+            notifySuccess('Request line routed successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Routing failed');
+            notifyError(err.response?.data?.message || 'Routing failed');
         } finally {
             setProcessing(false);
         }
@@ -51,41 +69,43 @@ export default function AdminMRRouting() {
     const handleBulkRoute = async (target) => {
         try {
             setProcessing(true);
-            // Prepare payload for bulk routing
-            // In the reference backend, routeTarget determines whether it goes to store or purchase
-            const formData = new FormData();
-            formData.append('requestId', selectedRequest.id);
-            formData.append('routeTarget', target);
+            const payload = {
+                requestId: getId(selectedRequest),
+                routeTarget: target,
+                lineId: selectedLines
+            };
 
-            selectedLines.forEach(lineId => {
-                formData.append('lineId', lineId);
-                const line = selectedRequest.lines.find(l => l.id === lineId);
+            selectedLines.forEach((lineId) => {
+                const line = selectedRequest.lines.find((entry) => getId(entry) === lineId);
+                if (!line) return;
+
                 if (target === 'store') {
-                    formData.append(`store:${lineId}`, line.requiredQuantity);
-                    formData.append(`purchase:${lineId}`, 0);
+                    payload[`store:${lineId}`] = line.requiredQuantity;
+                    payload[`purchase:${lineId}`] = 0;
                 } else {
-                    formData.append(`store:${lineId}`, 0);
-                    formData.append(`purchase:${lineId}`, line.requiredQuantity);
+                    payload[`store:${lineId}`] = 0;
+                    payload[`purchase:${lineId}`] = line.requiredQuantity;
                 }
-                formData.append(`remarks:${lineId}`, `Bulk routed to ${target} via IPMS`);
+
+                payload[`remarks:${lineId}`] = `Bulk routed to ${target} via IPMS`;
             });
 
-            await inventoryService.routeMaterialRequestBulk(formData);
-            alert(`Bulk routed ${selectedLines.length} lines to ${target}`);
+            await inventoryService.routeMaterialRequestBulk(payload);
+            notifySuccess(`Bulk routed ${selectedLines.length} lines to ${target}.`);
             setSelectedLines([]);
 
-            const res = await inventoryService.getMaterialRequestDetails(selectedRequest.id);
+            const res = await inventoryService.getMaterialRequestDetails(getId(selectedRequest));
             setSelectedRequest(res.data);
             fetchRequests();
         } catch (err) {
-            alert(err.response?.data?.message || 'Bulk routing failed');
+            notifyError(err.response?.data?.message || 'Bulk routing failed');
         } finally {
             setProcessing(false);
         }
     };
 
     return (
-        <Layout currentPage="store-requests">
+        <Layout currentPage="inv-store-routing">
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
@@ -94,7 +114,6 @@ export default function AdminMRRouting() {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* Queue List */}
                         <div className="lg:col-span-1 space-y-4">
                             <h2 className="text-xs font-black uppercase tracking-widest text-text-secondary px-2">Incoming Queue</h2>
                             {loading ? (
@@ -103,33 +122,36 @@ export default function AdminMRRouting() {
                                     <div className="h-4 bg-border-dark rounded w-2/3 mx-auto"></div>
                                 </div>
                             ) : (
-                                requests.map(req => (
-                                    <button
-                                        key={req.id}
-                                        onClick={() => setSelectedRequest(req)}
-                                        className={`w-full text-left p-4 rounded-xl border transition-all ${selectedRequest?.id === req.id
+                                requests.map((req) => {
+                                    const requestId = getId(req);
+                                    const selectedId = getId(selectedRequest);
+                                    return (
+                                        <button
+                                            key={requestId}
+                                            onClick={() => handleSelectRequest(req)}
+                                            className={`w-full text-left p-4 rounded-xl border transition-all ${selectedId === requestId
                                                 ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10'
                                                 : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'
-                                            }`}
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="font-mono text-primary text-xs font-bold">{req.requestNumber}</span>
-                                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${req.status === 'SUBMITTED' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-400'
-                                                }`}>
-                                                {req.status}
-                                            </span>
-                                        </div>
-                                        <div className="text-white font-bold truncate">{req.project?.name}</div>
-                                        <div className="text-text-secondary text-xs mt-1 flex justify-between">
-                                            <span>{req._count?.lines || 0} items</span>
-                                            <span>{new Date(req.createdAt).toLocaleDateString()}</span>
-                                        </div>
-                                    </button>
-                                ))
+                                                }`}
+                                        >
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="font-mono text-primary text-xs font-bold">{req.requestNumber}</span>
+                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${req.status === 'SUBMITTED' ? 'bg-amber-500/20 text-amber-500' : 'bg-emerald-500/20 text-emerald-400'
+                                                    }`}>
+                                                    {req.status}
+                                                </span>
+                                            </div>
+                                            <div className="text-white font-bold truncate">{req.project?.name}</div>
+                                            <div className="text-text-secondary text-xs mt-1 flex justify-between">
+                                                <span>{req._count?.lines || req.lines?.length || 0} items</span>
+                                                <span>{req.createdAt ? new Date(req.createdAt).toLocaleDateString() : ''}</span>
+                                            </div>
+                                        </button>
+                                    );
+                                })
                             )}
                         </div>
 
-                        {/* Routing Workspace */}
                         <div className="lg:col-span-2">
                             {selectedRequest ? (
                                 <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
@@ -184,12 +206,15 @@ export default function AdminMRRouting() {
                                                             type="checkbox"
                                                             onChange={(e) => {
                                                                 if (e.target.checked) {
-                                                                    setSelectedLines(selectedRequest.lines.filter(l => l.status === 'SUBMITTED').map(l => l.id));
+                                                                    const ids = (selectedRequest.lines || [])
+                                                                        .filter((line) => line.status === 'SUBMITTED')
+                                                                        .map((line) => getId(line));
+                                                                    setSelectedLines(ids);
                                                                 } else {
                                                                     setSelectedLines([]);
                                                                 }
                                                             }}
-                                                            checked={selectedLines.length > 0 && selectedLines.length === selectedRequest.lines.filter(l => l.status === 'SUBMITTED').length}
+                                                            checked={selectedLines.length > 0 && selectedLines.length === (selectedRequest.lines || []).filter((line) => line.status === 'SUBMITTED').length}
                                                             className="accent-primary"
                                                         />
                                                     </th>
@@ -200,77 +225,82 @@ export default function AdminMRRouting() {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border-dark">
-                                                {selectedRequest.lines?.map(line => (
-                                                    <tr key={line.id} className={`group transition-colors ${selectedLines.includes(line.id) ? 'bg-primary/5' : ''}`}>
-                                                        <td className="py-4">
-                                                            {line.status === 'SUBMITTED' && (
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={selectedLines.includes(line.id)}
-                                                                    onChange={() => {
-                                                                        if (selectedLines.includes(line.id)) {
-                                                                            setSelectedLines(selectedLines.filter(id => id !== line.id));
-                                                                        } else {
-                                                                            setSelectedLines([...selectedLines, line.id]);
-                                                                        }
-                                                                    }}
-                                                                    className="accent-primary"
-                                                                />
-                                                            )}
-                                                        </td>
-                                                        <td className="py-4">
-                                                            <div className="text-white font-medium">{line.item?.name}</div>
-                                                            <div className="text-text-secondary text-xs">{line.item?.itemCode}</div>
-                                                        </td>
-                                                        <td className="py-4 text-center font-bold text-white">{line.requiredQuantity}</td>
-                                                        <td className="py-4 text-center">
-                                                            <span className={`text-sm font-bold ${line.availableAtUpload > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                                {line.availableAtUpload}
-                                                            </span>
-                                                        </td>
-                                                        <td className="py-4 px-4">
-                                                            {line.status === 'SUBMITTED' ? (
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="flex-1 flex gap-1">
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="Store"
-                                                                            className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-emerald-400 font-bold outline-none focus:border-emerald-500"
-                                                                            defaultValue={Math.min(line.requiredQuantity, line.availableAtUpload)}
-                                                                            id={`store-${line.id}`}
-                                                                        />
-                                                                        <input
-                                                                            type="number"
-                                                                            placeholder="Purchase"
-                                                                            className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-amber-400 font-bold outline-none focus:border-amber-500"
-                                                                            defaultValue={Math.max(0, line.requiredQuantity - line.availableAtUpload)}
-                                                                            id={`pur-${line.id}`}
-                                                                        />
-                                                                    </div>
-                                                                    <button
-                                                                        disabled={processing}
-                                                                        onClick={() => {
-                                                                            const s = parseFloat(document.getElementById(`store-${line.id}`).value);
-                                                                            const p = parseFloat(document.getElementById(`pur-${line.id}`).value);
-                                                                            handleRouteLine(line.id, s, p);
+                                                {(selectedRequest.lines || []).map((line) => {
+                                                    const lineId = getId(line);
+                                                    return (
+                                                        <tr key={lineId} className={`group transition-colors ${selectedLines.includes(lineId) ? 'bg-primary/5' : ''}`}>
+                                                            <td className="py-4">
+                                                                {line.status === 'SUBMITTED' && (
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={selectedLines.includes(lineId)}
+                                                                        onChange={() => {
+                                                                            if (selectedLines.includes(lineId)) {
+                                                                                setSelectedLines(selectedLines.filter((id) => id !== lineId));
+                                                                            } else {
+                                                                                setSelectedLines([...selectedLines, lineId]);
+                                                                            }
                                                                         }}
-                                                                        className="p-1.5 rounded bg-primary text-white hover:bg-primary/80 transition-colors"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">check</span>
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex flex-col gap-1">
-                                                                    <div className="flex gap-2 text-[10px] font-bold">
-                                                                        {line.plannedStoreQuantity > 0 && <span className="text-emerald-400">Store: {line.plannedStoreQuantity}</span>}
-                                                                        {line.plannedPurchaseQuantity > 0 && <span className="text-amber-400">Purchase: {line.plannedPurchaseQuantity}</span>}
+                                                                        className="accent-primary"
+                                                                    />
+                                                                )}
+                                                            </td>
+                                                            <td className="py-4">
+                                                                <div className="text-white font-medium">{line.item?.name}</div>
+                                                                <div className="text-text-secondary text-xs">{line.item?.itemCode}</div>
+                                                            </td>
+                                                            <td className="py-4 text-center font-bold text-white">{line.requiredQuantity}</td>
+                                                            <td className="py-4 text-center">
+                                                                <span className={`text-sm font-bold ${(line.availableAtUpload || 0) > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                    {line.availableAtUpload || 0}
+                                                                </span>
+                                                            </td>
+                                                            <td className="py-4 px-4">
+                                                                {line.status === 'SUBMITTED' ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="flex-1 flex gap-1">
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Store"
+                                                                                className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-emerald-400 font-bold outline-none focus:border-emerald-500"
+                                                                                defaultValue={Math.min(line.requiredQuantity, line.availableAtUpload || 0)}
+                                                                                id={`store-${lineId}`}
+                                                                            />
+                                                                            <input
+                                                                                type="number"
+                                                                                placeholder="Purchase"
+                                                                                className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-amber-400 font-bold outline-none focus:border-amber-500"
+                                                                                defaultValue={Math.max(0, line.requiredQuantity - (line.availableAtUpload || 0))}
+                                                                                id={`pur-${lineId}`}
+                                                                            />
+                                                                        </div>
+                                                                        <button
+                                                                            disabled={processing}
+                                                                            onClick={() => {
+                                                                                const storeInput = document.getElementById(`store-${lineId}`);
+                                                                                const purchaseInput = document.getElementById(`pur-${lineId}`);
+                                                                                const storeQty = parseFloat(storeInput?.value || '0');
+                                                                                const purchaseQty = parseFloat(purchaseInput?.value || '0');
+                                                                                handleRouteLine(lineId, storeQty, purchaseQty);
+                                                                            }}
+                                                                            className="p-1.5 rounded bg-primary text-white hover:bg-primary/80 transition-colors"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-sm">check</span>
+                                                                        </button>
                                                                     </div>
-                                                                    <span className="text-[9px] uppercase tracking-tighter text-text-secondary">{line.status.replace(/_/g, ' ')}</span>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                                ) : (
+                                                                    <div className="flex flex-col gap-1">
+                                                                        <div className="flex gap-2 text-[10px] font-bold">
+                                                                            {line.plannedStoreQuantity > 0 && <span className="text-emerald-400">Store: {line.plannedStoreQuantity}</span>}
+                                                                            {line.plannedPurchaseQuantity > 0 && <span className="text-amber-400">Purchase: {line.plannedPurchaseQuantity}</span>}
+                                                                        </div>
+                                                                        <span className="text-[9px] uppercase tracking-tighter text-text-secondary">{line.status?.replace(/_/g, ' ')}</span>
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>

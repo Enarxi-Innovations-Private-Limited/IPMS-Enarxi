@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import SuperUserLayout from '../common/SuperUserLayout.jsx';
+import BulkProjectUploadModal from './BulkProjectUploadModal.jsx';
 
 export default function SuperUserProjectsPage() {
     const navigate = useNavigate();
@@ -42,6 +43,7 @@ export default function SuperUserProjectsPage() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDetailsModal, setShowDetailsModal] = useState(false);
     const [showTeamModal, setShowTeamModal] = useState(false);
+    const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
     const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
     const [showAttachmentDeleteConfirm, setShowAttachmentDeleteConfirm] = useState(false);
     const [fileToDelete, setFileToDelete] = useState(null);
@@ -453,10 +455,22 @@ export default function SuperUserProjectsPage() {
                             <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Projects</h1>
                             <p className="text-text-secondary text-lg">Manage all projects and their teams.</p>
                         </div>
-                        <button onClick={openCreateModal} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all">
-                            <span className="material-symbols-outlined text-lg">add</span>
-                            New Project
-                        </button>
+                        <div className="flex gap-3">
+                            <button 
+                                onClick={() => setShowBulkUploadModal(true)} 
+                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-surface-dark border border-border-dark text-white font-bold hover:bg-background-dark transition-all"
+                            >
+                                <span className="material-symbols-outlined text-lg">upload_file</span>
+                                Bulk Upload
+                            </button>
+                            <button 
+                                onClick={openCreateModal} 
+                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
+                            >
+                                <span className="material-symbols-outlined text-lg">add</span>
+                                New Project
+                            </button>
+                        </div>
                     </div>
 
                     {/* Search and Filter */}
@@ -583,6 +597,13 @@ export default function SuperUserProjectsPage() {
                     )}
                 </div>
             </div>
+
+            {/* Bulk Upload Modal */}
+            <BulkProjectUploadModal 
+                isOpen={showBulkUploadModal}
+                onClose={() => setShowBulkUploadModal(false)}
+                onUploadSuccess={loadProjects}
+            />
 
             {/* Create Project Modal */}
             {showCreateModal && (

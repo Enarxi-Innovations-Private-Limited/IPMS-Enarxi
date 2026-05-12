@@ -6,7 +6,7 @@ import inventoryService from '../../services/inventoryService';
 export default function StoreDashboard() {
     const Layout = usePortalLayout();
     const navigate = useNavigate();
-    const [stats, setStats] = useState({ stock: 0, lowStock: 0, pending: 0, dispatches: 0 });
+    const [stats, setStats] = useState({ stock: 0, lowStock: 0, pending: 0, dispatches: 0, inward: 0, approvals: 0 });
     const [loading, setLoading] = useState(true);
     const [recentMovements, setRecentMovements] = useState([]);
 
@@ -14,18 +14,27 @@ export default function StoreDashboard() {
         const fetchData = async () => {
             try {
                 setLoading(true);
-                const [stockRes, histRes] = await Promise.all([
+                const [stockRes, ledgerRes, storeReqRes, dispatchRes, poRes] = await Promise.all([
                     inventoryService.getCurrentStock(),
-                    inventoryService.getStockHistory(),
+                    inventoryService.getStockLedger(),
+                    inventoryService.getStoreRequests(),
+                    inventoryService.getDispatches(),
+                    inventoryService.getPurchaseOrders()
                 ]);
                 const stockData = stockRes.data || [];
+                const pendingRequests = (storeReqRes.data || []).filter(r => r.status === 'PENDING').length;
+                const readyDispatches = (dispatchRes.data || []).filter(d => d.status === 'DISPATCHED').length;
+                const inwardPending = (poRes.data || []).filter(po => po.status === 'PLACED').length;
+
                 setStats({
                     stock: stockData.length,
                     lowStock: stockData.filter(i => i.quantityOnHand < 5).length,
-                    pending: 0,
-                    dispatches: 0,
+                    pending: pendingRequests,
+                    dispatches: readyDispatches,
+                    inward: inwardPending,
+                    approvals: 0, // Placeholder for now until adjustment API is verified
                 });
-                setRecentMovements((histRes.data || []).slice(0, 8));
+                setRecentMovements((ledgerRes.data || []).slice(0, 8));
             } catch (err) {
                 console.error(err);
             } finally {
@@ -45,8 +54,8 @@ export default function StoreDashboard() {
     const statCards = [
         { label: 'Store requests', value: stats.pending, icon: 'assignment', color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
         { label: 'Ready dispatch', value: stats.dispatches, icon: 'local_shipping', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-        { label: 'Inward pending', value: 0, icon: 'input', color: 'text-amber-400', bg: 'bg-amber-500/10' },
-        { label: 'Stock approvals', value: 0, icon: 'check_circle', color: 'text-teal-400', bg: 'bg-teal-500/10' },
+        { label: 'Inward pending', value: stats.inward, icon: 'input', color: 'text-amber-400', bg: 'bg-amber-500/10' },
+        { label: 'Stock approvals', value: stats.approvals, icon: 'check_circle', color: 'text-teal-400', bg: 'bg-teal-500/10' },
     ];
 
     return (

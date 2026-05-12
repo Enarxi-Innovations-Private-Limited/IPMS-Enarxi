@@ -12,20 +12,22 @@ export default function InventoryDashboard() {
         pendingPOs: 0
     });
     const [loading, setLoading] = useState(true);
+    const [recentMovements, setRecentMovements] = useState([]);
 
     useEffect(() => {
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
-                const [stockRes, mrRes, poRes] = await Promise.all([
+                const [stockRes, mrRes, poRes, ledgerRes] = await Promise.all([
                     inventoryService.getCurrentStock(),
                     inventoryService.getMaterialRequests(),
-                    inventoryService.getPurchaseOrders()
+                    inventoryService.getPurchaseOrders(),
+                    inventoryService.getStockLedger()
                 ]);
 
                 const stock = stockRes.data;
                 const totalSkus = stock.length;
-                const totalValue = stock.reduce((sum, item) => sum + (item.quantityOnHand * 100), 0); // Simplified value calc
+                const totalValue = stock.reduce((sum, item) => sum + (item.quantityOnHand * (item.avgPurchasePrice || 100)), 0); 
                 const lowStockCount = stock.filter(item => item.quantityOnHand < 5).length;
 
                 const pendingMRs = mrRes.data.filter(mr => mr.status === 'SUBMITTED').length;
@@ -38,6 +40,7 @@ export default function InventoryDashboard() {
                     pendingMRs,
                     pendingPOs
                 });
+                setRecentMovements(ledgerRes.data.slice(0, 5)); // Show latest 5
             } catch (err) {
                 console.error('Failed to load dashboard data:', err);
             } finally {
@@ -125,22 +128,26 @@ export default function InventoryDashboard() {
                                 <button className="text-xs text-primary font-bold hover:underline">See All</button>
                             </div>
                             <div className="space-y-4">
-                                {[...Array(4)].map((_, i) => (
-                                    <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-background-dark/30 border border-border-dark/50">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`size-8 rounded-full flex items-center justify-center text-xs font-bold ${i % 2 === 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
-                                                {i % 2 === 0 ? 'IN' : 'OUT'}
+                                {recentMovements.length === 0 ? (
+                                    <div className="py-10 text-center text-text-secondary text-sm">No recent activity</div>
+                                ) : (
+                                    recentMovements.map((log, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-background-dark/30 border border-border-dark/50">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`size-8 rounded-full flex items-center justify-center text-[10px] font-bold ${log.quantityChange > 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}`}>
+                                                    {log.quantityChange > 0 ? 'IN' : 'OUT'}
+                                                </div>
+                                                <div>
+                                                    <div className="text-white text-xs font-bold">{log.itemId?.name || 'Component'}</div>
+                                                    <div className="text-text-secondary text-[10px]">{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {log.movementType?.replace(/_/g, ' ')}</div>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <div className="text-white text-xs font-bold">Component ID #{1000 + i}</div>
-                                                <div className="text-text-secondary text-[10px]">2 hours ago</div>
+                                            <div className={`text-xs font-black ${log.quantityChange > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
                                             </div>
                                         </div>
-                                        <div className={`text-xs font-black ${i % 2 === 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                            {i % 2 === 0 ? '+' : '-'}{Math.floor(Math.random() * 50)}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>

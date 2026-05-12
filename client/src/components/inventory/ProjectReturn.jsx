@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout.js';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function ProjectReturn({ currentPage: propCurrentPage }) {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const currentPage = propCurrentPage || 'returns';
     const [projects, setProjects] = useState([]);
     const [items, setItems] = useState([]);
@@ -64,10 +66,10 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                 reason: `Project Return: ${projects.find(p => p.id === formData.projectId)?.name}`,
                 payload: JSON.stringify(payload)
             });
-            alert('Project return submitted for approval!');
+            notifySuccess('Project return submitted for approval.');
             setFormData({ projectId: '', locationId: '', items: [{ itemCode: '', quantity: 1, remarks: '' }] });
         } catch (err) {
-            alert('Submission failed. Ensure all fields are correct.');
+            notifyError(err.response?.data?.message || 'Submission failed. Ensure all fields are correct.');
         } finally {
             setSubmitting(false);
         }

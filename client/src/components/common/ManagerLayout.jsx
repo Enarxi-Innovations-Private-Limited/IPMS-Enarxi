@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getCurrentUser } from '../../services/authService.js';
 import api from '../../services/api.js';
@@ -15,10 +15,38 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     const [passwordSuccess, setPasswordSuccess] = useState('');
     const [isChangingPassword, setIsChangingPassword] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-    const [isInventoryOpen, setIsInventoryOpen] = useState(
-        currentPage.startsWith('inv-') || 
-        ['inventory', 'material-requests', 'returns', 'inv-dispatches', 'inv-ledger'].includes(currentPage)
-    );
+    const sidebarRef = useRef(null);
+
+    // Persistence for scroll position
+    useEffect(() => {
+        const sidebar = sidebarRef.current;
+        if (sidebar) {
+            const savedScroll = sessionStorage.getItem('man_sidebar_scroll');
+            if (savedScroll) {
+                sidebar.scrollTop = parseInt(savedScroll, 10);
+            }
+
+            const handleScroll = () => {
+                sessionStorage.setItem('man_sidebar_scroll', sidebar.scrollTop);
+            };
+
+            sidebar.addEventListener('scroll', handleScroll);
+            return () => sidebar.removeEventListener('scroll', handleScroll);
+        }
+    }, []);
+
+    const [isInventoryOpen, setIsInventoryOpen] = useState(() => {
+        const saved = localStorage.getItem('man_inventory_expanded');
+        if (saved !== null) return saved === 'true';
+        return currentPage.startsWith('inv-') || 
+               ['inventory', 'material-requests', 'returns', 'inv-dispatches', 'inv-ledger'].includes(currentPage);
+    });
+
+    const toggleInventory = () => {
+        const newState = !isInventoryOpen;
+        setIsInventoryOpen(newState);
+        localStorage.setItem('man_inventory_expanded', newState);
+    };
 
     const handleLogout = () => {
         clearAuth();
@@ -107,7 +135,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                     </div>
 
                     {/* Navigation */}
-                    <nav className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-6">
+                    <nav ref={sidebarRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-6">
                         {/* Main Apps */}
                         <div className="space-y-1">
                             <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Portal Apps</h2>
@@ -140,7 +168,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         {/* Inventory Section (Accordion) */}
                         <div className="space-y-1">
                             <button
-                                onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+                                onClick={toggleInventory}
                                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
                                     }`}
                             >
@@ -247,7 +275,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         {/* Inventory Section (Accordion) */}
                         <div className="space-y-1">
                             <button
-                                onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+                                onClick={toggleInventory}
                                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
                                     }`}
                             >

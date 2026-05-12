@@ -13,8 +13,10 @@ const path = require('path');
 const fs = require('fs');
 const connectDB = require('./db');
 const { User, Project, Task, Activity, Notification } = require('./models');
+const inventoryRoutes = require('./inventoryRoutes');
 
 const app = express();
+
 // CORS Configuration - Allow Production & Development
 const allowedOrigins = [
     'https://ipms-enarxi.vercel.app',
@@ -44,6 +46,8 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+app.use('/api/inventory', inventoryRoutes);
+
 // Test Endpoint for DB Connection
 app.get('/api/test', (req, res) => {
     const dbState = mongoose.connection.readyState;
@@ -60,57 +64,40 @@ app.get('/api/test', (req, res) => {
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
 const INVENTORY_API_URL = process.env.INVENTORY_API_URL || 'http://localhost:3000';
 
-// ============================================================
-// INVENTORY PROXY — forwards /api/inventory/* to Inventory Tracker
-// ============================================================
-const proxyToInventory = async (req, res) => {
-    const startTime = Date.now();
-    const url = `${INVENTORY_API_URL}${req.originalUrl}`;
-    const userLabel = req.user ? `[${req.user.role}] ${req.user.name}` : '[unauthenticated]';
-
-    console.log(`\n🔀 [Proxy] ${req.method} ${req.originalUrl}`);
-    console.log(`   👤 User   : ${userLabel}`);
-    console.log(`   🌐 Target : ${url}`);
-    if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-        console.log(`   📦 Body   :`, JSON.stringify(req.body).substring(0, 200));
-    }
+const syncProjectToInventory = async (project, user) => {
+    // Only sync HARDWARE projects to the Inventory system
+    if (project.department !== 'HARDWARE') return;
 
     try {
-        const response = await fetch(url, {
-            method: req.method,
+        const manager = await User.findById(project.managerId);
+        // Point to the new standalone IT Backend port
+        const url = `http://localhost:5001/api/projects`; 
+        const payload = {
+            name: project.name,
+            projectCode: project.projectCode,
+            status: project.status,
+            engineerEmail: manager?.email || '',
+            engineerName: manager?.name || '',
+        };
+
+        console.log(`📡 [Sync] Syncing project ${project.projectCode} to Inventory Tracker...`);
+        const res = await fetch(url, {
+            method: 'POST',
             headers: {
                 'content-type': 'application/json',
-                'x-user-id': req.user?._id?.toString() || '',
-                'x-user-role': req.user?.role || '',
+                'Authorization': `Bearer ${jwt.sign({ id: user?._id, name: user?.name, email: user?.email, role: user?.role }, JWT_SECRET, { expiresIn: '1m' })}`
             },
-            body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? JSON.stringify(req.body) : undefined,
+            body: JSON.stringify(payload)
         });
 
-        const elapsed = Date.now() - startTime;
-        const contentType = response.headers.get('content-type');
-
-        if (contentType && contentType.includes('application/json')) {
-            const data = await response.json();
-            const isSuccess = response.status >= 200 && response.status < 300;
-            if (isSuccess) {
-                const count = Array.isArray(data) ? `(${data.length} records)` : '';
-                console.log(`   ✅ Status : ${response.status} ${count} in ${elapsed}ms`);
-            } else {
-                console.error(`   ❌ Status : ${response.status} in ${elapsed}ms`);
-                console.error(`   ❌ Error  :`, JSON.stringify(data).substring(0, 300));
-            }
-            res.status(response.status).json(data);
+        if (res.ok) {
+            console.log(`✅ [Sync] Project ${project.projectCode} synced successfully.`);
         } else {
-            const text = await response.text();
-            console.error(`   ❌ Status : ${response.status} (non-JSON) in ${elapsed}ms`);
-            console.error(`   ❌ Body   :`, text.substring(0, 400));
-            res.status(response.status).json({ message: 'Inventory service error', details: text.substring(0, 200) });
+            const err = await res.json();
+            console.error(`❌ [Sync] Project sync failed:`, err);
         }
     } catch (err) {
-        const elapsed = Date.now() - startTime;
-        console.error(`   💥 CRASH  : ${err.message} after ${elapsed}ms`);
-        console.error(`   💥 Stack  :`, err.stack);
-        res.status(500).json({ message: 'Inventory service unavailable', error: err.message });
+        // console.error(`❌ [Sync] Error during project sync:`, err.message);
     }
 };
 
@@ -344,11 +331,39 @@ const projectAttachmentUpload = multer({
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// General request logger
+// Performance Tracker Store
+const perfStats = {};
+
+
+
+// Performance Monitoring Middleware
 app.use((req, res, next) => {
-    if (!req.path.startsWith('/api/inventory')) {
-        console.log(`📨 [${req.method}] ${req.path}`);
-    }
+    const start = Date.now();
+    
+    // Once the response is finished
+    res.on('finish', () => {
+        const elapsed = Date.now() - start;
+        const pathKey = `${req.method} ${req.path.split('?')[0]}`;
+        
+        // Update stats
+        if (!perfStats[pathKey]) {
+            perfStats[pathKey] = { totalTime: 0, count: 0, maxTime: 0, lastAccessed: null };
+        }
+        perfStats[pathKey].totalTime += elapsed;
+        perfStats[pathKey].count += 1;
+        perfStats[pathKey].maxTime = Math.max(perfStats[pathKey].maxTime, elapsed);
+        perfStats[pathKey].lastAccessed = new Date();
+
+        // Don't double-log inventory proxy requests (they log themselves)
+        if (req.path.startsWith('/api/inventory')) return;
+
+        let color = '\x1b[32m'; // Green
+        if (elapsed > 500) color = '\x1b[33m'; // Yellow
+        if (elapsed > 1000) color = '\x1b[31m'; // Red
+        
+        console.log(`⏱️  [${req.method}] ${req.path} - ${color}${elapsed}ms\x1b[0m`);
+    });
+    
     next();
 });
 
@@ -388,8 +403,26 @@ const requireRole = (...allowedRoles) => (req, res, next) => {
     next();
 };
 
-// ✅ INVENTORY PROXY — uses app.use() to avoid path-to-regexp issues with wildcards
-app.use('/api/inventory', authMiddleware, proxyToInventory);
+// Management endpoint to view performance audit
+app.get('/api/system/performance', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), (req, res) => {
+    const sorted = Object.entries(perfStats)
+        .map(([path, data]) => ({
+            endpoint: path,
+            averageMs: (data.totalTime / data.count).toFixed(2),
+            maxMs: data.maxTime.toFixed(2),
+            count: data.count,
+            lastAccessed: data.lastAccessed
+        }))
+        .sort((a, b) => b.averageMs - a.averageMs); // Sort by slowest average
+
+    res.json({
+        timestamp: new Date(),
+        summary: sorted,
+        slowest: sorted[0] || null
+    });
+});
+
+// Inventory routes removed (moved to direct frontend connection)
 
 // Helper to log activity
 const logActivity = async (type, message, userId, userName, targetId, targetName) => {
@@ -410,7 +443,7 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
         return res.status(401).json({ message: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    const token = jwt.sign({ id: user._id, name: user.name, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
     await logActivity('LOGIN', `${user.name} logged in`, user._id, user.name, null, null);
     res.json({
         token,
@@ -453,12 +486,24 @@ app.put('/api/auth/change-password', authMiddleware, async (req, res) => {
 // ============ NOTIFICATION ROUTES ============
 app.get('/api/notifications', authMiddleware, async (req, res) => {
     try {
-        const notifications = await Notification.find({ recipientId: req.user._id })
+        if (!req.user || !req.user._id) {
+            console.warn('⚠️ [Notifications] req.user or req.user._id missing');
+            return res.status(401).json({ message: 'User context missing' });
+        }
+        
+        // Ensure ID is ObjectId for strict matching
+        const uid = typeof req.user._id === 'string' ? new mongoose.Types.ObjectId(req.user._id) : req.user._id;
+        
+        const notifications = await Notification.find({ recipientId: uid })
             .sort({ createdAt: -1 })
             .limit(50);
         res.json(notifications);
     } catch (err) {
-        console.error('❌ [Fetch Notifications]: Error:', err);
+        console.error('❌ [Fetch Notifications] Critical Error:', {
+            error: err.message,
+            stack: err.stack,
+            userId: req.user?._id
+        });
         res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
     }
 });
@@ -755,7 +800,7 @@ app.put('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER, role
 app.delete('/api/users/:userId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role === roles.SUPER_USER) return res.status(403).json({ message: 'Cannot delete super user' });
+    if (user.role === roles.SUPER_USER || user.role === roles.SUPER_ADMIN) return res.status(403).json({ message: 'Cannot delete super user' });
 
     await logActivity('USER_DELETED', `User ${user.name} (${user.employeeId}) was removed`, req.user._id, req.user.name, user._id, user.name);
     await Project.updateMany({ teamIds: user._id }, { $pull: { teamIds: user._id } });
@@ -782,48 +827,53 @@ app.get('/api/task-templates/:department', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/projects', authMiddleware, async (req, res) => {
-    let query = {};
-    if (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) {
-        // Super users and Stock Admins see all projects
-    } else if (req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) {
-        // Managers see projects they manage OR are assigned to
-        query.$or = [
-            { managerId: req.user._id },
-            { teamIds: req.user._id }
-        ];
-    } else {
-        // Employees/Interns only see projects they're assigned to
-        query.teamIds = req.user._id;
-    }
-    const projects = await Project.find(query)
-        .populate('managerId', 'name')
-        .populate('teamIds', 'name employeeId');
-    const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
+    try {
+        let query = {};
+        if (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) {
+            // Super users and Stock Admins see all projects
+        } else if (req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) {
+            // Managers see projects they manage OR are assigned to
+            query.$or = [
+                { managerId: req.user._id },
+                { teamIds: req.user._id }
+            ];
+        } else {
+            // Employees/Interns only see projects they're assigned to
+            query.teamIds = req.user._id;
+        }
+        const projects = await Project.find(query)
+            .populate('managerId', 'name')
+            .populate('teamIds', 'name employeeId');
+        const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
 
-    const projectsWithStats = await Promise.all(projects.map(async (p) => {
-        const taskCount = await Task.countDocuments({ projectId: p._id });
-        const completedTaskCount = await Task.countDocuments({ projectId: p._id, status: 'COMPLETED' });
-        return {
-            id: p._id,
-            name: isEmployeeOrIntern ? null : p.name,
-            projectCode: p.projectCode,
-            description: p.description,
-            department: p.department || 'SOFTWARE',
-            status: p.status,
-            startDate: p.startDate,
-            endDate: p.deadline,
-            deadline: p.deadline,
-            budget: p.budget,
-            managerId: p.managerId?._id,
-            managerName: p.managerId?.name,
-            teamIds: p.teamIds, // Return populated objects so frontend can see names
-            templateUsed: p.templateUsed,
-            attachments: p.attachments,
-            taskCount,
-            completedTaskCount,
-        };
-    }));
-    res.json(projectsWithStats);
+        const projectsWithStats = await Promise.all(projects.map(async (p) => {
+            const taskCount = await Task.countDocuments({ projectId: p._id });
+            const completedTaskCount = await Task.countDocuments({ projectId: p._id, status: 'COMPLETED' });
+            return {
+                id: p._id,
+                name: isEmployeeOrIntern ? null : p.name,
+                projectCode: p.projectCode,
+                description: p.description,
+                department: p.department || 'SOFTWARE',
+                status: p.status,
+                startDate: p.startDate,
+                endDate: p.deadline,
+                deadline: p.deadline,
+                budget: p.budget,
+                managerId: p.managerId?._id,
+                managerName: p.managerId?.name,
+                teamIds: Array.isArray(p.teamIds) ? p.teamIds : [],
+                templateUsed: p.templateUsed,
+                attachments: Array.isArray(p.attachments) ? p.attachments : [],
+                taskCount,
+                completedTaskCount,
+            };
+        }));
+        res.json(projectsWithStats);
+    } catch (err) {
+        console.error('❌ [Load Projects]: Error:', err);
+        res.status(500).json({ message: 'Failed to load projects', error: err.message });
+    }
 });
 
 // Project summary stats
@@ -833,6 +883,7 @@ app.get('/api/projects/summary', authMiddleware, async (req, res) => {
         const active = await Project.countDocuments({ status: 'ACTIVE' });
         const completed = await Project.countDocuments({ status: 'COMPLETED' });
         const onHold = await Project.countDocuments({ status: 'ON_HOLD' });
+        const delayed = await Project.countDocuments({ deadline: { $lt: new Date() }, status: { $ne: 'COMPLETED' } });
 
         const recentProjects = await Project.find().sort({ createdAt: -1 }).limit(5);
 
@@ -844,7 +895,10 @@ app.get('/api/projects/summary', authMiddleware, async (req, res) => {
         // Get unique team members
         const allProjects = await Project.find().select('teamIds');
         const uniqueMembers = new Set();
-        allProjects.forEach(p => p.teamIds.forEach(id => uniqueMembers.add(id.toString())));
+        allProjects.forEach((p) => {
+            const teamIds = Array.isArray(p.teamIds) ? p.teamIds : [];
+            teamIds.forEach((id) => uniqueMembers.add(id.toString()));
+        });
         const totalMembers = uniqueMembers.size;
 
         res.json({
@@ -852,6 +906,7 @@ app.get('/api/projects/summary', authMiddleware, async (req, res) => {
             active,
             completed,
             onHold,
+            delayed,
             recentProjects: recentProjects.map(p => ({
                 id: p._id,
                 name: p.name,
@@ -919,7 +974,7 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
     });
 });
 
-app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { name, description, department, managerId, startDate, deadline, endDate, budget, templateName, teamIds } = req.body;
         console.log('Creating project:', { name, department, managerId, startDate, deadline, endDate });
@@ -982,6 +1037,10 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
         }
 
         await logActivity('PROJECT_CREATED', `Project "${name}" was created`, req.user._id, req.user.name, project._id, name);
+        
+        // Sync to Inventory Tracker
+        await syncProjectToInventory(project, req.user);
+
         res.status(201).json({
             id: project._id,
             name: project.name,
@@ -1002,7 +1061,136 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER), async (
     }
 });
 
-app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
+// Get Excel Template for Bulk Project Upload
+app.get('/api/projects/template', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), (req, res) => {
+    try {
+        const wb = xlsx.utils.book_new();
+        const wsData = [
+            ['Project Name', 'Description', 'Department', 'Manager Email', 'Start Date', 'Deadline', 'Budget'],
+            ['Sample Project Alpha', 'This is a sample project description', 'SOFTWARE', 'manager@enarxi.in', '2026-05-01', '2026-12-31', '500000'],
+            ['Hardware Expansion B', 'Building new server racks', 'HARDWARE', 'engineer@enarxi.in', '2026-06-15', '2026-09-30', '1250000'],
+        ];
+        const ws = xlsx.utils.aoa_to_sheet(wsData);
+        xlsx.utils.book_append_sheet(wb, ws, 'ProjectsTemplate');
+        
+        const buf = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=Project_Bulk_Upload_Template.xlsx');
+        res.end(buf);
+    } catch (err) {
+        console.error('Error generating template:', err);
+        res.status(500).json({ message: 'Failed to generate template' });
+    }
+});
+
+// Bulk Project Upload
+app.post('/api/projects/bulk', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), upload.single('file'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+
+        const workbook = xlsx.readFile(req.file.path);
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const data = xlsx.utils.sheet_to_json(sheet);
+
+        if (data.length === 0) return res.status(400).json({ message: 'Excel sheet is empty' });
+
+        const results = {
+            success: [],
+            errors: []
+        };
+
+        for (let i = 0; i < data.length; i++) {
+            const row = data[i];
+            const rowIndex = i + 2; // Row number in Excel
+
+            try {
+                const name = row['Project Name'];
+                const description = row['Description'] || '';
+                const department = (row['Department'] || 'SOFTWARE').toUpperCase();
+                const managerEmail = row['Manager Email'];
+                const startDateStr = row['Start Date'];
+                const deadlineStr = row['Deadline'];
+                const budget = parseFloat(row['Budget'] || 0);
+
+                if (!name) throw new Error('Project Name is required');
+                if (!deadlineStr) throw new Error('Deadline is required');
+                if (!['SOFTWARE', 'HARDWARE'].includes(department)) throw new Error('Invalid Department (Must be SOFTWARE or HARDWARE)');
+
+                // Find manager if email provided
+                let managerId = null;
+                if (managerEmail) {
+                    const manager = await User.findOne({ email: new RegExp(`^${managerEmail.trim()}$`, 'i') });
+                    if (manager) managerId = manager._id;
+                }
+
+                // Process dates
+                const parseDate = (d) => {
+                    if (!d) return null;
+                    const date = new Date(d);
+                    return isNaN(date.getTime()) ? null : date;
+                };
+
+                const startDate = parseDate(startDateStr) || new Date();
+                const deadline = parseDate(deadlineStr);
+                if (!deadline) throw new Error('Invalid Deadline date format (Use YYYY-MM-DD)');
+
+                const project = await Project.create({
+                    name,
+                    description,
+                    department,
+                    status: 'PLANNING',
+                    managerId,
+                    startDate,
+                    deadline,
+                    budget,
+                    createdBy: req.user._id,
+                });
+
+                // Notify Manager
+                if (managerId) {
+                    await Notification.create({
+                        recipientId: managerId,
+                        type: 'PROJECT_ASSIGNMENT',
+                        message: `You have been assigned to project [${project.projectCode}] (Bulk Upload)`,
+                        relatedId: project._id
+                    });
+                }
+
+                // Create attachment folder
+                const folderName = project.projectCode ? `${project.projectCode}_${project._id.toString()}` : project._id.toString();
+                const projectUploadDir = path.join(__dirname, 'uploads', 'projects', folderName);
+                if (!fs.existsSync(projectUploadDir)) {
+                    fs.mkdirSync(projectUploadDir, { recursive: true });
+                }
+
+                await logActivity('PROJECT_CREATED', `Project "${name}" was created via Bulk Upload`, req.user._id, req.user.name, project._id, name);
+                
+                // Sync to Inventory Tracker
+                await syncProjectToInventory(project, req.user);
+
+                results.success.push({ name, projectCode: project.projectCode });
+            } catch (rowErr) {
+                results.errors.push({ row: rowIndex, name: row['Project Name'] || 'Unknown', error: rowErr.message });
+            }
+        }
+
+        // Clean up uploaded file
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+        res.json({
+            message: `Processed ${data.length} rows: ${results.success.length} succeeded, ${results.errors.length} failed.`,
+            summary: results
+        });
+
+    } catch (err) {
+        console.error('Bulk upload error:', err);
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(500).json({ message: 'Failed to process bulk upload' });
+    }
+});
+
+app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER), async (req, res) => {
     try {
         const { projectId } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1023,7 +1211,7 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         if (managerId !== undefined) project.managerId = managerId;
 
         // Only Super Users can update budget
-        if (budget !== undefined && req.user.role === roles.SUPER_USER) {
+        if (budget !== undefined && (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN)) {
             project.budget = budget;
         }
 
@@ -1061,6 +1249,10 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         }
 
         await project.save();
+        
+        // Sync to Inventory Tracker
+        await syncProjectToInventory(project, req.user);
+
         console.log('✅ Project updated successfully:', project._id, 'Status:', project.status);
         res.json({ id: project._id, name: project.name, description: project.description, department: project.department, status: project.status, deadline: project.deadline, teamIds: project.teamIds.map(id => id.toString()) });
     } catch (err) {
@@ -1070,7 +1262,7 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
 });
 
 // Upload attachments to a project
-app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER, roles.JUNIOR_ENGINEER, roles.INTERN), projectAttachmentUpload.array('attachments', 10), async (req, res) => {
+app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER, roles.JUNIOR_ENGINEER, roles.INTERN), projectAttachmentUpload.array('attachments', 10), async (req, res) => {
     try {
         const { projectId } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1120,7 +1312,7 @@ app.post('/api/projects/:projectId/attachments', authMiddleware, requireRole(rol
 });
 
 // Delete an attachment from a project (moves to backup instead of permanent delete)
-app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
+app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER), async (req, res) => {
     try {
         const { projectId, filename } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1185,7 +1377,7 @@ app.delete('/api/projects/:projectId/attachments/:filename', authMiddleware, req
     }
 });
 
-app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { projectId } = req.params;
         if (!isValidObjectId(projectId)) {
@@ -1298,7 +1490,7 @@ app.delete('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_U
 // ============ BACKUP MANAGEMENT ROUTES (Super Admin Only) ============
 
 // Get all backup folders
-app.get('/api/backups', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/backups', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const backupBaseDir = path.join(__dirname, 'uploads', 'backup');
 
@@ -1358,7 +1550,7 @@ app.get('/api/backups', authMiddleware, requireRole(roles.SUPER_USER), async (re
 });
 
 // Get details of a specific backup folder
-app.get('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { folderName } = req.params;
         const folderPath = path.join(__dirname, 'uploads', 'backup', folderName);
@@ -1409,7 +1601,7 @@ app.get('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER
 });
 
 // Download a file from backup
-app.get('/api/backups/:folderName/download/:filename', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.get('/api/backups/:folderName/download/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { folderName, filename } = req.params;
         const filePath = path.join(__dirname, 'uploads', 'backup', folderName, filename);
@@ -1426,7 +1618,7 @@ app.get('/api/backups/:folderName/download/:filename', authMiddleware, requireRo
 });
 
 // Permanently delete a file from backup (Super Admin only)
-app.delete('/api/backups/:folderName/files/:filename', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.delete('/api/backups/:folderName/files/:filename', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { folderName, filename } = req.params;
         const folderPath = path.join(__dirname, 'uploads', 'backup', folderName);
@@ -1459,7 +1651,7 @@ app.delete('/api/backups/:folderName/files/:filename', authMiddleware, requireRo
 });
 
 // Permanently delete entire backup folder (Super Admin only)
-app.delete('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.delete('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { folderName } = req.params;
         const folderPath = path.join(__dirname, 'uploads', 'backup', folderName);
@@ -1486,7 +1678,7 @@ app.delete('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_U
 });
 
 // Serve backup files (Super Admin only - protected route)
-app.use('/api/backups/files', authMiddleware, requireRole(roles.SUPER_USER), express.static(path.join(__dirname, 'uploads', 'backup')));
+app.use('/api/backups/files', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), express.static(path.join(__dirname, 'uploads', 'backup')));
 
 
 // Update project status (Accessible by Team Members)
@@ -1503,7 +1695,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
         // Check authorization: Super User or Team Member
-        const isSuperUser = req.user.role === roles.SUPER_USER;
+        const isSuperUser = req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN;
         const isTeamMember = project.teamIds.map(id => String(id)).includes(String(req.user._id));
 
         if (!isSuperUser && !isTeamMember) {
@@ -1515,7 +1707,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
             if (req.user.role === roles.ENGINEER && status === 'COMPLETED') {
                 project.status = 'WAITING_APPROVAL';
                 // Notify Super Users
-                const superUsers = await User.find({ role: roles.SUPER_USER });
+                const superUsers = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
                 for (const admin of superUsers) {
                     await Notification.create({
                         recipientId: admin._id,
@@ -1525,7 +1717,7 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
                     });
                 }
             }
-            else if (req.user.role === roles.SUPER_USER && project.status === 'WAITING_APPROVAL') {
+            else if ((req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) && project.status === 'WAITING_APPROVAL') {
                 project.status = status; // COMPLETED (Approve) or ACTIVE (Reject)
                 if (project.managerId) {
                     const action = status === 'COMPLETED' ? 'approved' : 'returned';
@@ -1577,47 +1769,50 @@ app.get('/api/projects/:projectId/tasks', authMiddleware, async (req, res) => {
 });
 
 app.get('/api/tasks', authMiddleware, async (req, res) => {
-    let query = {};
-    if (req.user.role === roles.SUPER_USER) {
-        // Super users see all tasks
-    } else if (req.user.role === roles.ENGINEER && req.user.department) {
-        // Managers see tasks from projects in their department
-        const deptProjects = await Project.find({ department: req.user.department }).select('_id');
-        const projectIds = deptProjects.map(p => p._id);
-        query.projectId = { $in: projectIds };
-    } else {
-        // Employees/Interns only see their own tasks
-        query.assigneeId = req.user._id;
-    }
-    const tasks = await Task.find(query).populate('projectId', 'name projectCode');
-    const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
+    try {
+        let query = {};
+        if (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) {
+            // Super users see all tasks
+        } else if (req.user.role === roles.ENGINEER && req.user.department) {
+            // Managers see tasks from projects in their department
+            const deptProjects = await Project.find({ department: req.user.department }).select('_id');
+            const projectIds = deptProjects.map(p => p._id);
+            query.projectId = { $in: projectIds };
+        } else {
+            // Employees/Interns only see their own tasks
+            query.assigneeId = req.user._id;
+        }
+        const tasks = await Task.find(query).populate('projectId', 'name projectCode');
+        const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
 
-    res.json(tasks.map(t => ({
-        id: t._id,
-        title: t.title,
-        description: t.description,
-        status: t.status,
-        projectId: t.projectId?._id,
-        projectName: isEmployeeOrIntern ? null : (t.projectId?.name || 'Unknown'),
-        projectCode: t.projectId?.projectCode || null,
-        assigneeId: t.assigneeId,
-        rejectionReason: t.rejectionReason,
-        // Deadline and performance fields
-        assignedAt: t.assignedAt,
-        deadline: t.deadline,
-        completedAt: t.completedAt,
-        allocatedMinutes: t.allocatedMinutes,
-        actualMinutes: t.actualMinutes,
-        performanceScore: t.performanceScore,
-        comments: t.comments,
-        queries: t.queries,
-        // Delay workflow fields
-        delayStatus: t.delayStatus,
-        delayReason: t.delayReason,
-        delayRequestedAt: t.delayRequestedAt,
-        adminDelayApproved: t.adminDelayApproved,
-        delayRejectionReason: t.delayRejectionReason
-    })));
+        res.json(tasks.map(t => ({
+            id: t._id,
+            title: t.title,
+            description: t.description,
+            status: t.status,
+            projectId: t.projectId?._id,
+            projectName: isEmployeeOrIntern ? null : (t.projectId?.name || 'Unknown'),
+            projectCode: t.projectId?.projectCode || null,
+            assigneeId: t.assigneeId,
+            rejectionReason: t.rejectionReason,
+            assignedAt: t.assignedAt,
+            deadline: t.deadline,
+            completedAt: t.completedAt,
+            allocatedMinutes: t.allocatedMinutes,
+            actualMinutes: t.actualMinutes,
+            performanceScore: t.performanceScore,
+            comments: Array.isArray(t.comments) ? t.comments : [],
+            queries: Array.isArray(t.queries) ? t.queries : [],
+            delayStatus: t.delayStatus,
+            delayReason: t.delayReason,
+            delayRequestedAt: t.delayRequestedAt,
+            adminDelayApproved: t.adminDelayApproved,
+            delayRejectionReason: t.delayRejectionReason
+        })));
+    } catch (err) {
+        console.error('❌ [Load Tasks]: Error:', err);
+        res.status(500).json({ message: 'Failed to load tasks', error: err.message });
+    }
 });
 
 // Get single task by ID
@@ -1635,7 +1830,7 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
         // Check permissions
         const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
         const isManager = req.user.role === roles.ENGINEER;
-        const isSuperUser = req.user.role === roles.SUPER_USER;
+        const isSuperUser = req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN;
 
         // Employees/Interns can only view their own tasks
         if (isEmployeeOrIntern && task.assigneeId && task.assigneeId.toString() !== req.user._id.toString()) {
@@ -1808,7 +2003,7 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 });
 
 // Delete Task
-app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.ENGINEER), async (req, res) => {
+app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER), async (req, res) => {
     console.log(`Received DELETE request for task: ${req.params.taskId}`);
     try {
         const { taskId } = req.params;
@@ -1882,7 +2077,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         if (status) {
             const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
             const isManager = req.user.role === roles.ENGINEER;
-            const isSuperUser = req.user.role === roles.SUPER_USER;
+            const isSuperUser = req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN;
 
             // Manager or Super User can directly update any status (no approval needed for them)
             if (isManager || isSuperUser) {
@@ -2057,7 +2252,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
                     console.log('✅ Project auto-updated to WAITING_APPROVAL:', project._id);
 
                     // Notify all Super Admins about project completion approval
-                    const superAdmins = await User.find({ role: roles.SUPER_USER });
+                    const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
                     for (const admin of superAdmins) {
                         await Notification.create({
                             recipientId: admin._id,
@@ -2102,7 +2297,7 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
 
         const isEmployeeOrIntern = [roles.EMPLOYEE, roles.INTERN].includes(req.user.role);
         const isManager = req.user.role === roles.MANAGER;
-        const isSuperUser = req.user.role === roles.SUPER_USER;
+        const isSuperUser = req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN;
         let isApprovalFlow = false;
 
         // Manager or Super User can directly update any status (no approval needed for them)
@@ -2204,7 +2399,7 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
                         console.log('✅ Project auto-updated to WAITING_APPROVAL:', project._id);
 
                         // Notify all Super Admins about project completion approval
-                        const superAdmins = await User.find({ role: roles.SUPER_USER });
+                        const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
                         for (const admin of superAdmins) {
                             await Notification.create({
                                 recipientId: admin._id,
@@ -2301,7 +2496,7 @@ app.put('/api/tasks/:taskId/delay/manager-review', authMiddleware, requireRole(r
             task.delayStatus = 'PENDING_ADMIN';
 
             // Notify Super Admin
-            const superAdmins = await User.find({ role: roles.SUPER_USER });
+            const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
             for (const admin of superAdmins) {
                 await Notification.create({
                     recipientId: admin._id,
@@ -2336,7 +2531,7 @@ app.put('/api/tasks/:taskId/delay/manager-review', authMiddleware, requireRole(r
 });
 
 // 3. Admin Final Review
-app.put('/api/tasks/:taskId/delay/admin-review', authMiddleware, requireRole(roles.SUPER_USER), async (req, res) => {
+app.put('/api/tasks/:taskId/delay/admin-review', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const { taskId } = req.params;
         const { approved, rejectionReason } = req.body;
@@ -2514,7 +2709,7 @@ app.post('/api/tasks/:taskId/queries', authMiddleware, async (req, res) => {
 });
 
 // Respond to Query
-app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.MANAGER), async (req, res) => {
     try {
         const { taskId, queryId } = req.params;
         const { response } = req.body;
@@ -2556,7 +2751,7 @@ app.put('/api/tasks/:taskId/queries/:queryId/respond', authMiddleware, requireRo
 
 // ============ MANAGER PERFORMANCE ANALYTICS ============
 // Get manager's self-assigned tasks and performance metrics
-app.get('/api/manager/performance', authMiddleware, requireRole(roles.MANAGER, roles.SUPER_USER), async (req, res) => {
+app.get('/api/manager/performance', authMiddleware, requireRole(roles.MANAGER, roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
         const managerId = req.user._id;
 
@@ -2645,7 +2840,7 @@ app.get('/api/manager/performance', authMiddleware, requireRole(roles.MANAGER, r
 });
 
 // Project Status Manual Update (Manager override)
-app.put('/api/projects/:projectId/status', authMiddleware, requireRole(roles.SUPER_USER, roles.MANAGER), async (req, res) => {
+app.put('/api/projects/:projectId/status', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.MANAGER), async (req, res) => {
     try {
         const { projectId } = req.params;
         const { status } = req.body;
@@ -2690,7 +2885,7 @@ app.get('/api/activity-logs', authMiddleware, requireRole(roles.SUPER_USER, role
 app.get('/api/activities', authMiddleware, async (req, res) => {
     try {
         let query = {};
-        if (req.user.role !== roles.SUPER_USER) {
+        if (req.user.role !== roles.SUPER_USER && req.user.role !== roles.SUPER_ADMIN) {
             query.userId = req.user._id;
         }
         const activities = await Activity.find(query).sort({ timestamp: -1 }).limit(20);
@@ -2735,7 +2930,7 @@ const startServer = async () => {
         }
         // ─────────────────────────────────────────────────────────────
 
-        app.listen(PORT, () => {
+        app.listen(PORT, '0.0.0.0', () => {
             console.log(`\n🚀 Server running on http://localhost:${PORT}`);
         });
     } catch (error) {

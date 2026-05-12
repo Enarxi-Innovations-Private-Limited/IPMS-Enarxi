@@ -1,58 +1,103 @@
-import api from './api';
+import inventoryApi from './inventoryApi';
 
 const inventoryService = {
   // Stock Overview
-  getCurrentStock: () => api.get('/inventory/stock/current'),
-  getStockLedger: () => api.get('/inventory/stock/ledger'),
+  getCurrentStock: () => inventoryApi.get('stock/current'),
+  getStockLedger: () => inventoryApi.get('inventory/ledger'),
+  getStockHistory: (itemId) => inventoryApi.get(`inventory/history/${itemId}`),
+  getLowStockReport: () => inventoryApi.get('inventory/low-stock'),
+  getStockAdjustments: () => inventoryApi.get('stock-adjustments'),
   
   // Material Requests
-  getMaterialRequests: () => api.get('/inventory/material-requests'),
-  getMaterialRequestDetails: (id) => api.get(`/inventory/material-requests/${id}`),
-  submitMaterialRequest: (data) => api.post('/inventory/material-requests', data),
-  routeMaterialRequestLine: (data) => api.post('/inventory/routeMaterialRequestLine', data),
-  routeMaterialRequestBulk: (data) => api.post('/inventory/routeMaterialRequestBulk', data),
+  getMaterialRequests: () => inventoryApi.get('bridge/material-requests'),
+  getMaterialRequestDetails: (id) => inventoryApi.get(`bridge/material-requests/${id}`),
+  submitMaterialRequest: (data) => inventoryApi.post('projects/material-request', data),
+  routeMaterialRequestLine: (data) => inventoryApi.post('projects/material-request/route-line', data),
+  routeMaterialRequestBulk: (data) => inventoryApi.post('projects/material-request/bulk-route', data),
+  amendStoreShortageLine: (data) => inventoryApi.post('amendStoreShortageLine', data),
   
   // Purchase Operations
-  getVendors: () => api.get('/inventory/vendors'),
-  createVendor: (data) => api.post('/inventory/createVendor', data),
-  getPurchaseRequests: () => api.get('/inventory/purchase/requests'),
-  generatePurchaseOrders: (data) => api.post('/inventory/generatePurchaseOrders', data),
-  getPurchaseOrders: () => api.get('/inventory/purchase/orders'),
-  getPurchaseOrderDetails: (id) => api.get(`/inventory/purchase/orders/${id}`),
-  submitPOForApproval: (id) => api.post('/inventory/submitPurchaseOrderForApproval', { purchaseOrderId: id }),
-  reviewPO: (id, decision, remarks) => api.post('/inventory/reviewPurchaseOrder', { purchaseOrderId: id, decision, adminRemarks: remarks }),
-  markPOPlaced: (data) => api.post('/inventory/markPurchaseOrderPlaced', data),
-  receivePO: (data) => api.post('/inventory/receivePurchaseOrderLines', data),
+  getVendors: () => inventoryApi.get('bridge/vendors'),
+  createVendor: (data) => inventoryApi.post('purchase/vendors', data),
+  updateVendor: (id, data) => inventoryApi.put(`vendors/${id}`, data),
+  deleteVendor: (id) => inventoryApi.delete(`vendors/${id}`),
+  getPurchaseRequests: () => inventoryApi.get('purchase/requests'),
+  getPurchasePlanning: () => inventoryApi.get('inventory/purchase-planning'),
+  generatePurchaseOrders: (data) => inventoryApi.post('generatePurchaseOrders', data),
+  getPurchaseOrders: () => inventoryApi.get('purchase/orders'),
+  getPurchaseOrderDetails: (poId) => inventoryApi.get(`purchase/orders/${poId}`),
+  submitPOForApproval: (purchaseOrderId) => inventoryApi.post('submitPurchaseOrderForApproval', { purchaseOrderId }),
+  reviewPO: (purchaseOrderIdOrData, decision, adminRemarks) => {
+    if (typeof purchaseOrderIdOrData === 'object' && purchaseOrderIdOrData !== null) {
+      return inventoryApi.post('reviewPurchaseOrder', purchaseOrderIdOrData);
+    }
+    return inventoryApi.post('reviewPurchaseOrder', {
+      purchaseOrderId: purchaseOrderIdOrData,
+      decision,
+      adminRemarks,
+    });
+  },
+  markPOPlaced: (data) => inventoryApi.post('markPurchaseOrderPlaced', data),
+  receivePO: (data) => inventoryApi.post('receivePurchaseOrderLines', data),
   
-  // Stock Adjustments / Reconciliation
-  getStockAdjustments: () => api.get('/inventory/stock-adjustments'),
-  submitStockAdjustment: (data) => api.post('/inventory/submitStockAdjustment', data),
-  approveStockAdjustment: (id, remarks) => api.post('/inventory/approveStockAdjustment', { batchId: id, adminRemarks: remarks }),
-  rejectStockAdjustment: (id, remarks) => api.post('/inventory/rejectStockAdjustment', { batchId: id, adminRemarks: remarks }),
+  // Stock Adjustments
+  submitStockAdjustment: (data) => inventoryApi.post('submitStockAdjustment', data),
+  approveStockAdjustment: (batchIdOrData, adminRemarks) => {
+    if (typeof batchIdOrData === 'object' && batchIdOrData !== null) {
+      return inventoryApi.post('approveStockAdjustment', batchIdOrData);
+    }
+    return inventoryApi.post('approveStockAdjustment', { batchId: batchIdOrData, adminRemarks });
+  },
+  rejectStockAdjustment: (batchIdOrData, adminRemarks) => {
+    if (typeof batchIdOrData === 'object' && batchIdOrData !== null) {
+      return inventoryApi.post('rejectStockAdjustment', batchIdOrData);
+    }
+    return inventoryApi.post('rejectStockAdjustment', { batchId: batchIdOrData, adminRemarks });
+  },
   
-  // Master Data
-  createClassification: (data) => api.post('/inventory/createClassification', data),
-  updateClassification: (data) => api.post('/inventory/updateClassification', data),
-  createLocation: (data) => api.post('/inventory/createStockLocation', data),
-  createItem: (data) => api.post('/inventory/createItem', data),
-  importItems: (data) => api.post('/inventory/importItems', data),
+  // Master Data — Classifications
+  createClassification: (data) => inventoryApi.post('admin/classifications', data),
+  updateClassification: (id, data) => inventoryApi.put(`classifications/${id}`, data),
+  deleteClassification: (id) => inventoryApi.delete(`classifications/${id}`),
+
+  // Master Data — Items
+  createItem: (data) => inventoryApi.post('admin/items', data),
+  updateItem: (id, data) => inventoryApi.put(`items/${id}`, data),
+  deleteItem: (id) => inventoryApi.delete(`items/${id}`),
+  bulkImportItems: (items) => inventoryApi.post('admin/items/bulk-import', { items }),
+
+  // Master Data — Locations
+  createLocation: (data) => inventoryApi.post('admin/locations', data),
+  updateLocation: (id, data) => inventoryApi.put(`stock-locations/${id}`, data),
+  deleteLocation: (id) => inventoryApi.delete(`stock-locations/${id}`),
+
+  // Master Data — Vendor SKU Mappings
+  getVendorSkuMappings: () => inventoryApi.get('vendor-sku-mappings'),
+  getItemSkuMappings: (itemId) => inventoryApi.get(`vendor-sku-mappings/item/${itemId}`),
+  createVendorSkuMapping: (data) => inventoryApi.post('vendor-sku-mappings', data),
+  deleteVendorSkuMapping: (id) => inventoryApi.delete(`vendor-sku-mappings/${id}`),
   
-  // Audit & Analytics
-  getStockHistory: (itemCode) => api.get(`/inventory/stock/history${itemCode ? `?itemCode=${itemCode}` : ''}`),
-  getLowStockReport: () => api.get('/inventory/reports/low-stock'),
-  
-  // Logistics
-  transferStock: (data) => api.post('/inventory/transferStock', data),
+  // Master Data (for dropdowns)
+  getItems: () => inventoryApi.get('inventory'),
+  getClassifications: () => inventoryApi.get('bridge/classifications'),
+  getLocations: () => inventoryApi.get('bridge/stock-locations'),
+  getProjects: () => inventoryApi.get('bridge/projects'),
   
   // Store / Dispatch
-  getStoreRequests: () => api.get('/inventory/store/requests'),
-  getDispatches: () => api.get('/inventory/dispatches'),
-  confirmDispatch: (id, remarks) => api.post(`/inventory/dispatches/${id}/acknowledge`, { remarks }),
+  getStoreRequests: () => inventoryApi.get('store/requests'),
+  getDispatches: () => inventoryApi.get('bridge/dispatches'),
+  dispatchStoreRequest: (data) => inventoryApi.post('store/dispatch', data),
+  acknowledgeDispatch: (data) => inventoryApi.post('acknowledgeDispatch', data),
+  confirmDispatch: (dispatchId, engineerRemarks, receiptAction = 'accept') =>
+    inventoryApi.post('acknowledgeDispatch', { dispatchId, engineerRemarks, receiptAction }),
+  confirmStoreRequest: (data) => inventoryApi.post('store/confirm', data),
+  transferStock: (data) => inventoryApi.post('stock/transfer', data),
+  
+  // Audit Logs
+  getAuditLogs: (params = {}) => inventoryApi.get('audit-logs', { params }),
 
-  // Master Data (for dropdowns)
-  getItems: () => api.get('/inventory/items'),
-  getClassifications: () => api.get('/inventory/classifications'),
-  getLocations: () => api.get('/inventory/stock-locations'),
+  // Dashboard
+  getDashboardStats: () => inventoryApi.get('dashboard-stats'),
 };
 
 export default inventoryService;

@@ -31,6 +31,7 @@ import Traceability from './components/inventory/Traceability.jsx';
 import StockTransfer from './components/inventory/StockTransfer.jsx';
 import AdjustmentReview from './components/inventory/AdjustmentReview.jsx';
 import StoreDispatchPage from './components/inventory/StoreDispatchPage.jsx';
+import StoreRequestsPage from './components/inventory/StoreRequestsPage.jsx';
 import ClassificationsPage from './components/inventory/ClassificationsPage.jsx';
 import StockLocationsPage from './components/inventory/StockLocationsPage.jsx';
 import StockUploadsPage from './components/inventory/StockUploadsPage.jsx';
@@ -209,6 +210,22 @@ function App() {
         }
       />
       <Route
+        path="/super/inventory/fulfillment"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StoreRequestsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/dispatches"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <StoreDispatchPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/super/inventory/audit"
         element={
           <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
@@ -365,16 +382,16 @@ function App() {
 
       {/* Store Manager Routes */}
       <Route path="/store" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreDashboard /></ProtectedRoute>} />
-      <Route path="/store/requests" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><AdminMRRouting /></ProtectedRoute>} />
+      <Route path="/store/requests" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreRequestsPage /></ProtectedRoute>} />
+      <Route path="/store/routing" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><Navigate to="/store/requests" replace /></ProtectedRoute>} />
       <Route path="/store/inward" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><PurchaseInward /></ProtectedRoute>} />
       <Route path="/store/dispatches" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreDispatchPage currentPage="store-dispatches" /></ProtectedRoute>} />
       <Route path="/store/transfers" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockTransfer /></ProtectedRoute>} />
       <Route path="/store/stock" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockOverview currentPage="store-stock" /></ProtectedRoute>} />
       <Route path="/store/uploads" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockUploadsPage /></ProtectedRoute>} />
       <Route path="/store/approvals" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><AdjustmentReview /></ProtectedRoute>} />
-      <Route path="/store/ledger" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-reports" /></ProtectedRoute>} />
+      <Route path="/store/ledger" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-ledger" /></ProtectedRoute>} />
       <Route path="/store/locations" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockLocationsPage /></ProtectedRoute>} />
-      <Route path="/store/reports" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-reports" /></ProtectedRoute>} />
 
       {/* Purchase Manager Routes */}
       <Route path="/purchase" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchaseDashboard /></ProtectedRoute>} />
@@ -382,7 +399,7 @@ function App() {
       <Route path="/purchase/orders" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchaseOrdersPage /></ProtectedRoute>} />
       <Route path="/purchase/approvals" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><POApprovalsPage /></ProtectedRoute>} />
       <Route path="/purchase/vendors" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><VendorManagement /></ProtectedRoute>} />
-      <Route path="/purchase/items" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><MasterDataManagement /></ProtectedRoute>} />
+
       <Route path="/purchase/stock" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><StockOverview currentPage="purchase-stock" /></ProtectedRoute>} />
 
       <Route path="/" element={<RoleRedirect />} />

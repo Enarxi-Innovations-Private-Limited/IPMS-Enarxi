@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function VendorManagement() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -40,8 +42,9 @@ export default function VendorManagement() {
             setShowModal(false);
             setFormData({ vendorCode: '', name: '', contactPerson: '', email: '', phone: '', gstin: '', address: '' });
             fetchVendors();
+            notifySuccess('Vendor created successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to create vendor');
+            notifyError(err.response?.data?.message || 'Failed to create vendor');
         }
     };
 

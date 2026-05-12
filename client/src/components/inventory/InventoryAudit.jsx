@@ -18,7 +18,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
         try {
             setLoading(true);
             const [histRes, lowRes] = await Promise.all([
-                inventoryService.getStockHistory(),
+                inventoryService.getStockLedger(),
                 inventoryService.getLowStockReport()
             ]);
             setHistory(histRes.data);
@@ -42,14 +42,23 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Stock History Ledger */}
                         <div className="lg:col-span-2 space-y-4">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-xl">
-                                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex justify-between items-center">
-                                    <h2 className="text-lg font-bold text-white">Stock Ledger</h2>
+                            <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
+                                <div className="px-6 py-5 border-b border-border-dark bg-background-dark/30 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
+                                            <span className="material-symbols-outlined">history_edu</span>
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-white leading-none">Stock Ledger</h2>
+                                            <p className="text-text-secondary text-[11px] font-medium mt-1 uppercase tracking-wider">Transaction Audit Trail</p>
+                                        </div>
+                                    </div>
                                     <div className="relative">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-lg opacity-40">search</span>
                                         <input 
                                             type="text" 
                                             placeholder="Search ledger..." 
-                                            className="bg-background-dark border border-border-dark rounded-lg px-3 py-1 text-xs text-white"
+                                            className="bg-background-dark/50 border border-border-dark rounded-lg pl-10 pr-4 py-2 text-xs text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all w-64"
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                         />
@@ -57,45 +66,61 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                 </div>
                                 {loading ? (
                                     <div className="p-20 text-center">
-                                        <div className="animate-spin size-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+                                        <div className="animate-spin size-10 border-4 border-amber-500 border-t-transparent rounded-full mx-auto shadow-lg shadow-amber-500/20"></div>
+                                        <p className="text-text-secondary mt-4 font-medium">Loading ledger data...</p>
                                     </div>
                                 ) : (
-                                    <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                                        <table className="w-full text-left">
-                                            <thead className="bg-background-dark/50 sticky top-0 z-10">
+                                    <div className="overflow-x-auto max-h-[700px] overflow-y-auto custom-scrollbar">
+                                        <table className="w-full text-left border-collapse">
+                                            <thead className="bg-background-dark/80 sticky top-0 z-10 backdrop-blur-md border-b border-border-dark">
                                                 <tr>
-                                                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Date</th>
-                                                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Component</th>
-                                                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary">Action</th>
-                                                    <th className="px-6 py-4 text-[10px] font-black uppercase text-text-secondary text-right">Qty</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Timestamp</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Item Details</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Location</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Type</th>
+                                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary text-right">Qty Change</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-border-dark text-sm">
+                                            <tbody className="divide-y divide-border-dark/30">
                                                 {history.map((log, idx) => (
-                                                    <tr key={idx} className="hover:bg-primary/5">
-                                                        <td className="px-6 py-4 text-text-secondary text-xs">
-                                                            {new Date(log.createdAt).toLocaleString()}
+                                                    <tr key={idx} className="hover:bg-amber-500/[0.02] transition-colors group">
+                                                        <td className="px-6 py-4">
+                                                            <div className="text-white text-xs font-bold">{new Date(log.createdAt).toLocaleDateString()}</div>
+                                                            <div className="text-text-secondary text-[10px] font-medium opacity-60">{new Date(log.createdAt).toLocaleTimeString()}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="text-white font-medium">{log.item?.name}</div>
-                                                            <div className="text-primary text-[10px]">{log.item?.itemCode}</div>
+                                                            <div className="text-white font-bold group-hover:text-amber-500 transition-colors">{log.itemId?.name || log.item?.name}</div>
+                                                            <div className="text-amber-500/70 text-[10px] font-mono font-black">{log.itemId?.itemCode || log.item?.itemCode}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                                                                log.type === 'INWARD' ? 'bg-emerald-500/20 text-emerald-400' :
-                                                                log.type === 'OUTWARD' ? 'bg-red-500/20 text-red-400' :
-                                                                'bg-blue-500/20 text-blue-400'
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="material-symbols-outlined text-sm text-text-secondary">location_on</span>
+                                                                <span className="text-text-secondary text-xs font-medium">{log.locationId?.name || 'Main Warehouse'}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                                                                log.movementType === 'INWARD' || log.movementType === 'STOCK_ADDITION' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                                log.movementType === 'DISPATCH' || log.movementType === 'STOCK_REDUCTION' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                                                                'bg-amber-500/10 text-amber-400 border-amber-500/20'
                                                             }`}>
-                                                                {log.type}
+                                                                {log.movementType?.replace(/_/g, ' ') || 'TRANSACTION'}
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
-                                                            <span className={`font-bold ${log.quantity > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                                {log.quantity > 0 ? '+' : ''}{log.quantity}
+                                                            <span className={`text-base font-black ${log.quantityChange > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                                {log.quantityChange > 0 ? '+' : ''}{log.quantityChange}
                                                             </span>
                                                         </td>
                                                     </tr>
                                                 ))}
+                                                {history.length === 0 && (
+                                                    <tr>
+                                                        <td colSpan="5" className="px-6 py-32 text-center text-text-secondary italic">
+                                                            No transaction history found in the ledger.
+                                                        </td>
+                                                    </tr>
+                                                )}
                                             </tbody>
                                         </table>
                                     </div>

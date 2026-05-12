@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth, getCurrentUser } from '../../services/authService.js';
 import api from '../../services/api.js';
@@ -12,7 +12,37 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showMobileSidebar, setShowMobileSidebar] = useState(false);
-  const [isInventoryExpanded, setIsInventoryExpanded] = useState(currentPage.startsWith('inv-') || currentPage.startsWith('inventory'));
+  const sidebarRef = useRef(null);
+
+  // Persistence for scroll position
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (sidebar) {
+      const savedScroll = sessionStorage.getItem('su_sidebar_scroll');
+      if (savedScroll) {
+        sidebar.scrollTop = parseInt(savedScroll, 10);
+      }
+
+      const handleScroll = () => {
+        sessionStorage.setItem('su_sidebar_scroll', sidebar.scrollTop);
+      };
+
+      sidebar.addEventListener('scroll', handleScroll);
+      return () => sidebar.removeEventListener('scroll', handleScroll);
+    }
+  }, []);
+
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState(() => {
+    const saved = localStorage.getItem('inventory_menu_expanded');
+    if (saved !== null) return saved === 'true';
+    return currentPage.startsWith('inv-') || currentPage.startsWith('inventory') || currentPage.includes('material-requests');
+  });
+
+  const toggleInventory = () => {
+    const newState = !isInventoryExpanded;
+    setIsInventoryExpanded(newState);
+    localStorage.setItem('inventory_menu_expanded', newState);
+  };
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
@@ -84,8 +114,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
     {
       name: "STORE",
       items: [
-        { id: 'inv-store-reqs', label: 'Store Requests', icon: 'shopping_cart', path: '/super/inventory/routing' },
+        { id: 'inv-store-routing', label: 'Store Routing', icon: 'route', path: '/super/inventory/routing' },
+        { id: 'inv-store-fulfillment', label: 'Store Requests', icon: 'assignment_turned_in', path: '/super/inventory/fulfillment' },
         { id: 'inv-inward', label: 'Store Inward', icon: 'input', path: '/super/inventory/inward' },
+        { id: 'inv-dispatches', label: 'Store Dispatches', icon: 'local_shipping', path: '/super/inventory/dispatches' },
         { id: 'inv-uploads', label: 'Stock Uploads', icon: 'upload', path: '/super/inventory/uploads' },
         { id: 'inv-approvals', label: 'Stock Approvals', icon: 'check_circle', path: '/super/inventory/adjustments' },
       ]
@@ -121,7 +153,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
               <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
             </div>
           </div>
-          <nav className="flex-1 flex flex-col gap-2 overflow-y-auto pb-6 custom-scrollbar pr-2">
+          <nav 
+            ref={sidebarRef}
+            className="flex-1 flex flex-col gap-2 overflow-y-auto pb-6 custom-scrollbar pr-2"
+          >
             {navItems.map((item) => (
               <a
                 key={item.id}
@@ -149,7 +184,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             {/* Inventory Accordion Menu */}
             <div className="flex flex-col mt-2">
               <button
-                onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
+                onClick={toggleInventory}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
                   currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
                     ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
@@ -258,7 +293,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             {/* Inventory Accordion Menu (Mobile) */}
             <div className="flex flex-col mt-2">
               <button
-                onClick={() => setIsInventoryExpanded(!isInventoryExpanded)}
+                onClick={toggleInventory}
                 className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
                   currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
                     ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'

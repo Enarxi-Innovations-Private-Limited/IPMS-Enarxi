@@ -1,15 +1,17 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function ClassificationsPage() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess } = useNotifier();
     const [classifications, setClassifications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
-        description: ''
+        prefix: ''
     });
 
     useEffect(() => {
@@ -33,10 +35,11 @@ export default function ClassificationsPage() {
         try {
             await inventoryService.createClassification(formData);
             setShowModal(false);
-            setFormData({ name: '', description: '' });
+            setFormData({ name: '', prefix: '' });
             fetchClassifications();
+            notifySuccess('Classification created successfully.');
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to create classification');
+            notifyError(err.response?.data?.message || 'Failed to create classification');
         }
     };
 
@@ -70,7 +73,7 @@ export default function ClassificationsPage() {
                                 <p className="text-text-secondary">Categorize your items by creating your first classification.</p>
                             </div>
                         ) : classifications.map(cls => (
-                            <div key={cls.id} className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
+                            <div key={cls._id} className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-3xl -mr-12 -mt-12 group-hover:bg-primary/10 transition-all"></div>
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -79,9 +82,6 @@ export default function ClassificationsPage() {
                                     <span className="material-symbols-outlined text-text-secondary/50 group-hover:text-primary transition-colors">arrow_forward_ios</span>
                                 </div>
                                 <h3 className="text-xl font-bold text-white mb-1">{cls.name}</h3>
-                                <p className="text-text-secondary text-sm line-clamp-2 mt-2">
-                                    {cls.description || 'No description provided for this category.'}
-                                </p>
                                 <div className="mt-6 pt-6 border-t border-border-dark flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Active Status</span>
@@ -117,13 +117,16 @@ export default function ClassificationsPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Description</label>
-                                <textarea 
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white focus:border-primary outline-none transition-all h-24 resize-none"
-                                    placeholder="Brief explanation of what this category includes..."
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Prefix (Internal Code)</label>
+                                <input 
+                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white focus:border-primary outline-none transition-all"
+                                    placeholder="e.g. ELE, TOL, CON"
+                                    value={formData.prefix}
+                                    onChange={(e) => setFormData({...formData, prefix: e.target.value.toUpperCase()})}
+                                    maxLength={5}
+                                    required
                                 />
+                                <p className="text-[10px] text-text-secondary/60 mt-1 italic">Used for auto-generating item codes (e.g. TOL-001)</p>
                             </div>
                             <div className="pt-2">
                                 <button type="submit" className="w-full bg-primary py-3 rounded-xl text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-95 transition-all">
