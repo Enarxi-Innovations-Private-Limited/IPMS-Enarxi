@@ -5,7 +5,7 @@ const {
     Classification, Vendor, Item, ItemVendorSku, StockLocation, StockBalance, StockMovement, 
     MaterialRequest, StoreRequestBatch, DispatchBatch, PurchaseRequestBatch,
     PurchasePlanLine, PurchaseOrder, PurchaseOrderLineAllocation,
-    PurchaseInwardBatch, StockAdjustmentBatch, Activity, User, Notification, Project, Task
+    PurchaseInwardBatch, ProjectReturnBatch, StockAdjustmentBatch, Activity, User, Notification, Project, Task
 } = require('./models');
 
 // Helper to log inventory activity
@@ -19,6 +19,8 @@ const logInvActivity = async (type, message, userId, userName, targetId, targetN
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const normalizeId = (value) => (value ? String(value) : '');
+
 const findLocationByReference = async (reference) => {
     const normalized = (reference || '').toString().trim();
     if (!normalized) return null;
@@ -29,6 +31,13 @@ const findLocationByReference = async (reference) => {
             { name: new RegExp(`^${escapeRegex(normalized)}$`, 'i') }
         ]
     });
+};
+
+const DAMAGED_HOLD_LOCATION = {
+    locationCode: 'DMG-HOLD',
+    name: 'Damaged Hold',
+    label: 'Damaged Hold',
+    description: 'Quarantine location for damaged project returns'
 };
 
 const logAudit = async (entityType, entityId, action, before, after, req, metadata = {}) => {
@@ -312,10 +321,6 @@ async function issueReservedStock(itemId, quantity, referenceId, userId, session
     }
 }
 
-function normalizeId(value) {
-    return value ? String(value) : '';
-}
-
 async function getCurrentAvailableStock(itemId, session = null) {
     const balances = await StockBalance.find({ itemId }).session(session);
     return balances.reduce((total, balance) => {
@@ -328,6 +333,153 @@ async function getCurrentAvailableStock(itemId, session = null) {
 async function getCurrentReservedStock(itemId, session = null) {
     const balances = await StockBalance.find({ itemId }).session(session);
     return balances.reduce((total, balance) => total + Number(balance.reservedQuantity || 0), 0);
+}
+
+async function getOrCreateDamagedHoldLocation(session = null) {
+    let location = await StockLocation.findOne({ locationCode: DAMAGED_HOLD_LOCATION.locationCode }).session(session);
+    if (!location) {
+        const created = await StockLocation.create([{
+            ...DAMAGED_HOLD_LOCATION,
+            isActive: true,
+            status: 'ACTIVE'
+        }], session ? { session } : undefined);
+        location = created[0];
+    }
+    return location;
+}
+
+async function getDamagedHoldLocationId(session = null) {
+    const location = await StockLocation.findOne({ locationCode: DAMAGED_HOLD_LOCATION.locationCode }).session(session);
+    return location ? location._id : null;
+}
+
+async function getProjectReturnableItems(projectId, recipientUserId = null) {
+    const approvedReturns = await ProjectReturnBatch.find({
+        projectId,
+        status: 'APPROVED'
+    }).lean();
+
+    const alreadyReturnedByItem = new Map();
+    for (const batch of approvedReturns) {
+        for (const line of batch.lines || []) {
+            const itemKey = normalizeId(line.itemId);
+            const current = alreadyReturnedByItem.get(itemKey) || { good: 0, damaged: 0 };
+            current.good += Number(line.goodQuantity || 0);
+            current.damaged += Number(line.damagedQuantity || 0);
+            alreadyReturnedByItem.set(itemKey, current);
+        }
+    }
+
+    const dispatches = await DispatchBatch.find({
+        status: { $in: ['DISPATCHED', 'ACKNOWLEDGED'] }
+    })
+        .populate({
+            path: 'storeRequestId',
+            populate: { path: 'materialRequestId', populate: { path: 'projectId', select: 'name projectCode' } }
+        })
+        .populate('lines.itemId', 'name itemCode uom')
+        .sort({ dispatchedAt: -1 });
+
+    const eligibleMap = new Map();
+
+    for (const dispatch of dispatches) {
+        const dispatchProjectId = normalizeId(dispatch.storeRequestId?.materialRequestId?.projectId?._id || dispatch.storeRequestId?.materialRequestId?.projectId);
+        if (dispatchProjectId !== normalizeId(projectId)) continue;
+        if (recipientUserId) {
+            const dispatchRecipientId = normalizeId(
+                dispatch.storeRequestId?.materialRequestId?.engineerId?._id ||
+                dispatch.storeRequestId?.materialRequestId?.engineerId
+            );
+            if (dispatchRecipientId !== normalizeId(recipientUserId)) continue;
+        }
+
+        for (const line of dispatch.lines || []) {
+            const itemId = normalizeId(line.itemId?._id || line.itemId);
+            if (!itemId) continue;
+
+            if (!eligibleMap.has(itemId)) {
+                eligibleMap.set(itemId, {
+                    itemId,
+                    item: line.itemId && typeof line.itemId === 'object'
+                        ? { ...line.itemId.toObject?.(), id: line.itemId._id }
+                        : null,
+                    issuedQuantity: 0,
+                    alreadyReturnedQuantity: 0,
+                    maxReturnableQuantity: 0,
+                    dispatchIds: new Set(),
+                    dispatchLineRefs: []
+                });
+            }
+
+            const bucket = eligibleMap.get(itemId);
+            bucket.issuedQuantity += Number(line.dispatchedQuantity || 0);
+            bucket.dispatchIds.add(normalizeId(dispatch._id));
+            bucket.dispatchLineRefs.push(normalizeId(line._id));
+        }
+    }
+
+    return [...eligibleMap.values()]
+        .map((entry) => {
+            const returned = alreadyReturnedByItem.get(entry.itemId) || { good: 0, damaged: 0 };
+            const alreadyReturnedQuantity = Number(returned.good || 0) + Number(returned.damaged || 0);
+            const maxReturnableQuantity = Math.max(0, Number(entry.issuedQuantity || 0) - alreadyReturnedQuantity);
+
+            return {
+                ...entry,
+                alreadyReturnedQuantity,
+                maxReturnableQuantity,
+                dispatchIds: [...entry.dispatchIds]
+            };
+        })
+        .filter((entry) => entry.maxReturnableQuantity > 0.0001)
+        .sort((a, b) => (a.item?.name || '').localeCompare(b.item?.name || ''));
+}
+
+async function getEligibleProjectReturnsForUser(user) {
+    const dispatches = await DispatchBatch.find({
+        status: { $in: ['DISPATCHED', 'ACKNOWLEDGED'] }
+    })
+        .populate({
+            path: 'storeRequestId',
+            populate: { path: 'materialRequestId', populate: { path: 'projectId', select: 'name projectCode status managerId department' } }
+        })
+        .sort({ dispatchedAt: -1 });
+
+    const restrictToRecipient = [roles.MANAGER, roles.ENGINEER, roles.JUNIOR_ENGINEER].includes(user.role);
+    const projectMap = new Map();
+
+    for (const dispatch of dispatches) {
+        const materialRequest = dispatch.storeRequestId?.materialRequestId;
+        const project = materialRequest?.projectId;
+        if (!project) continue;
+
+        if (restrictToRecipient) {
+            const dispatchRecipientId = normalizeId(materialRequest.engineerId?._id || materialRequest.engineerId);
+            if (dispatchRecipientId !== normalizeId(user._id)) continue;
+        }
+
+        const projectId = normalizeId(project._id || project);
+        if (!projectMap.has(projectId)) {
+            projectMap.set(projectId, {
+                ...(project.toObject ? project.toObject() : project),
+                id: project._id || project,
+                latestDispatchAt: dispatch.dispatchedAt
+            });
+        }
+    }
+
+    const projects = [];
+    for (const project of projectMap.values()) {
+        const items = await getProjectReturnableItems(project.id, restrictToRecipient ? user._id : null);
+        if (items.length > 0) {
+            projects.push({
+                ...project,
+                returnableItemCount: items.length
+            });
+        }
+    }
+
+    return projects.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 }
 
 async function checkMRCompletion(mrId, session = null) {
@@ -906,7 +1058,54 @@ router.get('/audit-logs', async (req, res) => {
 
 router.get('/stock/current', async (req, res) => {
     try {
-        const balances = await StockBalance.find()
+        const damagedHoldLocationId = await getDamagedHoldLocationId();
+        const balanceQuery = damagedHoldLocationId
+            ? { locationId: { $ne: damagedHoldLocationId } }
+            : {};
+
+        const balances = await StockBalance.find(balanceQuery)
+            .populate({
+                path: 'itemId',
+                populate: { path: 'classificationId' }
+            })
+            .populate('locationId');
+
+        const rows = balances
+            .filter((balance) => balance.itemId && balance.locationId)
+            .map((balance) => ({
+                id: balance._id,
+                balanceId: balance._id,
+                itemId: balance.itemId._id,
+                itemCode: balance.itemId.itemCode,
+                name: balance.itemId.name,
+                package: balance.itemId.package,
+                uom: balance.itemId.uom,
+                description: balance.itemId.description,
+                tracksSerial: Boolean(balance.itemId.classificationId?.tracksSerial),
+                classificationId: balance.itemId.classificationId,
+                classification: balance.itemId.classificationId,
+                locationId: balance.locationId,
+                quantityOnHand: balance.quantityOnHand,
+                reservedQuantity: balance.reservedQuantity,
+                availableQuantity: balance.quantityOnHand - balance.reservedQuantity,
+                createdAt: balance.createdAt,
+                updatedAt: balance.updatedAt
+            }));
+
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/stock/damaged', async (req, res) => {
+    try {
+        const damagedHoldLocationId = await getDamagedHoldLocationId();
+        if (!damagedHoldLocationId) {
+            return res.json([]);
+        }
+
+        const balances = await StockBalance.find({ locationId: damagedHoldLocationId, quantityOnHand: { $gt: 0 } })
             .populate({
                 path: 'itemId',
                 populate: { path: 'classificationId' }
@@ -969,7 +1168,11 @@ router.get('/inventory/history/:itemId', async (req, res) => {
 
 router.get('/inventory/low-stock', async (req, res) => {
     try {
-        const stock = await StockBalance.find({ quantityOnHand: { $lt: 10 } })
+        const damagedHoldLocationId = await getDamagedHoldLocationId();
+        const stock = await StockBalance.find({
+            quantityOnHand: { $lt: 10 },
+            ...(damagedHoldLocationId ? { locationId: { $ne: damagedHoldLocationId } } : {})
+        })
             .populate('itemId', 'name itemCode');
         res.json(stock);
     } catch (err) {
@@ -1005,7 +1208,11 @@ router.get('/inventory/history/:itemId', async (req, res) => {
 
 router.get('/inventory/low-stock', async (req, res) => {
     try {
-        const stock = await StockBalance.find({ quantityOnHand: { $lt: 10 } })
+        const damagedHoldLocationId = await getDamagedHoldLocationId();
+        const stock = await StockBalance.find({
+            quantityOnHand: { $lt: 10 },
+            ...(damagedHoldLocationId ? { locationId: { $ne: damagedHoldLocationId } } : {})
+        })
             .populate('itemId', 'name itemCode');
         res.json(stock);
     } catch (err) {
@@ -2121,6 +2328,343 @@ router.get('/bridge/projects', async (req, res) => {
         res.json(mapped);
     } catch (err) {
         res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/project-returns/eligible-items/:projectId', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.MANAGER,
+            roles.ENGINEER,
+            roles.JUNIOR_ENGINEER,
+            roles.STORE_MANAGER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const projectId = req.params.projectId;
+        if (!projectId) {
+            return res.status(400).json({ message: 'Project ID is required.' });
+        }
+
+        const project = await Project.findById(projectId).select('name projectCode');
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found.' });
+        }
+
+        const restrictToRecipient = [roles.MANAGER, roles.ENGINEER, roles.JUNIOR_ENGINEER].includes(req.user.role);
+        const items = await getProjectReturnableItems(projectId, restrictToRecipient ? req.user._id : null);
+        res.json({
+            project: { ...project.toObject(), id: project._id },
+            items
+        });
+    } catch (err) {
+        console.error('Project return eligibility error:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/project-returns/eligible-projects', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.MANAGER,
+            roles.ENGINEER,
+            roles.JUNIOR_ENGINEER,
+            roles.STORE_MANAGER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const projects = await getEligibleProjectReturnsForUser(req.user);
+        res.json(projects);
+    } catch (err) {
+        console.error('Project return eligible projects error:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/project-returns', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.MANAGER,
+            roles.ENGINEER,
+            roles.JUNIOR_ENGINEER,
+            roles.STORE_MANAGER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const query = {};
+        if ([roles.MANAGER, roles.ENGINEER, roles.JUNIOR_ENGINEER].includes(req.user.role)) {
+            query.submittedById = req.user._id;
+        }
+
+        const batches = await ProjectReturnBatch.find(query)
+            .populate('projectId', 'name projectCode')
+            .populate('destinationLocationId', 'name locationCode')
+            .populate('submittedById', 'name')
+            .populate('reviewedById', 'name')
+            .populate('lines.itemId', 'name itemCode uom')
+            .sort({ createdAt: -1 });
+
+        res.json(batches.map((batch) => ({
+            ...batch.toObject(),
+            id: batch._id,
+            project: batch.projectId,
+            destinationLocation: batch.destinationLocationId,
+            submittedBy: batch.submittedById,
+            reviewedBy: batch.reviewedById,
+            lines: (batch.lines || []).map((line) => ({
+                ...(line.toObject ? line.toObject() : line),
+                id: line._id,
+                item: line.itemId
+            }))
+        })));
+    } catch (err) {
+        console.error('Project returns list error:', err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.post('/project-returns', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.MANAGER,
+            roles.ENGINEER,
+            roles.JUNIOR_ENGINEER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const { projectId, destinationLocationId, lines, overallRemarks } = req.body;
+        if (!projectId || !destinationLocationId) {
+            return res.status(400).json({ message: 'Project and destination location are required.' });
+        }
+
+        if (!Array.isArray(lines) || !lines.length) {
+            return res.status(400).json({ message: 'At least one return line is required.' });
+        }
+
+        const [project, destinationLocation] = await Promise.all([
+            Project.findById(projectId).select('name projectCode'),
+            StockLocation.findById(destinationLocationId).select('name locationCode')
+        ]);
+
+        if (!project) return res.status(404).json({ message: 'Project not found.' });
+        if (!destinationLocation) return res.status(404).json({ message: 'Destination location not found.' });
+
+        const eligibleItems = await getProjectReturnableItems(projectId);
+        const eligibleMap = new Map(eligibleItems.map((item) => [normalizeId(item.itemId), item]));
+
+        const sanitizedLines = [];
+        const sourceDispatchIds = new Set();
+
+        for (const rawLine of lines) {
+            const itemId = normalizeId(rawLine.itemId);
+            const eligible = eligibleMap.get(itemId);
+            if (!eligible) {
+                return res.status(400).json({ message: 'One or more selected items are not returnable for this project.' });
+            }
+
+            const goodQuantity = Number(rawLine.goodQuantity || 0);
+            const damagedQuantity = Number(rawLine.damagedQuantity || 0);
+            const totalQuantity = goodQuantity + damagedQuantity;
+
+            if (totalQuantity <= 0) {
+                return res.status(400).json({ message: 'Each return line must include a positive good or damaged quantity.' });
+            }
+
+            if (totalQuantity > Number(eligible.maxReturnableQuantity || 0) + 0.0001) {
+                return res.status(400).json({ message: `${eligible.item?.name || 'Selected item'} exceeds the remaining returnable quantity.` });
+            }
+
+            const conditionType =
+                goodQuantity > 0 && damagedQuantity > 0 ? 'MIXED' :
+                damagedQuantity > 0 ? 'DAMAGED' :
+                'GOOD';
+
+            if (damagedQuantity > 0 && !String(rawLine.damageReason || '').trim()) {
+                return res.status(400).json({ message: `Damage reason is required for ${eligible.item?.name || 'damaged return lines'}.` });
+            }
+
+            eligible.dispatchIds.forEach((dispatchId) => sourceDispatchIds.add(dispatchId));
+
+            sanitizedLines.push({
+                itemId,
+                dispatchLineRefs: eligible.dispatchLineRefs,
+                issuedQuantity: Number(eligible.issuedQuantity || 0),
+                maxReturnableQuantity: Number(eligible.maxReturnableQuantity || 0),
+                goodQuantity,
+                damagedQuantity,
+                conditionType,
+                damageReason: String(rawLine.damageReason || '').trim() || null,
+                responsibleTeam: String(rawLine.responsibleTeam || '').trim() || null,
+                responsibleUserId: rawLine.responsibleUserId || null,
+                remarks: String(rawLine.remarks || '').trim() || null
+            });
+        }
+
+        const count = await ProjectReturnBatch.countDocuments();
+        const stamp = new Date().toISOString().slice(0, 10).replaceAll('-', '');
+        const returnNumber = `PRT-${stamp}-${String(count + 1).padStart(4, '0')}`;
+
+        const batch = await ProjectReturnBatch.create({
+            returnNumber,
+            projectId,
+            destinationLocationId,
+            submittedById: req.user._id,
+            sourceDispatchIds: [...sourceDispatchIds],
+            overallRemarks: String(overallRemarks || '').trim() || null,
+            status: 'SUBMITTED',
+            submittedAt: new Date(),
+            lines: sanitizedLines
+        });
+
+        await logAudit('ProjectReturnBatch', batch._id, 'CREATE', null, batch.toObject(), req, {
+            returnNumber,
+            remarks: 'Project return submitted'
+        });
+        await logInvActivity('INV_PROJECT_RETURN_SUBMITTED', `Project return ${returnNumber} submitted for ${project.name}`, req.user._id, req.user.name, batch._id, returnNumber);
+
+        res.status(201).json({
+            ...batch.toObject(),
+            id: batch._id,
+            project,
+            destinationLocation
+        });
+    } catch (err) {
+        console.error('Project return submit error:', err);
+        res.status(400).json({ message: err.message });
+    }
+});
+
+router.post('/project-returns/:id/approve', async (req, res) => {
+    const session = await mongoose.startSession();
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.STORE_MANAGER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const { reviewRemarks } = req.body;
+        let resultBatch = null;
+
+        await session.withTransaction(async () => {
+            const batch = await ProjectReturnBatch.findById(req.params.id).session(session);
+            if (!batch) throw new Error('Project return batch not found.');
+            if (batch.status !== 'SUBMITTED') throw new Error('Only submitted project returns can be approved.');
+
+            const latestEligible = await getProjectReturnableItems(batch.projectId);
+            const eligibleMap = new Map(latestEligible.map((item) => [normalizeId(item.itemId), item]));
+            const damagedHoldLocation = await getOrCreateDamagedHoldLocation(session);
+
+            for (const line of batch.lines) {
+                const eligible = eligibleMap.get(normalizeId(line.itemId));
+                const requestedTotal = Number(line.goodQuantity || 0) + Number(line.damagedQuantity || 0);
+                if (!eligible || requestedTotal > Number(eligible.maxReturnableQuantity || 0) + 0.0001) {
+                    throw new Error('Return quantities are no longer valid against dispatched stock. Please refresh and resubmit.');
+                }
+
+                if (Number(line.goodQuantity || 0) > 0) {
+                    await StockBalance.findOneAndUpdate(
+                        { itemId: line.itemId, locationId: batch.destinationLocationId },
+                        { $inc: { quantityOnHand: Number(line.goodQuantity || 0) } },
+                        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+                    );
+
+                    await StockMovement.create([{
+                        itemId: line.itemId,
+                        locationId: batch.destinationLocationId,
+                        movementType: 'PROJECT_RETURN_GOOD',
+                        quantityChange: Number(line.goodQuantity || 0),
+                        referenceType: 'ProjectReturnBatch',
+                        referenceId: String(batch._id),
+                        remarks: line.remarks || batch.overallRemarks || `Project return ${batch.returnNumber}`,
+                        createdById: req.user._id
+                    }], { session });
+                }
+
+                if (Number(line.damagedQuantity || 0) > 0) {
+                    await StockBalance.findOneAndUpdate(
+                        { itemId: line.itemId, locationId: damagedHoldLocation._id },
+                        { $inc: { quantityOnHand: Number(line.damagedQuantity || 0) } },
+                        { upsert: true, new: true, setDefaultsOnInsert: true, session }
+                    );
+
+                    await StockMovement.create([{
+                        itemId: line.itemId,
+                        locationId: damagedHoldLocation._id,
+                        movementType: 'PROJECT_RETURN_DAMAGED',
+                        quantityChange: Number(line.damagedQuantity || 0),
+                        referenceType: 'ProjectReturnBatch',
+                        referenceId: String(batch._id),
+                        remarks: line.damageReason || line.remarks || `Damaged return ${batch.returnNumber}`,
+                        createdById: req.user._id
+                    }], { session });
+                }
+            }
+
+            const before = batch.toObject();
+            batch.status = 'APPROVED';
+            batch.reviewedById = req.user._id;
+            batch.reviewedAt = new Date();
+            batch.reviewRemarks = String(reviewRemarks || '').trim() || null;
+            await batch.save({ session });
+            resultBatch = batch;
+
+            await logAudit('ProjectReturnBatch', batch._id, 'APPROVE', before, batch.toObject(), req, {
+                returnNumber: batch.returnNumber,
+                remarks: batch.reviewRemarks || 'Project return approved'
+            });
+        });
+
+        await logInvActivity('INV_PROJECT_RETURN_APPROVED', `Project return ${resultBatch.returnNumber} approved`, req.user._id, req.user.name, resultBatch._id, resultBatch.returnNumber);
+        res.json({ success: true, batch: resultBatch });
+    } catch (err) {
+        console.error('Project return approve error:', err);
+        res.status(400).json({ message: err.message });
+    } finally {
+        await session.endSession();
+    }
+});
+
+router.post('/project-returns/:id/reject', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [
+            roles.STORE_MANAGER,
+            roles.ADMIN,
+            roles.SUPER_ADMIN,
+            roles.SUPER_USER
+        ])) return;
+
+        const { reviewRemarks } = req.body;
+        const batch = await ProjectReturnBatch.findById(req.params.id);
+        if (!batch) return res.status(404).json({ message: 'Project return batch not found.' });
+        if (batch.status !== 'SUBMITTED') return res.status(400).json({ message: 'Only submitted project returns can be rejected.' });
+
+        const before = batch.toObject();
+        batch.status = 'REJECTED';
+        batch.reviewedById = req.user._id;
+        batch.reviewedAt = new Date();
+        batch.reviewRemarks = String(reviewRemarks || '').trim() || null;
+        await batch.save();
+
+        await logAudit('ProjectReturnBatch', batch._id, 'REJECT', before, batch.toObject(), req, {
+            returnNumber: batch.returnNumber,
+            remarks: batch.reviewRemarks || 'Project return rejected'
+        });
+        await logInvActivity('INV_PROJECT_RETURN_REJECTED', `Project return ${batch.returnNumber} rejected`, req.user._id, req.user.name, batch._id, batch.returnNumber);
+
+        res.json({ success: true, batch });
+    } catch (err) {
+        console.error('Project return reject error:', err);
+        res.status(400).json({ message: err.message });
     }
 });
 

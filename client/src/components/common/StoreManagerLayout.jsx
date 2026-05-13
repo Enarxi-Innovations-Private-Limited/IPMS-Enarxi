@@ -37,7 +37,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     const [isStoreOpen, setIsStoreOpen] = useState(() => {
         const saved = localStorage.getItem('sm_store_expanded');
         if (saved !== null) return saved === 'true';
-        return ['store-requests', 'store-inward', 'store-uploads'].includes(currentPage);
+        return ['store-requests', 'store-inward', 'store-uploads', 'store-project-returns'].includes(currentPage);
     });
 
     const [isAdminSetupOpen, setIsAdminSetupOpen] = useState(() => {
@@ -49,7 +49,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     const [isReportsOpen, setIsReportsOpen] = useState(() => {
         const saved = localStorage.getItem('sm_reports_expanded');
         if (saved !== null) return saved === 'true';
-        return ['store-reports'].includes(currentPage);
+        return ['store-reports', 'store-stock', 'store-ledger', 'store-damaged-stock'].includes(currentPage);
     });
 
     const toggleStore = () => {
@@ -127,11 +127,13 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
         { id: 'store-requests', label: 'Store Requests', icon: 'assignment', path: '/store/requests' },
         { id: 'store-inward', label: 'Store Inward', icon: 'input', path: '/store/inward' },
         { id: 'store-dispatches', label: 'Store Dispatches', icon: 'local_shipping', path: '/store/dispatches' },
+        { id: 'store-project-returns', label: 'Project Returns', icon: 'keyboard_return', path: '/store/project-returns' },
         { id: 'store-uploads', label: 'Stock Uploads', icon: 'upload', path: '/store/uploads' },
     ];
 
     const reportsMenu = [
         { id: 'store-stock', label: 'Current Stock', icon: 'inventory_2', path: '/store/stock' },
+        { id: 'store-damaged-stock', label: 'Damaged Stock', icon: 'inventory_2', path: '/store/damaged-stock' },
         { id: 'store-ledger', label: 'Stock Ledger', icon: 'history', path: '/store/ledger' },
     ];
 

@@ -17,8 +17,10 @@ import ManagerProjectsPage from './components/dashboard/ManagerProjectsPage.jsx'
 import ManagerTasksPage from './components/dashboard/ManagerTasksPage.jsx';
 import ManagerTeamPage from './components/dashboard/ManagerTeamPage.jsx';
 import StockOverview from './components/inventory/StockOverview.jsx';
+import DamagedStockPage from './components/inventory/DamagedStockPage.jsx';
 import MaterialRequestPage from './components/inventory/MaterialRequestPage.jsx';
 import ProjectReturn from './components/inventory/ProjectReturn.jsx';
+import ProjectReturnReview from './components/inventory/ProjectReturnReview.jsx';
 import AdminMRRouting from './components/inventory/AdminMRRouting.jsx';
 import VendorManagement from './components/inventory/VendorManagement.jsx';
 import PurchasePlanning from './components/inventory/PurchasePlanning.jsx';
@@ -234,10 +236,26 @@ function App() {
         }
       />
       <Route
+        path="/super/inventory/damaged-stock"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <DamagedStockPage currentPage="inv-damaged-stock" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/super/inventory/transfers"
         element={
           <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
             <StockTransfer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/super/inventory/project-returns"
+        element={
+          <ProtectedRoute allowedRoles={['SUPER_USER', 'SUPER_ADMIN']}>
+            <ProjectReturnReview currentPage="inv-project-returns" />
           </ProtectedRoute>
         }
       />
@@ -388,8 +406,10 @@ function App() {
       <Route path="/store/dispatches" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StoreDispatchPage currentPage="store-dispatches" /></ProtectedRoute>} />
       <Route path="/store/transfers" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockTransfer /></ProtectedRoute>} />
       <Route path="/store/stock" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockOverview currentPage="store-stock" /></ProtectedRoute>} />
+      <Route path="/store/damaged-stock" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><DamagedStockPage currentPage="store-damaged-stock" /></ProtectedRoute>} />
       <Route path="/store/uploads" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockUploadsPage /></ProtectedRoute>} />
       <Route path="/store/approvals" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><AdjustmentReview /></ProtectedRoute>} />
+      <Route path="/store/project-returns" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><ProjectReturnReview currentPage="store-project-returns" /></ProtectedRoute>} />
       <Route path="/store/ledger" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><InventoryAudit currentPage="store-ledger" /></ProtectedRoute>} />
       <Route path="/store/locations" element={<ProtectedRoute allowedRoles={['STORE_MANAGER']}><StockLocationsPage /></ProtectedRoute>} />
 

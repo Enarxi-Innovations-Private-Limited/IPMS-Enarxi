@@ -86,7 +86,9 @@ const StockMovementSchema = new mongoose.Schema({
             'STOCK_RESERVATION_RELEASED', 
             'STOCK_DISPATCHED', 
             'PURCHASE_INWARD',
-            'PROJECT_RETURN'
+            'PROJECT_RETURN',
+            'PROJECT_RETURN_GOOD',
+            'PROJECT_RETURN_DAMAGED'
         ],
         required: true 
     },
@@ -299,6 +301,38 @@ const PurchaseInwardBatchSchema = new mongoose.Schema({
 
 PurchaseInwardBatchSchema.index({ purchaseOrderId: 1 });
 
+// --- Project Return Workflow ---
+
+const ProjectReturnBatchSchema = new mongoose.Schema({
+    returnNumber: { type: String, required: true, unique: true },
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', required: true },
+    destinationLocationId: { type: mongoose.Schema.Types.ObjectId, ref: 'StockLocation', required: true },
+    submittedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    reviewedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    status: { type: String, enum: ['SUBMITTED', 'APPROVED', 'REJECTED'], default: 'SUBMITTED' },
+    sourceDispatchIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'DispatchBatch' }],
+    overallRemarks: String,
+    reviewRemarks: String,
+    submittedAt: { type: Date, default: Date.now },
+    reviewedAt: Date,
+    lines: [{
+        itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
+        dispatchLineRefs: [String],
+        issuedQuantity: { type: Number, required: true },
+        maxReturnableQuantity: { type: Number, required: true },
+        goodQuantity: { type: Number, default: 0 },
+        damagedQuantity: { type: Number, default: 0 },
+        conditionType: { type: String, enum: ['GOOD', 'DAMAGED', 'MIXED'], required: true },
+        damageReason: String,
+        responsibleTeam: String,
+        responsibleUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        remarks: String
+    }]
+}, { timestamps: true });
+
+ProjectReturnBatchSchema.index({ projectId: 1, status: 1 });
+ProjectReturnBatchSchema.index({ submittedById: 1 });
+
 const AuditLogSchema = new mongoose.Schema({
     actorUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     actorRole: String,
@@ -359,6 +393,7 @@ module.exports = {
     PurchaseOrder: mongoose.model('PurchaseOrder', PurchaseOrderSchema),
     PurchaseOrderLineAllocation: mongoose.model('PurchaseOrderLineAllocation', PurchaseOrderLineAllocationSchema),
     PurchaseInwardBatch: mongoose.model('PurchaseInwardBatch', PurchaseInwardBatchSchema),
+    ProjectReturnBatch: mongoose.model('ProjectReturnBatch', ProjectReturnBatchSchema),
     StockAdjustmentBatch: mongoose.model('StockAdjustmentBatch', StockAdjustmentBatchSchema),
     AuditLog: mongoose.model('AuditLog', AuditLogSchema)
 };

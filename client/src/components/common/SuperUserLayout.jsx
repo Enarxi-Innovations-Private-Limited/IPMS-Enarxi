@@ -35,7 +35,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(() => {
     const saved = localStorage.getItem('inventory_menu_expanded');
     if (saved !== null) return saved === 'true';
-    return currentPage.startsWith('inv-') || currentPage.startsWith('inventory') || currentPage.includes('material-requests');
+        return currentPage.startsWith('inv-') || currentPage.startsWith('inventory') || currentPage.includes('material-requests');
   });
 
   const toggleInventory = () => {
@@ -91,7 +91,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/super' },
     { id: 'projects', label: 'Projects', icon: 'folder', path: '/super/projects' },
     { id: 'teams', label: 'Team Members', icon: 'group', path: '/super/teams' },
-    { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
+        { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
   ];
 
   const inventoryMenu = [
@@ -118,6 +118,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
         { id: 'inv-store-fulfillment', label: 'Store Requests', icon: 'assignment_turned_in', path: '/super/inventory/fulfillment' },
         { id: 'inv-inward', label: 'Store Inward', icon: 'input', path: '/super/inventory/inward' },
         { id: 'inv-dispatches', label: 'Store Dispatches', icon: 'local_shipping', path: '/super/inventory/dispatches' },
+        { id: 'inv-project-returns', label: 'Project Returns', icon: 'keyboard_return', path: '/super/inventory/project-returns' },
         { id: 'inv-uploads', label: 'Stock Uploads', icon: 'upload', path: '/super/inventory/uploads' },
         { id: 'inv-approvals', label: 'Stock Approvals', icon: 'check_circle', path: '/super/inventory/adjustments' },
       ]
@@ -134,6 +135,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
       name: "STOCK REPORTS",
       items: [
         { id: 'inv-current-stock', label: 'Current Stock', icon: 'warehouse', path: '/super/inventory' },
+        { id: 'inv-damaged-stock', label: 'Damaged Stock', icon: 'broken_image', path: '/super/inventory/damaged-stock' },
         { id: 'inv-ledger', label: 'Stock Ledger', icon: 'menu_book', path: '/super/inventory/audit' },
       ]
     }

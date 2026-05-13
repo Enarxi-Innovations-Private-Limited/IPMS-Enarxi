@@ -3,6 +3,7 @@ import inventoryApi from './inventoryApi';
 const inventoryService = {
   // Stock Overview
   getCurrentStock: () => inventoryApi.get('stock/current'),
+  getDamagedStock: () => inventoryApi.get('stock/damaged'),
   getStockLedger: () => inventoryApi.get('inventory/ledger'),
   getStockHistory: (itemId) => inventoryApi.get(`inventory/history/${itemId}`),
   getLowStockReport: () => inventoryApi.get('inventory/low-stock'),
@@ -82,6 +83,12 @@ const inventoryService = {
   getClassifications: () => inventoryApi.get('bridge/classifications'),
   getLocations: () => inventoryApi.get('bridge/stock-locations'),
   getProjects: () => inventoryApi.get('bridge/projects'),
+  getEligibleProjectReturnProjects: () => inventoryApi.get('project-returns/eligible-projects'),
+  getProjectReturnableItems: (projectId) => inventoryApi.get(`project-returns/eligible-items/${projectId}`),
+  getProjectReturns: () => inventoryApi.get('project-returns'),
+  submitProjectReturn: (data) => inventoryApi.post('project-returns', data),
+  approveProjectReturn: (id, reviewRemarks) => inventoryApi.post(`project-returns/${id}/approve`, { reviewRemarks }),
+  rejectProjectReturn: (id, reviewRemarks) => inventoryApi.post(`project-returns/${id}/reject`, { reviewRemarks }),
   
   // Store / Dispatch
   getStoreRequests: () => inventoryApi.get('store/requests'),
