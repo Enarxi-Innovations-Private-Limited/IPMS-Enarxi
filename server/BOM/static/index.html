@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOM Price Comparison</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .cheapest {
+            background-color: #dcfce7;
+            font-weight: bold;
+        }
+
+        .insufficient-stock {
+            background-color: #fef2f2;
+            color: #dc2626;
+            font-style: italic;
+        }
+
+        .loading {
+            display: none;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen p-8">
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-10 text-center">
+            <h1 class="text-4xl font-bold text-blue-600 mb-2">AI-Powered BOM Price Evaluator</h1>
+            <p class="text-gray-600">Upload your electronic component list and find the best deals.</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4">1. Upload Excel BOM</h2>
+            <div class="flex items-center space-x-4">
+                <input type="file" id="fileInput" accept=".xlsx, .xls"
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                <button onclick="uploadFile()"
+                    class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 transition">Analyze
+                    File</button>
+            </div>
+            <p id="uploadStatus" class="mt-2 text-sm text-gray-500"></p>
+        </div>
+
+        <!-- Detection & Mapping Section -->
+        <div id="mappingSection" class="bg-white p-6 rounded-lg shadow-md mb-8 hidden">
+            <h2 class="text-xl font-semibold mb-4">2. Confirm Column Mapping</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Component/Value Column</label>
+                    <select id="compCol"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Quantity Column</label>
+                    <select id="qtyCol"
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Vendor/Product Columns</label>
+                    <div id="vendorCols" class="mt-2 space-y-2 max-h-40 overflow-y-auto border p-2 rounded"></div>
+                </div>
+            </div>
+            <div id="progressContainer" class="mt-6 hidden">
+                <div class="flex justify-between mb-1">
+                    <span class="text-sm font-medium text-blue-700" id="progressStatus">Starting evaluation...</span>
+                    <span class="text-sm font-medium text-blue-700" id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <button id="processBtn" onclick="processBOM()"
+                class="mt-6 bg-green-600 text-white px-8 py-3 rounded-md hover:bg-green-700 transition font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                <span id="btnText">Compare Prices & Optimize</span>
+                <svg id="loadingSpinner" class="animate-spin ml-3 h-5 w-5 text-white hidden" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="bg-white p-6 rounded-lg shadow-md hidden">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h2 class="text-xl font-semibold">3. Price Comparison Results</h2>
+                <div class="flex gap-4">
+                    <a href="/export"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition text-sm">Export
+                        to Excel</a>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div class="bg-blue-50 p-4 rounded-lg">
+                    <p class="text-sm text-blue-600 font-bold uppercase">Optimized Total Cost</p>
+                    <p id="optTotal" class="text-3xl font-extrabold text-blue-900">$0.00</p>
+                </div>
+                <div class="col-span-2 bg-gray-50 p-4 rounded-lg">
+                    <p class="text-sm text-gray-600 font-bold uppercase mb-2">Single Vendor Comparison</p>
+                    <div id="vendorSummary" class="flex flex-wrap gap-4"></div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200" id="resultsTable">
+                    <thead class="bg-gray-100">
+                        <tr id="tableHeader">
+                            <th class="px-4 py-3 text-left font-bold">Component</th>
+                            <th class="px-4 py-3 text-left font-bold">Qty</th>
+                            <th class="px-4 py-3 text-left font-bold">Best Price</th>
+                            <th class="px-4 py-3 text-left font-bold">Total Amt</th>
+                            <th class="px-4 py-3 text-left font-bold">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200" id="tableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allColumns = [];
+        let detectedMapping = {};
+        let currentResults = null;
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return alert("Please select a file first!");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            document.getElementById('uploadStatus').textContent = "Analyzing columns...";
+
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+
+                if (response.ok) {
+                    allColumns = data.columns;
+                    detectedMapping = data.detected;
+                    showMappingUI();
+                } else {
+                    alert(data.detail);
+                }
+            } catch (err) {
+                alert("Error connecting to server");
+            }
+        }
+
+        function showMappingUI() {
+            const compSelect = document.getElementById('compCol');
+            const qtySelect = document.getElementById('qtyCol');
+            const vendorDiv = document.getElementById('vendorCols');
+
+            compSelect.innerHTML = '';
+            qtySelect.innerHTML = '';
+            vendorDiv.innerHTML = '';
+
+            allColumns.forEach(col => {
+                const opt1 = new Option(col, col);
+                const opt2 = new Option(col, col);
+                if (col === detectedMapping.component) opt1.selected = true;
+                if (col === detectedMapping.quantity) opt2.selected = true;
+                compSelect.add(opt1);
+                qtySelect.add(opt2);
+
+                const checkboxWrap = document.createElement('div');
+                checkboxWrap.className = 'flex items-center';
+                const isVendor = (detectedMapping.vendors || []).includes(col);
+                checkboxWrap.innerHTML = `
+                    <input type="checkbox" value="${col}" ${isVendor ? 'checked' : ''} class="vendor-chk h-4 w-4 text-blue-600 border-gray-300 rounded">
+                    <label class="ml-2 block text-sm text-gray-900">${col}</label>
+                `;
+                vendorDiv.appendChild(checkboxWrap);
+            });
+
+            document.getElementById('mappingSection').classList.remove('hidden');
+            document.getElementById('uploadStatus').textContent = "File analyzed successfully.";
+        }
+
+        async function processBOM() {
+            const processBtn = document.getElementById('processBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('loadingSpinner');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressStatus = document.getElementById('progressStatus');
+
+            const mapping = {
+                component: document.getElementById('compCol').value,
+                quantity: document.getElementById('qtyCol').value,
+                vendors: Array.from(document.querySelectorAll('.vendor-chk:checked')).map(el => el.value)
+            };
+
+            // UI State: LOCK
+            processBtn.disabled = true;
+            btnText.textContent = "Processing...";
+            spinner.classList.remove('hidden');
+            progressContainer.classList.remove('hidden');
+            
+            // Progress Simulation
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                if (progress < 95) {
+                    progress += Math.random() * 5;
+                    updateProgress(progress, "Analyzing vendors and optimizing prices...");
+                }
+            }, 1500);
+
+            function updateProgress(val, status) {
+                val = Math.min(val, 100);
+                progressBar.style.width = `${val}%`;
+                progressPercent.textContent = `${Math.round(val)}%`;
+                if (status) progressStatus.textContent = status;
+            }
+
+            const formData = new FormData();
+            formData.append('mapping', JSON.stringify(mapping));
+
+            try {
+                const response = await fetch('/process', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                clearInterval(progressInterval);
+                updateProgress(100, "100% Complete - Results Ready!");
+                
+                currentResults = data;
+                renderResults(data);
+                
+                // Keep progress at 100% for a moment before allowing re-click if needed
+                setTimeout(() => {
+                    processBtn.disabled = false;
+                    btnText.textContent = "Compare Prices & Optimize";
+                    spinner.classList.add('hidden');
+                }, 1000);
+
+            } catch (err) {
+                clearInterval(progressInterval);
+                alert("Processing failed");
+                processBtn.disabled = false;
+                btnText.textContent = "Compare Prices & Optimize";
+                spinner.classList.add('hidden');
+            }
+        }
+
+        function renderResults(data) {
+            document.getElementById('resultsSection').classList.remove('hidden');
+            // Display optimized total (already formatted with &#8377;)
+            document.getElementById('optTotal').textContent = data.optimized_total;
+
+            const summaryDiv = document.getElementById('vendorSummary');
+            summaryDiv.innerHTML = '';
+            Object.entries(data.vendor_totals).forEach(([vendor, total]) => {
+                const div = document.createElement('div');
+                div.className = 'bg-white border p-2 rounded text-sm';
+                // total is already formatted (e.g., "&#8377;1500.00")
+                div.innerHTML = `<span class="font-bold">${vendor}:</span> ${total}`;
+                summaryDiv.appendChild(div);
+            });
+
+            const header = document.getElementById('tableHeader');
+            header.innerHTML = `
+                <th class="px-4 py-3 text-left font-bold">Component</th>
+                <th class="px-4 py-3 text-left font-bold">Qty</th>
+                ${data.vendors.map(v => `<th class="px-4 py-3 text-left font-bold">${v}</th>`).join('')}
+                <th class="px-4 py-3 text-left font-bold">Best Price</th>
+                <th class="px-4 py-3 text-left font-bold">Total Amt</th>
+                <th class="px-4 py-3 text-left font-bold">Actions</th>
+            `;
+
+            const body = document.getElementById('tableBody');
+            body.innerHTML = '';
+            data.items.forEach(item => {
+                const tr = document.createElement('tr');
+                let vendorCells = data.vendors.map(v => {
+                    const raw = item[v] || "-";
+                    const link = item.links && item.links[v];
+
+                    // ── Classify the cell value ──
+                    const isOOS = typeof raw === 'string' && raw.startsWith('OOS');
+                    const isLowStock = typeof raw === 'string' && raw.startsWith('Insufficient Stock');
+                    const isDash = raw === "-";
+
+                    // Check if this vendor is part of the allocations
+                    const allocation = item.allocations && item.allocations.find(a => a.vendor === v);
+                    const isAllocated = !!allocation;
+
+                    // Extract price from "OOS:0.56" or "Insufficient Stock (5 available):0.56" format
+                    let oosPrice = null;
+                    let errorLabel = isLowStock ? 'Low Stock' : 'Out of Stock';
+
+                    if ((isOOS || isLowStock) && raw.includes(':')) {
+                        const parts = raw.split(':');
+                        const priceVal = parseFloat(parts[parts.length - 1]);
+                        if (!isNaN(priceVal)) oosPrice = '\u20b9' + priceVal.toFixed(2);
+                        if (isLowStock) {
+                            const labelPart = parts.slice(0, -1).join(':');
+                            const countMatch = labelPart.match(/(\d+)\s*available/);
+                            errorLabel = countMatch
+                                ? `Only ${countMatch[1]} available`
+                                : labelPart.replace('Insufficient Stock', 'Low Stock');
+                        }
+                    }
+
+                    let cellContent;
+                    if (isOOS || isLowStock) {
+                        const priceStr = oosPrice || '';
+                        const priceHtml = priceStr
+                            ? `<span class="line-through text-xs mr-1 text-gray-400">${priceStr}</span>`
+                            : '';
+                        const badge = `<span class="inline-block bg-amber-100 border border-amber-300 text-amber-800 text-xs font-bold px-1.5 py-0.5 rounded whitespace-nowrap">${errorLabel}</span>`;
+                        const inner = `<span class="flex flex-col gap-0.5">${priceHtml}${badge}</span>`;
+                        cellContent = link
+                            ? `<a href="${link}" target="_blank" class="hover:opacity-80">${inner}</a>`
+                            : inner;
+                    } else if (isDash) {
+                        cellContent = `<span class="text-gray-400">&mdash;</span>`;
+                    } else {
+                        // Normal in-stock price
+                        let inner = `<span class="font-medium">${raw}</span>`;
+                        if (isAllocated) {
+                            inner += ` <span class="text-[10px] bg-green-200 text-green-800 px-1 rounded ml-1">${allocation.qty}x</span>`;
+                        }
+                        cellContent = link
+                            ? `<a href="${link}" target="_blank" class="hover:underline">${inner}</a>`
+                            : inner;
+                    }
+
+                    const cellClass = isAllocated
+                        ? 'cheapest text-green-700 bg-green-50 border-2 border-green-200'
+                        : (isOOS || isLowStock)
+                            ? 'bg-amber-50'
+                            : 'text-gray-700';
+
+                    return `<td class="px-4 py-3 ${cellClass}">${cellContent}</td>`;
+                }).join('');
+
+                // SVG cart icon
+                const cartSVG = `<svg xmlns="http://www.w3.org/2000/svg" class="inline w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13l-1.4 7h12.8M7 13H5.4M9 21a1 1 0 100-2 1 1 0 000 2zm10 0a1 1 0 100-2 1 1 0 000 2z"/></svg>`;
+                const warnSVG = `<svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`;
+
+                // Best Price & Total Breakdown
+                let bestPriceHtml = '';
+                let totalAmtHtml = '';
+                if (item.allocations && item.allocations.length > 0) {
+                    bestPriceHtml = item.allocations.map(a => `<div class="text-xs text-green-700"><span class="font-bold">${a.vendor}:</span> &#8377;${a.unit_price.toFixed(2)} (${a.qty}x)</div>`).join('');
+                    totalAmtHtml = `<div class="font-bold text-gray-900">${item.total_amt}</div>`;
+                    if (item.allocations.length > 1) {
+                        totalAmtHtml += item.allocations.map(a => `<div class="text-[10px] text-gray-500">${a.vendor}: &#8377;${a.total.toFixed(2)}</div>`).join('');
+                    }
+                } else {
+                    bestPriceHtml = `<span class="text-gray-400">&mdash;</span>`;
+                    totalAmtHtml = `<span class="text-gray-400">&mdash;</span>`;
+                }
+
+                // Unfulfilled Warning
+                let unfulfilledHtml = '';
+                if (item.unfulfilled) {
+                    unfulfilledHtml = `<div class="mt-1 flex items-center gap-1 bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded">${warnSVG} Missing: ${item.unfulfilled} units</div>`;
+                }
+
+                // Action Buttons
+                let actionButtonsHtml = '';
+                if (item.allocations && item.allocations.length > 0) {
+                    actionButtonsHtml = item.allocations.map(a => {
+                        const vUrl = (item.links && item.links[a.vendor]) || '';
+                        const cartUrl = data.vendor_cart_urls && data.vendor_cart_urls[a.vendor];
+                        return `
+                            <a href="${cartUrl || vUrl}" target="_blank" 
+                               class="inline-flex items-center bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold px-2 py-1 rounded transition mr-1 mb-1 shadow-sm">
+                                ${cartSVG} ${a.vendor} (${a.qty})
+                            </a>`;
+                    }).join('');
+                } else if (item.links && Object.keys(item.links).length > 0) {
+                    const firstLink = Object.values(item.links).find(link => link);
+                    actionButtonsHtml = `<a href="${firstLink}" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold px-2 py-1 rounded transition shadow-sm">View Product</a>`;
+                } else {
+                    actionButtonsHtml = `<span class="text-gray-400 text-sm">&mdash;</span>`;
+                }
+
+                tr.innerHTML = `
+                    <td class="px-4 py-3 font-medium text-gray-900">${item.component}</td>
+                    <td class="px-4 py-3 text-gray-600 text-sm">${item.qty}</td>
+                    ${vendorCells}
+                    <td class="px-4 py-3">${bestPriceHtml}</td>
+                    <td class="px-4 py-3">${totalAmtHtml}</td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-wrap">${actionButtonsHtml}</div>
+                        ${unfulfilledHtml}
+                    </td>
+                `;
+                body.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+
+</html>

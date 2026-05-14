@@ -2903,6 +2903,52 @@ app.get('/api/activities', authMiddleware, async (req, res) => {
     }
 });
 
+// ============ BOM AUTOMATION INTEGRATION ============
+const startBOMAutomation = () => {
+    const { spawn } = require('child_process');
+    const path = require('path');
+    const fs = require('fs');
+
+    const bomDir = path.join(__dirname, 'BOM');
+    
+    // Cross-platform python executable path
+    const pythonExe = process.platform === 'win32' 
+        ? path.join(bomDir, 'venv', 'Scripts', 'python.exe')
+        : path.join(bomDir, 'venv', 'bin', 'python');
+
+    if (!fs.existsSync(bomDir)) {
+        console.error('⚠️ [BOM] Automation directory not found at:', bomDir);
+        return;
+    }
+
+    if (!fs.existsSync(pythonExe)) {
+        console.error('⚠️ [BOM] Python executable not found at:', pythonExe);
+        console.log('   (Did you create the virtual environment in Automation-for-BOM?)');
+        return;
+    }
+
+    console.log(`🚀 [BOM] Starting Automation Server using: ${pythonExe}`);
+
+    // Using shell: true and quotes for paths with spaces
+    const bomProcess = spawn(`"${pythonExe}"`, ['-m', 'app.main'], {
+        cwd: bomDir,
+        shell: true,
+        env: { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' }
+    });
+
+    bomProcess.stdout.on('data', (data) => {
+        console.log(`[BOM] ${data.toString().trim()}`);
+    });
+
+    bomProcess.stderr.on('data', (data) => {
+        console.error(`[BOM ERROR] ${data.toString().trim()}`);
+    });
+
+    bomProcess.on('close', (code) => {
+        console.log(`🛑 [BOM] Automation Server exited with code ${code}`);
+    });
+};
+
 // ============ START SERVER ============
 const PORT = process.env.PORT || 5000;
 
@@ -2932,6 +2978,9 @@ const startServer = async () => {
 
         app.listen(PORT, '0.0.0.0', () => {
             console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+            
+            // Start BOM Automation as a child process
+            startBOMAutomation();
         });
     } catch (error) {
         console.error('❌ [Start Server]: Failed to start server:', error);

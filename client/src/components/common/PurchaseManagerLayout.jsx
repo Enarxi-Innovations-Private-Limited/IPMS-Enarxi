@@ -121,6 +121,7 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
         { id: 'purchase-requests', label: 'Purchase Requests', icon: 'request_quote', path: '/purchase/requests' },
         { id: 'purchase-orders', label: 'Purchase Orders', icon: 'receipt_long', path: '/purchase/orders' },
         { id: 'purchase-approvals', label: 'PO Approvals', icon: 'fact_check', path: '/purchase/approvals' },
+        { id: 'purchase-bom', label: 'Purchasing Hub', icon: 'bolt', path: '/purchase/bom' },
     ];
 
     const vendorMenu = [

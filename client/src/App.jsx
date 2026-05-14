@@ -40,6 +40,7 @@ import StockUploadsPage from './components/inventory/StockUploadsPage.jsx';
 import POApprovalsPage from './components/inventory/POApprovalsPage.jsx';
 import StoreDashboard from './components/inventory/StoreDashboard.jsx';
 import PurchaseDashboard from './components/inventory/PurchaseDashboard.jsx';
+import PurchasingHub from './components/inventory/PurchasingHub.jsx';
 import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
@@ -419,6 +420,7 @@ function App() {
       <Route path="/purchase/orders" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchaseOrdersPage /></ProtectedRoute>} />
       <Route path="/purchase/approvals" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><POApprovalsPage /></ProtectedRoute>} />
       <Route path="/purchase/vendors" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><VendorManagement /></ProtectedRoute>} />
+      <Route path="/purchase/bom" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><PurchasingHub /></ProtectedRoute>} />
 
       <Route path="/purchase/stock" element={<ProtectedRoute allowedRoles={['PURCHASE_MANAGER']}><StockOverview currentPage="purchase-stock" /></ProtectedRoute>} />
 
