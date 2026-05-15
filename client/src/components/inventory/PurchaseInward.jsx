@@ -98,7 +98,7 @@ export default function PurchaseInward() {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Purchase Inward (GRN)</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Purchase Inward (GRN)</h1>
                         <p className="text-text-secondary">Record incoming shipments with optional serial tracking.</p>
                     </div>
 
@@ -126,7 +126,7 @@ export default function PurchaseInward() {
                                             <span className="font-mono text-primary text-xs font-bold">{order.poNumber}</span>
                                             <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 uppercase">PLACED</span>
                                         </div>
-                                        <div className="text-white font-bold truncate">{order.vendor?.name}</div>
+                                        <div className="text-[#556070] font-bold truncate">{order.vendor?.name}</div>
                                         <div className="text-text-secondary text-xs mt-1">
                                             Expected: {order.expectedDeliveryDate ? new Date(order.expectedDeliveryDate).toLocaleDateString() : 'TBD'}
                                         </div>
@@ -138,9 +138,9 @@ export default function PurchaseInward() {
                         {/* Receipt Form */}
                         <div className="lg:col-span-2">
                             {selectedOrder ? (
-                                <form onSubmit={handleReceive} className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
+                                <form onSubmit={handleReceive} className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden shadow-2xl">
                                     <div className="p-6 border-b border-border-dark bg-gradient-surface">
-                                        <h3 className="text-xl font-bold text-white mb-1">Receive Inward: {selectedOrder.poNumber}</h3>
+                                        <h3 className="text-xl font-bold text-[#556070] mb-1">Receive Inward: {selectedOrder.poNumber}</h3>
                                         <p className="text-text-secondary text-sm">Vendor: {selectedOrder.vendor?.name}</p>
                                     </div>
 
@@ -148,7 +148,7 @@ export default function PurchaseInward() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Stock Location</label>
-                                                <select name="locationId" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary" required>
+                                                <select name="locationId" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary" required>
                                                     <option value="">Select storage bin/rack...</option>
                                                     {locations.map(loc => (
                                                         <option key={getEntityId(loc)} value={getEntityId(loc)}>{loc.name} ({loc.locationCode})</option>
@@ -157,7 +157,7 @@ export default function PurchaseInward() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Delivery Note #</label>
-                                                <input name="documentNote" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary" placeholder="Vendor Invoice/DC Number" required />
+                                                <input name="documentNote" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary" placeholder="Vendor Invoice/DC Number" required />
                                             </div>
                                         </div>
 
@@ -166,15 +166,15 @@ export default function PurchaseInward() {
                                             {selectedOrder.lines?.map(line => {
                                                 const lineId = getEntityId(line);
                                                 return (
-                                                <div key={lineId} className="bg-background-dark/30 border border-border-dark rounded-xl p-4">
+                                                <div key={lineId} className="bg-slate-50 border border-slate-200 shadow-sm rounded-xl p-4">
                                                     <div className="flex justify-between items-start mb-4">
                                                         <div>
-                                                            <div className="text-white font-bold">{line.item?.name}</div>
+                                                            <div className="text-[#556070] font-bold">{line.item?.name}</div>
                                                             <div className="text-primary text-xs font-mono">{line.item?.itemCode}</div>
                                                         </div>
                                                         <div className="text-right">
                                                             <div className="text-text-secondary text-[10px] uppercase font-bold">Pending</div>
-                                                            <div className="text-white font-black">{getPendingQuantity(line)} {line.item?.uom}</div>
+                                                            <div className="text-[#556070] font-black">{getPendingQuantity(line)} {line.item?.uom}</div>
                                                         </div>
                                                     </div>
                                                     
@@ -198,7 +198,7 @@ export default function PurchaseInward() {
                                                                     type="text" 
                                                                     name={`serials-${lineId}`}
                                                                     placeholder="e.g. SN1001, SN1002"
-                                                                    className="w-full bg-background-dark border border-amber-500/30 rounded-lg p-2 text-white text-sm outline-none focus:border-amber-500"
+                                                                    className="w-full bg-background-dark border border-amber-500/30 rounded-lg p-2 text-[#556070] text-sm outline-none focus:border-amber-500"
                                                                 />
                                                             </div>
                                                         )}
@@ -209,7 +209,7 @@ export default function PurchaseInward() {
 
                                         <div>
                                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Internal Remarks</label>
-                                            <textarea name="remarks" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary h-20" placeholder="Condition of goods, etc..."></textarea>
+                                            <textarea name="remarks" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary h-20" placeholder="Condition of goods, etc..."></textarea>
                                         </div>
 
                                         <button 
@@ -222,7 +222,7 @@ export default function PurchaseInward() {
                                     </div>
                                 </form>
                             ) : (
-                                <div className="h-[400px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
+                                <div className="h-[400px] flex flex-col items-center justify-center bg-white/30 border border-dashed border-slate-200 shadow-sm rounded-2xl">
                                     <span className="material-symbols-outlined text-border-dark text-6xl mb-4">downloading</span>
                                     <p className="text-text-secondary font-medium tracking-wide">Select a PO from the list to record inwarding</p>
                                 </div>

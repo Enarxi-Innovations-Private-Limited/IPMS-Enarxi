@@ -322,7 +322,7 @@ export default function EmployeeDashboard() {
           <nav aria-label="Breadcrumb" className="flex mb-6">
             <ol className="inline-flex items-center space-x-2">
               <li>
-                <span className="text-white text-sm font-medium">Dashboard</span>
+                <span className="text-[#556070] text-sm font-medium">Dashboard</span>
               </li>
             </ol>
           </nav>
@@ -330,7 +330,7 @@ export default function EmployeeDashboard() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Employee Dashboard</h1>
+              <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">Employee Dashboard</h1>
               <p className="text-text-secondary text-lg">Manage your assigned projects and tasks.</p>
             </div>
             <div className="flex gap-3">
@@ -356,7 +356,7 @@ export default function EmployeeDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div
                   onClick={() => navigate('/employee/projects')}
-                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 hover:bg-surface-dark/80 transition-all group"
+                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">My Projects</h3>
@@ -389,7 +389,7 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Projects Section */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden mb-8">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
                   <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">folder</span>
@@ -403,7 +403,7 @@ export default function EmployeeDashboard() {
                         <div
                           key={p.id}
                           onClick={() => navigate(`/employee/projects?projectId=${p.id}`)}
-                          className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors cursor-pointer group"
+                          className="bg-slate-50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-2">
                             <h3 className="text-primary font-bold font-mono group-hover:text-blue-400 transition-colors">{p.projectCode || 'No ID'}</h3>
@@ -439,7 +439,7 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Tasks Table */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
                 <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface">
                   <h2 className="text-lg font-semibold text-white flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">task_alt</span>
@@ -453,7 +453,7 @@ export default function EmployeeDashboard() {
                 ) : myTasks.length > 0 ? (
                   <div className="overflow-x-auto custom-scrollbar flex-1">
                     <table className="w-full">
-                      <thead className="bg-background-dark/50 border-b border-border-dark text-left">
+                      <thead className="bg-slate-50 border-b border-border-dark text-left">
                         <tr>
                           <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Title</th>
                           <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Project</th>
@@ -732,7 +732,7 @@ export default function EmployeeDashboard() {
               </div>
 
               <div className="p-6 space-y-5">
-                <div className="bg-background-dark/50 border border-border-dark rounded-lg p-4">
+                <div className="bg-slate-50 border border-border-dark rounded-lg p-4">
                   <p className="text-text-secondary text-xs uppercase tracking-wider mb-1">Task</p>
                   <p className="text-white font-medium">{selectedTaskForQuery.title}</p>
                 </div>

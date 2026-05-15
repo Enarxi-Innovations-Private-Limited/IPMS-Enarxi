@@ -63,26 +63,26 @@ export default function InventoryDashboard() {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Inventory Intelligence</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Inventory Intelligence</h1>
                         <p className="text-text-secondary">High-level overview of hardware assets and procurement health.</p>
                     </div>
 
                     {loading ? (
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-12">
                             {[...Array(5)].map((_, i) => (
-                                <div key={i} className="h-32 bg-surface-dark border border-border-dark rounded-2xl animate-pulse"></div>
+                                <div key={i} className="h-32 bg-white border border-slate-200 rounded-2xl animate-pulse"></div>
                             ))}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-12">
                             {statCards.map((card, i) => (
-                                <div key={i} className="bg-surface-dark border border-border-dark rounded-2xl p-5 shadow-xl relative overflow-hidden group hover:border-primary/50 transition-all">
+                                <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl relative overflow-hidden group hover:border-primary/50 transition-all">
                                     <div className="flex items-center justify-between mb-4">
                                         <div className={`size-10 rounded-xl ${card.bg} flex items-center justify-center`}>
                                             <span className={`material-symbols-outlined ${card.color}`}>{card.icon}</span>
                                         </div>
                                     </div>
-                                    <p className="text-2xl font-black text-white">{card.value}</p>
+                                    <p className="text-2xl font-black text-[#556070]">{card.value}</p>
                                     <p className="text-text-secondary text-[10px] font-bold uppercase tracking-widest mt-1">{card.label}</p>
                                 </div>
                             ))}
@@ -91,40 +91,40 @@ export default function InventoryDashboard() {
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         {/* Quick Actions */}
-                        <div className="bg-surface-dark border border-border-dark rounded-3xl p-8">
-                            <h3 className="text-xl font-bold text-white mb-6">Quick Operations</h3>
+                        <div className="bg-white border border-slate-200 rounded-3xl p-8">
+                            <h3 className="text-xl font-bold text-[#556070] mb-6">Quick Operations</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <button className="flex items-center gap-3 p-4 bg-background-dark border border-border-dark rounded-2xl hover:border-primary transition-all text-left">
+                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-primary transition-all text-left">
                                     <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                                         <span className="material-symbols-outlined">add_shopping_cart</span>
                                     </div>
-                                    <span className="text-sm font-bold text-white">Create MR</span>
+                                    <span className="text-sm font-bold text-[#556070]">Create MR</span>
                                 </button>
-                                <button className="flex items-center gap-3 p-4 bg-background-dark border border-border-dark rounded-2xl hover:border-emerald-500 transition-all text-left">
+                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-emerald-500 transition-all text-left">
                                     <div className="size-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
                                         <span className="material-symbols-outlined">input</span>
                                     </div>
-                                    <span className="text-sm font-bold text-white">Record Inward</span>
+                                    <span className="text-sm font-bold text-[#556070]">Record Inward</span>
                                 </button>
-                                <button className="flex items-center gap-3 p-4 bg-background-dark border border-border-dark rounded-2xl hover:border-amber-500 transition-all text-left">
+                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-amber-500 transition-all text-left">
                                     <div className="size-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
                                         <span className="material-symbols-outlined">assignment</span>
                                     </div>
-                                    <span className="text-sm font-bold text-white">Review POs</span>
+                                    <span className="text-sm font-bold text-[#556070]">Review POs</span>
                                 </button>
-                                <button className="flex items-center gap-3 p-4 bg-background-dark border border-border-dark rounded-2xl hover:border-blue-400 transition-all text-left">
+                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-blue-400 transition-all text-left">
                                     <div className="size-10 rounded-lg bg-blue-400/10 flex items-center justify-center text-blue-400">
                                         <span className="material-symbols-outlined">history</span>
                                     </div>
-                                    <span className="text-sm font-bold text-white">View Ledger</span>
+                                    <span className="text-sm font-bold text-[#556070]">View Ledger</span>
                                 </button>
                             </div>
                         </div>
 
                         {/* Recent Activity Mini-Ledger */}
-                        <div className="bg-surface-dark border border-border-dark rounded-3xl p-8 overflow-hidden">
+                        <div className="bg-white border border-slate-200 rounded-3xl p-8 overflow-hidden">
                             <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-xl font-bold text-white">Recent Movements</h3>
+                                <h3 className="text-xl font-bold text-[#556070]">Recent Movements</h3>
                                 <button className="text-xs text-primary font-bold hover:underline">See All</button>
                             </div>
                             <div className="space-y-4">
@@ -138,7 +138,7 @@ export default function InventoryDashboard() {
                                                     {log.quantityChange > 0 ? 'IN' : 'OUT'}
                                                 </div>
                                                 <div>
-                                                    <div className="text-white text-xs font-bold">{log.itemId?.name || 'Component'}</div>
+                                            <div className="text-[#556070] text-xs font-bold">{log.itemId?.name || 'Component'}</div>
                                                     <div className="text-text-secondary text-[10px]">{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {log.movementType?.replace(/_/g, ' ')}</div>
                                                 </div>
                                             </div>

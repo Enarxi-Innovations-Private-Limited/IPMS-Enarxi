@@ -117,18 +117,18 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     ];
 
     return (
-        <div className="flex h-screen w-full overflow-hidden">
+        <div className="light-theme flex h-screen w-full overflow-hidden">
             {/* Sidebar */}
-            <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
+            <aside className="hidden lg:flex w-72 flex-col border-r border-slate-200 bg-white h-full shrink-0">
                 <div className="flex flex-col h-full">
                     {/* Brand */}
                     <div className="p-6">
                         <div className="flex gap-3 px-2">
-                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">IP</span>
+                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-slate-100 bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                                <span className="text-[#556070] font-bold text-lg">IP</span>
                             </div>
                             <div className="flex flex-col justify-center">
-                                <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                                <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
                                 <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
                             </div>
                         </div>
@@ -143,8 +143,8 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                 <a
                                     key={item.id}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
-                                        ? 'bg-emerald-500/10 text-white shadow-sm'
-                                        : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                                        ? 'bg-emerald-500/10 text-[#556070] shadow-sm'
+                                        : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
                                         }`}
                                     href={item.path}
                                     onClick={(e) => {
@@ -169,7 +169,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070] hover:bg-slate-50'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -191,7 +191,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                                     key={subItem.id}
                                                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
                                                         ? 'text-emerald-400 font-bold'
-                                                        : 'text-text-secondary hover:text-white'
+                                                        : 'text-text-secondary hover:text-[#556070]'
                                                         }`}
                                                     href={subItem.path}
                                                     onClick={(e) => {
@@ -222,21 +222,21 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
             ></div>
 
             {/* Mobile Sidebar */}
-            <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
+            <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''} bg-white border-r border-slate-200`}>
                 <div className="flex flex-col gap-6 p-4">
                     <div className="flex items-center justify-between px-2 mt-2">
                         <div className="flex gap-3">
                             <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                                <span className="text-white font-bold text-lg">IP</span>
+                                <span className="text-[#556070] font-bold text-lg">IP</span>
                             </div>
                             <div className="flex flex-col justify-center">
-                                <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                                <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
                                 <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
                             </div>
                         </div>
                         <button
                             onClick={() => setShowMobileSidebar(false)}
-                            className="text-text-secondary hover:text-white"
+                            className="text-text-secondary hover:text-[#556070]"
                         >
                             <span className="material-symbols-outlined">close</span>
                         </button>
@@ -249,8 +249,8 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                 <a
                                     key={item.id}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
-                                        ? 'bg-emerald-500/10 text-white shadow-sm'
-                                        : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                                        ? 'bg-emerald-500/10 text-[#556070] shadow-sm'
+                                        : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
                                         }`}
                                     href={item.path}
                                     onClick={(e) => {
@@ -276,7 +276,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070] hover:bg-slate-50'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
@@ -298,7 +298,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                                     key={subItem.id}
                                                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
                                                         ? 'text-emerald-400 font-bold'
-                                                        : 'text-text-secondary hover:text-white'
+                                                        : 'text-text-secondary hover:text-[#556070]'
                                                         }`}
                                                     href={subItem.path}
                                                     onClick={(e) => {
@@ -323,17 +323,17 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background-dark">
+            <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-transparent">
                 {/* Header */}
-                <header className="flex items-center justify-between border-b border-border-dark bg-background-dark/95 backdrop-blur-sm px-6 py-4 z-10 sticky top-0">
+                <header className="flex items-center justify-between border-b border-slate-200 bg-white/80 backdrop-blur-md px-6 py-4 z-10 sticky top-0 shadow-sm">
                     <div className="flex items-center gap-4 lg:hidden">
                         <button
-                            className="text-text-secondary hover:text-white"
+                            className="text-text-secondary hover:text-[#556070]"
                             onClick={() => setShowMobileSidebar(true)}
                         >
                             <span className="material-symbols-outlined">menu</span>
                         </button>
-                        <span className="text-white font-bold text-lg">IPMS</span>
+                        <span className="text-[#556070] font-bold text-lg">IPMS</span>
                     </div>
                     <div className="hidden md:flex flex-1 max-w-xl mx-4">
                         <GlobalSearch placeholder="Search projects, tasks, team..." />
@@ -346,13 +346,13 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
+                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200"
                             >
                                 <div className="hidden md:flex flex-col items-end">
-                                    <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                                    <span className="text-[#556070] text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
                                     <span className="text-xs text-text-secondary font-medium">{user?.role?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) || 'Manager'}</span>
                                 </div>
-                                <div className="size-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold shadow-md shadow-emerald-500/20 ring-2 ring-background-dark">
+                                <div className="size-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-[#556070] font-bold shadow-md shadow-emerald-500/20 ring-2 ring-white">
                                     {user?.name?.charAt(0)?.toUpperCase() || 'M'}
                                 </div>
                                 <span className={`material-symbols-outlined text-text-secondary transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`}>
@@ -364,17 +364,17 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                             {showProfileDropdown && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileDropdown(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-72 bg-surface-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden">
+                                    <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden">
                                         {/* User Info */}
-                                        <div className="p-4 border-b border-border-dark bg-gradient-surface">
+                                        <div className="p-4 border-b border-border-dark bg-[#ECF1FF]/30 border-b border-slate-200">
                                             <div className="flex items-center gap-3">
                                                 <div className="size-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                                                    <span className="text-white font-bold text-lg">
+                                                    <span className="text-[#556070] font-bold text-lg">
                                                         {user?.name?.charAt(0)?.toUpperCase() || 'M'}
                                                     </span>
                                                 </div>
                                                 <div>
-                                                    <p className="text-white font-semibold">{user?.name || 'User'}</p>
+                                                    <p className="text-[#556070] font-semibold">{user?.name || 'User'}</p>
                                                     <p className="text-text-secondary text-sm">{user?.email || 'email@example.com'}</p>
                                                     <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-500/20 text-emerald-400">
                                                         {user?.role || 'MANAGER'}
@@ -387,13 +387,13 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                         <div className="p-2">
                                             <button
                                                 onClick={() => { setShowProfileDropdown(false); setShowChangePassword(true); }}
-                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors"
                                             >
                                                 <span className="material-symbols-outlined text-xl">lock</span>
                                                 <span className="text-sm font-medium">Change Password</span>
                                             </button>
                                             <button
-                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors"
                                             >
                                                 <span className="material-symbols-outlined text-xl">help</span>
                                                 <span className="text-sm font-medium">Help & Support</span>
@@ -425,9 +425,9 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
             {showChangePassword && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="relative bg-white border border-slate-200 shadow-xl w-full max-w-md mx-4 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-border-dark bg-[#ECF1FF]/30 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-emerald-500">lock</span>
                                 Change Password
                             </h2>
@@ -435,21 +435,21 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Current Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">New Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Enter new password (min 6 characters)" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Enter new password (min 6 characters)" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Confirm New Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
                             </div>
                             {passwordError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{passwordError}</div>}
                             {passwordSuccess && <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg text-sm">{passwordSuccess}</div>}
                             <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
-                                <button type="submit" disabled={isChangingPassword} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-lg shadow-emerald-900/50 hover:shadow-emerald-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-border-dark text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
+                                <button type="submit" disabled={isChangingPassword} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-[#556070] font-bold shadow-lg shadow-emerald-900/50 hover:shadow-emerald-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
                                     {isChangingPassword ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Changing...</> : <><span className="material-symbols-outlined text-lg">check</span>Change Password</>}
                                 </button>
                             </div>

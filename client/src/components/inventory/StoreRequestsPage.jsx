@@ -83,7 +83,7 @@ export default function StoreRequestsPage() {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Store Requests</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight mb-2">Store Requests</h1>
                         <p className="text-text-secondary">Fulfill and dispatch material requests from stock or inwarded goods.</p>
                     </div>
 
@@ -117,7 +117,7 @@ export default function StoreRequestsPage() {
                                             </span>
                                         </div>
                                         <div className="space-y-1">
-                                            <div className="text-white text-xs font-semibold">{batch.materialRequestId?.project?.name}</div>
+                                            <div className="text-[#556070] text-xs font-semibold">{batch.materialRequestId?.project?.name}</div>
                                             <div className="text-text-secondary text-[10px] uppercase font-bold">{batch.materialRequestId?.requestNumber}</div>
                                         </div>
                                         <div className="mt-3 flex items-center gap-2">
@@ -132,17 +132,17 @@ export default function StoreRequestsPage() {
                         {/* Detail Column */}
                         <div className="lg:col-span-2">
                             {selectedBatch ? (
-                                <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-right-4">
-                                    <div className="p-6 border-b border-border-dark bg-gradient-to-r from-amber-500/5 to-transparent">
+                                <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-right-4">
+                                    <div className="p-6 border-b border-slate-200 bg-gradient-to-r from-amber-500/5 to-transparent">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h3 className="text-xl font-bold text-white mb-1">{selectedBatch.batchNumber}</h3>
+                                                <h3 className="text-xl font-bold text-[#556070] mb-1">{selectedBatch.batchNumber}</h3>
                                                 <p className="text-text-secondary text-sm">
                                                     Source: {selectedBatch.notes?.includes('AUTO') ? 'Purchase Inward' : 'Direct Stock'}
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-white text-sm font-bold">{selectedBatch.materialRequestId?.project?.name}</div>
+                                                <div className="text-[#556070] text-sm font-bold">{selectedBatch.materialRequestId?.project?.name}</div>
                                                 <div className="text-text-secondary text-xs uppercase tracking-widest font-black">{selectedBatch.materialRequestId?.requestNumber}</div>
                                             </div>
                                         </div>
@@ -150,19 +150,19 @@ export default function StoreRequestsPage() {
 
                                     <div className="p-6">
                                         <div className="mb-6 grid grid-cols-3 gap-4">
-                                            <div className="bg-background-dark/50 border border-border-dark rounded-xl p-4">
+                                            <div className="bg-slate-50 border border-slate-200 shadow-sm rounded-xl p-4">
                                                 <div className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Batch Status</div>
-                                                <div className="text-white font-bold">{selectedBatch.status}</div>
+                                                <div className="text-[#556070] font-bold">{selectedBatch.status}</div>
                                             </div>
-                                            <div className="bg-background-dark/50 border border-border-dark rounded-xl p-4">
+                                            <div className="bg-slate-50 border border-slate-200 shadow-sm rounded-xl p-4">
                                                 <div className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Pending Lines</div>
-                                                <div className="text-white font-bold">
+                                                <div className="text-[#556070] font-bold">
                                                     {selectedBatch.lines.filter((line) => line.status === 'PENDING').length}
                                                 </div>
                                             </div>
-                                            <div className="bg-background-dark/50 border border-border-dark rounded-xl p-4">
+                                            <div className="bg-slate-50 border border-slate-200 shadow-sm rounded-xl p-4">
                                                 <div className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Confirmed Lines</div>
-                                                <div className="text-white font-bold">
+                                                <div className="text-[#556070] font-bold">
                                                     {selectedBatch.lines.filter((line) => line.status === 'CONFIRMED').length}
                                                 </div>
                                             </div>
@@ -170,15 +170,15 @@ export default function StoreRequestsPage() {
 
                                         <div className="space-y-4 mb-8">
                                             <h4 className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] mb-4">Requested Items</h4>
-                                            <div className="divide-y divide-border-dark bg-background-dark/50 rounded-xl border border-border-dark overflow-hidden">
+                                            <div className="divide-y divide-slate-200 shadow-sm bg-slate-50 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                                                 {selectedBatch.lines.map((line) => (
-                                                    <div key={getEntityId(line)} className="p-4 flex justify-between items-center group hover:bg-white/5 transition-colors">
+                                                    <div key={getEntityId(line)} className="p-4 flex justify-between items-center group hover:bg-slate-100 transition-colors">
                                                         <div className="flex gap-4">
-                                                            <div className="size-10 rounded-lg bg-surface-dark flex items-center justify-center border border-border-dark">
+                                                            <div className="size-10 rounded-lg bg-white flex items-center justify-center border border-slate-200">
                                                                 <span className="material-symbols-outlined text-text-secondary text-sm">inventory_2</span>
                                                             </div>
                                                             <div>
-                                                                <div className="text-white text-sm font-bold">{line.itemId?.name}</div>
+                                                                <div className="text-[#556070] text-sm font-bold">{line.itemId?.name}</div>
                                                                 <div className="text-amber-500/70 text-[10px] font-mono">{line.itemId?.itemCode}</div>
                                                                 <div className="text-text-secondary text-[10px] uppercase mt-1">
                                                                     Source: {line.source === 'PURCHASE_INWARD' ? 'Purchase inward' : 'Store stock'}
@@ -186,7 +186,7 @@ export default function StoreRequestsPage() {
                                                             </div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-lg text-white font-black">
+                                                            <div className="text-lg text-[#556070] font-black">
                                                                 {(line.status === 'CONFIRMED' ? line.confirmedQuantity : line.pendingQuantity || line.requestedQuantity || 0)} <span className="text-[10px] text-text-secondary font-medium uppercase">{line.itemId?.uom}</span>
                                                             </div>
                                                             <div className="text-[10px] text-text-secondary uppercase">Requested: {line.requestedQuantity}</div>
@@ -205,7 +205,7 @@ export default function StoreRequestsPage() {
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4 pt-6 border-t border-border-dark">
+                                        <div className="space-y-4 pt-6 border-t border-slate-200">
                                             {['PENDING', 'SHORTAGE_REPORTED'].includes(selectedBatch.status) && (
                                                 <button
                                                     onClick={handleConfirmAllAvailable}
@@ -219,7 +219,7 @@ export default function StoreRequestsPage() {
                                             <div>
                                                 <label className="block text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Dispatch Remarks</label>
                                                 <textarea
-                                                    className="w-full bg-background-dark border border-border-dark rounded-xl p-4 text-white text-sm outline-none focus:ring-1 focus:ring-amber-500 h-24 transition-all"
+                                                    className="w-full bg-slate-100 border border-slate-200 shadow-sm rounded-xl p-4 text-[#556070] text-sm outline-none focus:ring-1 focus:ring-amber-500 h-24 transition-all"
                                                     placeholder="Add any loading or delivery instructions..."
                                                     value={remarks}
                                                     onChange={(e) => setRemarks(e.target.value)}
@@ -245,7 +245,7 @@ export default function StoreRequestsPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-[400px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
+                                <div className="h-[400px] flex flex-col items-center justify-center bg-white/30 border border-dashed border-slate-200 shadow-sm rounded-2xl">
                                     <div className="size-16 rounded-full bg-surface-dark flex items-center justify-center mb-4">
                                         <span className="material-symbols-outlined text-text-secondary text-3xl">assignment_turned_in</span>
                                     </div>

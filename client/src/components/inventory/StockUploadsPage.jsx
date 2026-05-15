@@ -187,13 +187,13 @@ export default function StockUploadsPage() {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Stock Uploads</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Stock Uploads</h1>
                         <p className="text-text-secondary text-lg">Reconcile stock using Excel or manual single entries.</p>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <div className="lg:col-span-1 space-y-6">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl">
                                 <h2 className="text-sm font-black uppercase tracking-widest text-text-secondary mb-4">Stock Entry</h2>
                                 <div className="space-y-4">
                                     <div className="relative group">
@@ -206,13 +206,13 @@ export default function StockUploadsPage() {
                                         <div className="border-2 border-dashed border-border-dark rounded-xl p-8 text-center group-hover:border-primary/50 transition-all">
                                             <span className="material-symbols-outlined text-4xl text-border-dark mb-2">cloud_upload</span>
                                             <p className="text-sm text-text-secondary">Drag & drop or <span className="text-primary font-bold">Browse</span></p>
-                                            {file && <p className="text-xs text-white mt-2 font-mono bg-background-dark p-1 rounded">{file.name}</p>}
+                                            {file && <p className="text-xs text-[#556070] mt-2 font-mono bg-slate-50 p-1 rounded border border-slate-200">{file.name}</p>}
                                         </div>
                                     </div>
                                     
                                     <button 
                                         onClick={() => setShowManualModal(true)}
-                                        className="w-full bg-surface-light border border-border-dark py-3 rounded-xl text-white font-bold hover:bg-border-dark transition-all flex items-center justify-center gap-2"
+                                        className="w-full bg-white border border-slate-200 py-3 rounded-xl text-[#556070] font-bold hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
                                     >
                                         <span className="material-symbols-outlined text-sm">add_circle</span>
                                         Add Single Item
@@ -239,10 +239,10 @@ export default function StockUploadsPage() {
                         </div>
 
                         <div className="lg:col-span-2">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-xl">
-                                <div className="p-4 border-b border-border-dark bg-gradient-surface flex justify-between items-center">
-                                    <h2 className="text-sm font-black uppercase tracking-widest text-white">Preview & Validation</h2>
-                                    <span className="text-[10px] bg-background-dark px-2 py-1 rounded text-text-secondary font-bold">
+                            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xl">
+                                <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                                    <h2 className="text-sm font-black uppercase tracking-widest text-[#556070]">Preview & Validation</h2>
+                                    <span className="text-[10px] bg-white px-2 py-1 rounded text-text-secondary font-bold border border-slate-200">
                                         {previewData.length} Rows Identified
                                     </span>
                                 </div>
@@ -254,7 +254,7 @@ export default function StockUploadsPage() {
                                         </div>
                                     ) : (
                                         <table className="w-full text-left text-xs">
-                                            <thead className="bg-background-dark text-text-secondary uppercase font-bold sticky top-0">
+                                            <thead className="bg-slate-50 text-text-secondary uppercase font-bold sticky top-0">
                                                 <tr>
                                                     <th className="p-4">Item</th>
                                                     <th className="p-4">Location</th>
@@ -264,11 +264,11 @@ export default function StockUploadsPage() {
                                                     <th className="p-4 text-center">Status</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-border-dark">
+                                            <tbody className="divide-y divide-slate-200">
                                                 {previewData.map((row, idx) => (
                                                     <tr key={idx} className={row.isValid ? 'hover:bg-white/5' : 'bg-red-500/5'}>
                                                         <td className="p-4">
-                                                            <div className="text-white font-medium">{row.itemName}</div>
+                                                            <div className="text-[#556070] font-medium">{row.itemName}</div>
                                                             <div className="text-primary font-mono text-[10px]">{row.itemCode}</div>
                                                         </td>
                                                         <td className="p-4 text-text-secondary">
@@ -276,7 +276,7 @@ export default function StockUploadsPage() {
                                                             <div className="text-[10px] opacity-50">{row.locationCode}</div>
                                                         </td>
                                                         <td className="p-4 text-center text-text-secondary">{row.systemQuantity}</td>
-                                                        <td className="p-4 text-center text-white font-bold">{row.uploadedQuantity}</td>
+                                                        <td className="p-4 text-center text-[#556070] font-bold">{row.uploadedQuantity}</td>
                                                         <td className={`p-4 text-right font-bold ${row.adjustment >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                             {row.adjustment > 0 ? '+' : ''}{row.adjustment}
                                                         </td>

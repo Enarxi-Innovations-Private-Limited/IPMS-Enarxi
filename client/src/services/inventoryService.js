@@ -13,6 +13,7 @@ const inventoryService = {
   getMaterialRequests: () => inventoryApi.get('bridge/material-requests'),
   getMaterialRequestDetails: (id) => inventoryApi.get(`bridge/material-requests/${id}`),
   submitMaterialRequest: (data) => inventoryApi.post('projects/material-request', data),
+  addItemsToMRBulk: (id, items) => inventoryApi.post(`projects/material-request/${id}/add-items-bulk`, { items }),
   routeMaterialRequestLine: (data) => inventoryApi.post('projects/material-request/route-line', data),
   routeMaterialRequestBulk: (data) => inventoryApi.post('projects/material-request/bulk-route', data),
   amendStoreShortageLine: (data) => inventoryApi.post('amendStoreShortageLine', data),
@@ -23,7 +24,8 @@ const inventoryService = {
   updateVendor: (id, data) => inventoryApi.put(`vendors/${id}`, data),
   deleteVendor: (id) => inventoryApi.delete(`vendors/${id}`),
   getPurchaseRequests: () => inventoryApi.get('purchase/requests'),
-  getPurchasePlanning: () => inventoryApi.get('inventory/purchase-planning'),
+  getPurchasePlanning: (mode) => inventoryApi.get('inventory/purchase-planning', { params: { mode } }),
+  getIndividualPurchaseRequests: () => inventoryApi.get('inventory/purchase-requests/individual'),
   generatePurchaseOrders: (data) => inventoryApi.post('generatePurchaseOrders', data),
   getPurchaseOrders: () => inventoryApi.get('purchase/orders'),
   getPurchaseOrderDetails: (poId) => inventoryApi.get(`purchase/orders/${poId}`),
@@ -40,6 +42,7 @@ const inventoryService = {
   },
   markPOPlaced: (data) => inventoryApi.post('markPurchaseOrderPlaced', data),
   receivePO: (data) => inventoryApi.post('receivePurchaseOrderLines', data),
+  downloadPurchaseOrderPDF: (poId) => inventoryApi.get(`purchase/orders/${poId}/pdf`, { responseType: 'blob' }),
   
   // Stock Adjustments
   submitStockAdjustment: (data) => inventoryApi.post('submitStockAdjustment', data),

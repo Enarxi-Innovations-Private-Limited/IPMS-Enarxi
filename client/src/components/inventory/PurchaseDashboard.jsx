@@ -66,14 +66,14 @@ export default function PurchaseDashboard() {
                 <div className="max-w-7xl mx-auto w-full">
                     {/* Header */}
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight mb-1">Purchase Overview</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight mb-1">Purchase Overview</h1>
                         <p className="text-text-secondary">Procurement pipeline, vendor status and order approvals at a glance.</p>
                     </div>
 
                     {/* Stat Cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                         {statCards.map((card, idx) => (
-                            <div key={idx} className="bg-surface-dark border border-border-dark rounded-xl p-5 shadow-lg hover:border-violet-500/30 transition-all group">
+                            <div key={idx} className="bg-white border border-slate-200 shadow-sm rounded-xl p-5 shadow-lg hover:border-violet-500/30 transition-all group">
                                 <div className={`size-10 ${card.bg} rounded-xl flex items-center justify-center mb-3`}>
                                     <span className={`material-symbols-outlined ${card.color}`}>{card.icon}</span>
                                 </div>
@@ -81,7 +81,7 @@ export default function PurchaseDashboard() {
                                 {loading ? (
                                     <div className="h-8 w-16 bg-border-dark rounded animate-pulse"></div>
                                 ) : (
-                                    <p className="text-2xl font-black text-white">{card.value}</p>
+                                    <p className="text-2xl font-black text-[#556070]">{card.value}</p>
                                 )}
                             </div>
                         ))}
@@ -90,19 +90,19 @@ export default function PurchaseDashboard() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Quick Actions */}
                         <div className="lg:col-span-1">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl">
-                                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 shadow-xl">
+                                <h2 className="text-lg font-bold text-[#556070] mb-4 flex items-center gap-2">
                                     <span className="material-symbols-outlined text-violet-400">bolt</span>
                                     Quick Actions
                                 </h2>
                                 <div className="space-y-3">
                                     {quickActions.map((action, idx) => (
                                         <button key={idx} onClick={() => navigate(action.path)}
-                                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-background-dark/50 border border-border-dark hover:border-violet-500/30 transition-all group">
+                                            className="w-full flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-border-dark hover:border-violet-500/30 transition-all group">
                                             <div className={`size-9 rounded-lg bg-gradient-to-br ${action.color} flex items-center justify-center shrink-0 shadow-md group-hover:scale-110 transition-transform`}>
                                                 <span className="material-symbols-outlined text-white text-sm">{action.icon}</span>
                                             </div>
-                                            <span className="text-sm font-medium text-text-secondary group-hover:text-white transition-colors">{action.label}</span>
+                                            <span className="text-sm font-medium text-text-secondary group-hover:text-[#556070] transition-colors">{action.label}</span>
                                             <span className="material-symbols-outlined text-text-secondary ml-auto text-sm group-hover:text-violet-400 transition-colors">arrow_forward</span>
                                         </button>
                                     ))}
@@ -112,9 +112,9 @@ export default function PurchaseDashboard() {
 
                         {/* Recent Purchase Orders */}
                         <div className="lg:col-span-2">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl shadow-xl overflow-hidden">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl shadow-xl overflow-hidden">
                                 <div className="px-6 py-4 border-b border-border-dark flex items-center justify-between">
-                                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <h2 className="text-lg font-bold text-[#556070] flex items-center gap-2">
                                         <span className="material-symbols-outlined text-violet-400">receipt_long</span>
                                         Recent Purchase Orders
                                     </h2>
@@ -125,7 +125,7 @@ export default function PurchaseDashboard() {
                                 {loading ? (
                                     <div className="p-8 space-y-3">
                                         {[...Array(5)].map((_, i) => (
-                                            <div key={i} className="h-14 bg-background-dark/50 rounded-xl animate-pulse"></div>
+                                            <div key={i} className="h-14 bg-slate-50 rounded-xl animate-pulse"></div>
                                         ))}
                                     </div>
                                 ) : recentOrders.length === 0 ? (
@@ -144,13 +144,13 @@ export default function PurchaseDashboard() {
                                                             <span className="material-symbols-outlined text-violet-400 text-sm">receipt_long</span>
                                                         </div>
                                                         <div>
-                                                            <div className="text-white text-sm font-bold">{po.poNumber}</div>
+                                                            <div className="text-[#556070] text-sm font-bold">{po.poNumber}</div>
                                                             <div className="text-text-secondary text-[11px]">{po.vendor?.name} • {new Date(po.createdAt).toLocaleDateString()}</div>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-3">
                                                         <div className="text-right hidden md:block">
-                                                            <div className="text-white text-sm font-bold">₹{(po.totalAmount || 0).toLocaleString()}</div>
+                                                            <div className="text-[#556070] text-sm font-bold">₹{(po.totalAmount || 0).toLocaleString()}</div>
                                                         </div>
                                                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${cfg.color}`}>{cfg.label}</span>
                                                     </div>

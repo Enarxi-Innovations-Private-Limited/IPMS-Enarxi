@@ -98,6 +98,30 @@ export default function PurchaseOrdersPage() {
         }
     };
 
+    const handleDownloadPDF = async (orderId, poNumber) => {
+        try {
+            setProcessing(true);
+            const response = await inventoryService.downloadPurchaseOrderPDF(orderId);
+
+            const blob = new Blob([response.data], { type: 'application/pdf' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `PO_${poNumber}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            
+            notifySuccess(`PDF Generated: PO_${poNumber}.pdf`);
+        } catch (err) {
+            console.error('PDF Download Error:', err);
+            notifyError('Could not download PO PDF. Please log out and back in if this persists.');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
     const filteredOrders = filterStatus === 'ALL' 
         ? orders 
         : orders.filter(o => o.status === filterStatus);
@@ -117,20 +141,21 @@ export default function PurchaseOrdersPage() {
         <Layout currentPage="purchase-orders">
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
+                    {/* Header */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-3xl font-bold text-white tracking-tight">Purchase Orders</h1>
-                            <p className="text-text-secondary">Manage and approve vendor procurement documents.</p>
+                            <h1 className="text-2xl font-bold text-white tracking-tight">Purchase Order Details</h1>
+                            <p className="text-text-secondary text-sm">Financial Suite & Procurement Management</p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex bg-surface-dark p-1 rounded-xl border border-border-dark">
                             {['ALL', 'PENDING_ADMIN_APPROVAL', 'APPROVED', 'PLACED', 'REJECTED'].map(status => (
                                 <button
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
                                         filterStatus === status 
                                         ? 'bg-primary text-white shadow-lg shadow-primary/20' 
-                                        : 'bg-surface-dark text-text-secondary border border-border-dark hover:border-text-secondary/30'
+                                        : 'text-text-secondary hover:text-white'
                                     }`}
                                 >
                                     {status.replace(/_/g, ' ')}
@@ -139,41 +164,40 @@ export default function PurchaseOrdersPage() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        {/* PO List */}
-                        <div className="lg:col-span-1 space-y-4 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-2">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+                        {/* List Sidebar */}
+                        <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-2">
                             {loading ? (
-                                <div className="p-10 text-center bg-surface-dark rounded-xl border border-border-dark animate-pulse">
-                                    <div className="size-8 bg-border-dark rounded-full mx-auto mb-2"></div>
-                                    <div className="h-4 bg-border-dark rounded w-2/3 mx-auto"></div>
-                                </div>
+                                Array(5).fill(0).map((_, i) => (
+                                    <div key={i} className="h-24 bg-surface-dark rounded-xl border border-border-dark animate-pulse"></div>
+                                ))
                             ) : filteredOrders.length === 0 ? (
-                                <div className="p-10 text-center bg-surface-dark/30 border border-dashed border-border-dark rounded-xl">
-                                    <p className="text-text-secondary text-sm">No purchase orders found.</p>
+                                <div className="p-8 text-center bg-surface-dark/30 border border-dashed border-border-dark rounded-xl">
+                                    <p className="text-text-secondary text-xs">No orders found.</p>
                                 </div>
                             ) : (
                                 filteredOrders.map(order => (
                                     <button 
                                         key={order._id || order.id}
                                         onClick={() => setSelectedOrder(order)}
-                                        className={`w-full text-left p-4 rounded-xl border transition-all ${
+                                        className={`w-full text-left p-4 rounded-xl border transition-all group ${
                                             selectedOrder?.id === order.id 
-                                            ? 'bg-primary/10 border-primary shadow-lg shadow-primary/10' 
+                                            ? 'bg-primary border-primary shadow-lg shadow-primary/10' 
                                             : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'
                                         }`}
                                     >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="font-mono text-primary text-xs font-bold">{order.poNumber}</span>
-                                            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded uppercase ${getStatusColor(order.status)}`}>
-                                                {order.status.replace(/_/g, ' ')}
+                                        <div className="flex justify-between items-start mb-1">
+                                            <span className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-white' : 'text-primary'}`}>{order.poNumber}</span>
+                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${selectedOrder?.id === order.id ? 'bg-white/20 text-white' : getStatusColor(order.status)}`}>
+                                                {order.status}
                                             </span>
                                         </div>
-                                        <div className="text-white font-bold truncate">{order.vendor?.name}</div>
-                                        <div className="flex justify-between items-center mt-2">
-                                            <div className="text-text-secondary text-[10px] uppercase font-bold">
+                                        <div className={`font-bold truncate text-sm ${selectedOrder?.id === order.id ? 'text-white' : 'text-white/90'}`}>{order.vendor?.name}</div>
+                                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
+                                            <div className={`text-[9px] uppercase font-black ${selectedOrder?.id === order.id ? 'text-white/60' : 'text-text-secondary'}`}>
                                                 {order.lines?.length || 0} Items
                                             </div>
-                                            <div className="text-white font-mono text-xs font-bold">
+                                            <div className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-white' : 'text-primary'}`}>
                                                 ₹{order.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0).toLocaleString()}
                                             </div>
                                         </div>
@@ -182,76 +206,144 @@ export default function PurchaseOrdersPage() {
                             )}
                         </div>
 
-                        {/* Details & Actions */}
-                        <div className="lg:col-span-2">
+                        {/* Redesigned Details View */}
+                        <div className="lg:col-span-3">
                             {selectedOrder ? (
-                                <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                                    <div className="p-6 border-b border-border-dark bg-gradient-surface">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="text-2xl font-bold text-white">{selectedOrder.poNumber}</h3>
-                                                <p className="text-text-secondary text-sm">Vendor: <span className="text-white">{selectedOrder.vendor?.name}</span></p>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-text-secondary text-xs uppercase font-bold tracking-widest mb-1">Status</div>
-                                                <span className={`text-xs font-black px-3 py-1 rounded-full uppercase ${getStatusColor(selectedOrder.status)}`}>
-                                                    {selectedOrder.status.replace(/_/g, ' ')}
-                                                </span>
-                                            </div>
+                                <div className="space-y-6">
+                                    {/* Action Bar */}
+                                    <div className="flex items-center justify-between bg-surface-dark border border-border-dark p-3 rounded-xl">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-[10px] font-black text-text-secondary uppercase tracking-widest">Status:</span>
+                                            <span className={`text-[10px] font-black px-3 py-1 rounded uppercase ${getStatusColor(selectedOrder.status)}`}>
+                                                {selectedOrder.status}
+                                            </span>
                                         </div>
-                                        
-                                        <div className="grid grid-cols-3 gap-4 mt-6">
-                                            <div className="bg-background-dark/50 p-3 rounded-lg border border-border-dark">
-                                                <div className="text-[10px] text-text-secondary uppercase font-bold mb-1">Date Created</div>
-                                                <div className="text-white text-sm">{new Date(selectedOrder.createdAt).toLocaleDateString()}</div>
-                                            </div>
-                                            <div className="bg-background-dark/50 p-3 rounded-lg border border-border-dark">
-                                                <div className="text-[10px] text-text-secondary uppercase font-bold mb-1">Expected Delivery</div>
-                                                <div className="text-white text-sm">{selectedOrder.expectedDeliveryDate ? new Date(selectedOrder.expectedDeliveryDate).toLocaleDateString() : 'TBD'}</div>
-                                            </div>
-                                            <div className="bg-background-dark/50 p-3 rounded-lg border border-border-dark">
-                                                <div className="text-[10px] text-text-secondary uppercase font-bold mb-1">Total Value</div>
-                                                <div className="text-primary text-sm font-bold">₹{selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0).toLocaleString()}</div>
-                                            </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => handleDownloadPDF(selectedOrder.id || selectedOrder._id, selectedOrder.poNumber)}
+                                                className="flex items-center gap-2 bg-[#001f3f] text-white px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-primary transition-all"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">print</span>
+                                                Print / Export
+                                            </button>
+                                            <button className="flex items-center gap-2 bg-[#2b45a2]/20 text-[#2b45a2] border border-[#2b45a2]/30 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-[#2b45a2] hover:text-white transition-all">
+                                                <span className="material-symbols-outlined text-sm">edit</span>
+                                                Edit Order
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <div className="p-6">
-                                        <table className="w-full text-left mb-8">
+                                    {/* The Document View */}
+                                    <div className="bg-white rounded-sm shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto p-12 max-w-[850px] text-slate-800 font-sans min-h-[1000px] relative overflow-hidden">
+                                        {/* Watermark/Accent */}
+                                        <div className="absolute top-0 left-0 w-full h-1 bg-[#2b45a2]"></div>
+                                        
+                                        <div className="flex justify-between items-start mb-12">
+                                            <div className="flex gap-4">
+                                                <div className="size-16 bg-[#001f3f] flex items-center justify-center rounded-sm">
+                                                    <span className="text-white font-black text-2xl">E</span>
+                                                </div>
+                                                <div>
+                                                    <h2 className="text-xl font-bold tracking-tight text-slate-900 leading-none mb-1">ENARXI INNOVATIONS PVT LTD</h2>
+                                                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-[200px]">
+                                                        No. 23, Sripuram Colony, Vairalur,<br/>
+                                                        St. Thomas Mount, Chennai - 600016<br/>
+                                                        Ph: +91-9600676639 | info@enarxi.com
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <h1 className="text-4xl font-serif text-[#001f3f] font-light tracking-tight mb-4">PURCHASE ORDER</h1>
+                                                <div className="space-y-1">
+                                                    <div className="text-[10px] uppercase font-bold text-slate-400">PO Number: <span className="text-slate-900 ml-1">{selectedOrder.poNumber}</span></div>
+                                                    <div className="text-[10px] uppercase font-bold text-slate-400">Date: <span className="text-slate-900 ml-1">{new Date(selectedOrder.createdAt).toLocaleDateString()}</span></div>
+                                                    <div className="text-[10px] uppercase font-bold text-slate-400">Status: <span className="text-slate-900 ml-1">{selectedOrder.status}</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-8 mb-12">
+                                            <div className="bg-[#f8f9fa] border border-slate-200 rounded p-5">
+                                                <div className="text-[10px] font-black text-[#2b45a2] uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">Vendor Details</div>
+                                                <div className="text-sm font-bold text-slate-900 mb-1">{selectedOrder.vendor?.name}</div>
+                                                <div className="text-[11px] text-slate-500 leading-relaxed mb-3">
+                                                    {selectedOrder.vendor?.address || 'Address not provided'}
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-400">GSTIN: <span className="text-slate-700 ml-1">{selectedOrder.vendor?.gstin || 'N/A'}</span></div>
+                                            </div>
+                                            <div className="bg-[#f8f9fa] border border-slate-200 rounded p-5">
+                                                <div className="text-[10px] font-black text-[#2b45a2] uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">Ship To</div>
+                                                <div className="text-sm font-bold text-slate-900 mb-1">Enarxi Operations Hub</div>
+                                                <div className="text-[11px] text-slate-500 leading-relaxed mb-3">
+                                                    Warehouse Wing B, Sector 5, Logistics Park<br/>
+                                                    Chennai - 600096
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-400">Contact: <span className="text-slate-700 ml-1">Logistics Dept</span></div>
+                                            </div>
+                                        </div>
+
+                                        <table className="w-full text-left mb-12">
                                             <thead>
-                                                <tr className="text-xs font-bold uppercase tracking-wider text-text-secondary border-b border-border-dark">
-                                                    <th className="pb-4">Item Description</th>
-                                                    <th className="pb-4 text-center">Qty</th>
-                                                    <th className="pb-4 text-right">Rate</th>
-                                                    <th className="pb-4 text-right">GST</th>
-                                                    <th className="pb-4 text-right">Total</th>
+                                                <tr className="text-[10px] font-black uppercase text-slate-400 bg-[#f1f3f5] border-y border-slate-200">
+                                                    <th className="px-4 py-3">Item / SKU</th>
+                                                    <th className="px-4 py-3 text-right">Qty</th>
+                                                    <th className="px-4 py-3 text-right">Rate</th>
+                                                    <th className="px-4 py-3 text-right">GST%</th>
+                                                    <th className="px-4 py-3 text-right">Total</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-border-dark">
+                                            <tbody className="divide-y divide-slate-100">
                                                 {selectedOrder.lines?.map(line => (
-                                                    <tr key={line._id || line.id}>
-                                                        <td className="py-4">
-                                                            <div className="text-white font-medium">{line.item?.name}</div>
-                                                            <div className="text-text-secondary text-xs">{line.item?.itemCode}</div>
+                                                    <tr key={line._id || line.id} className="text-[11px]">
+                                                        <td className="px-4 py-4">
+                                                            <div className="font-bold text-slate-900">{line.item?.name}</div>
+                                                            <div className="text-[9px] text-slate-400 mt-0.5">{line.item?.itemCode}</div>
                                                         </td>
-                                                        <td className="py-4 text-center text-white font-bold">{line.orderQuantity}</td>
-                                                        <td className="py-4 text-right text-text-secondary">₹{Number(line.rate).toLocaleString()}</td>
-                                                        <td className="py-4 text-right text-text-secondary">{line.gstPercent}%</td>
-                                                        <td className="py-4 text-right text-white font-bold">₹{Number(line.lineTotal).toLocaleString()}</td>
+                                                        <td className="px-4 py-4 text-right font-bold">{line.orderQuantity}</td>
+                                                        <td className="px-4 py-4 text-right">{Number(line.rate).toFixed(2)}</td>
+                                                        <td className="px-4 py-4 text-right">{line.gstPercent}%</td>
+                                                        <td className="px-4 py-4 text-right font-bold text-slate-900">₹{Number(line.lineTotal).toLocaleString()}</td>
                                                     </tr>
                                                 ))}
                                             </tbody>
                                         </table>
 
-                                        {/* Review Section */}
+                                        <div className="flex justify-end pt-8 border-t border-slate-200">
+                                            <div className="w-64 space-y-3">
+                                                <div className="flex justify-between text-[11px] font-bold">
+                                                    <span className="text-slate-400 uppercase tracking-widest">Subtotal:</span>
+                                                    <span className="text-slate-900">INR {selectedOrder.lines?.reduce((sum, l) => sum + (Number(l.rate) * Number(l.orderQuantity)), 0).toFixed(2)}</span>
+                                                </div>
+                                                <div className="flex justify-between text-[11px] font-bold">
+                                                    <span className="text-slate-400 uppercase tracking-widest">Total Tax (GST):</span>
+                                                    <span className="text-slate-900">INR {(selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0) - selectedOrder.lines?.reduce((sum, l) => sum + (Number(l.rate) * Number(l.orderQuantity)), 0)).toFixed(2)}</span>
+                                                </div>
+                                                <div className="bg-[#001f3f] text-white p-4 rounded flex justify-between items-center shadow-lg">
+                                                    <span className="text-lg font-serif italic">Grand Total:</span>
+                                                    <div className="text-right">
+                                                        <div className="text-[8px] uppercase font-black opacity-60">INR</div>
+                                                        <div className="text-xl font-bold">₹{selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0).toLocaleString()}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-24 pt-12 border-t border-slate-100 flex justify-between text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                                            <div>Authorized Signature</div>
+                                            <div>Generated via Enarxi ERP Financial Suite</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Footers (Review/Approve) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
                                         {selectedOrder.status === 'PENDING_ADMIN_APPROVAL' && (
-                                            <div className="bg-background-dark/50 border border-primary/20 rounded-xl p-6">
+                                            <div className="bg-[#10b981]/10 border border-[#10b981]/20 rounded-xl p-6 col-span-2">
                                                 <h4 className="text-white font-bold mb-4 flex items-center gap-2">
-                                                    <span className="material-symbols-outlined text-primary">rate_review</span>
+                                                    <span className="material-symbols-outlined text-emerald-400">rate_review</span>
                                                     Administrative Review
                                                 </h4>
                                                 <textarea 
-                                                    className="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white text-sm outline-none focus:border-primary mb-4 h-24"
+                                                    className="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white text-sm outline-none focus:border-emerald-400 mb-4 h-24"
                                                     placeholder="Enter approval/rejection remarks..."
                                                     value={reviewRemarks}
                                                     onChange={(e) => setReviewRemarks(e.target.value)}
@@ -259,14 +351,14 @@ export default function PurchaseOrdersPage() {
                                                 <div className="flex gap-3">
                                                     <button 
                                                         disabled={processing}
-                                                        onClick={() => handleReview(selectedOrder.id, 'APPROVED')}
+                                                        onClick={() => handleReview(selectedOrder.id || selectedOrder._id, 'APPROVED')}
                                                         className="flex-1 bg-emerald-500 text-black font-black py-3 rounded-xl uppercase tracking-widest hover:bg-emerald-400 transition-all disabled:opacity-50"
                                                     >
                                                         Approve PO
                                                     </button>
                                                     <button 
                                                         disabled={processing}
-                                                        onClick={() => handleReview(selectedOrder.id, 'REJECTED')}
+                                                        onClick={() => handleReview(selectedOrder.id || selectedOrder._id, 'REJECTED')}
                                                         className="flex-1 bg-red-500 text-white font-black py-3 rounded-xl uppercase tracking-widest hover:bg-red-400 transition-all disabled:opacity-50"
                                                     >
                                                         Reject PO
@@ -276,75 +368,26 @@ export default function PurchaseOrdersPage() {
                                         )}
 
                                         {(selectedOrder.status === 'DRAFT' || selectedOrder.status === 'REJECTED') && (
-                                            <div className="bg-background-dark/50 border border-amber-500/20 rounded-xl p-6">
+                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6 col-span-2">
                                                 <h4 className="text-white font-bold mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-amber-400">approval</span>
                                                     Submit For Approval
                                                 </h4>
-                                                <p className="text-text-secondary text-sm mb-6">
-                                                    This purchase order matches the tracker flow only after it is formally submitted into the admin approval queue.
-                                                </p>
                                                 <button
                                                     disabled={processing}
-                                                    onClick={() => handleSubmitForApproval(selectedOrder.id)}
+                                                    onClick={() => handleSubmitForApproval(selectedOrder.id || selectedOrder._id)}
                                                     className="w-full bg-amber-500 text-black font-black py-3 rounded-xl uppercase tracking-widest hover:bg-amber-400 transition-all disabled:opacity-50 shadow-lg shadow-amber-500/20"
                                                 >
                                                     Submit to Admin Queue
                                                 </button>
                                             </div>
                                         )}
-
-                                        {/* Action Section for Approved POs */}
-                                        {selectedOrder.status === 'APPROVED' && (
-                                            <div className="bg-background-dark/50 border border-blue-500/20 rounded-xl p-6">
-                                                <h4 className="text-white font-bold mb-4 flex items-center gap-2">
-                                                    <span className="material-symbols-outlined text-blue-400">send</span>
-                                                    Execution Action
-                                                </h4>
-                                                <p className="text-text-secondary text-sm mb-6">Confirm that this Purchase Order has been officially sent to the vendor.</p>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                                                    <div>
-                                                        <label className="block text-[10px] text-text-secondary uppercase font-bold mb-2 tracking-widest">Expected Delivery</label>
-                                                        <input
-                                                            type="date"
-                                                            value={expectedDeliveryDate}
-                                                            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-                                                            className="w-full bg-surface-dark border border-border-dark rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-400"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-[10px] text-text-secondary uppercase font-bold mb-2 tracking-widest">Vendor Note</label>
-                                                        <input
-                                                            type="text"
-                                                            value={vendorDocumentNote}
-                                                            onChange={(e) => setVendorDocumentNote(e.target.value)}
-                                                            placeholder="PO email ref / vendor doc note"
-                                                            className="w-full bg-surface-dark border border-border-dark rounded-lg px-3 py-2.5 text-white text-sm outline-none focus:border-blue-400"
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    disabled={processing}
-                                                    onClick={() => handleMarkPlaced(selectedOrder.id)}
-                                                    className="w-full bg-blue-500 text-white font-black py-3 rounded-xl uppercase tracking-widest hover:bg-blue-400 transition-all disabled:opacity-50 shadow-lg shadow-blue-500/20"
-                                                >
-                                                    Mark as PLACED with Vendor
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {selectedOrder.adminRemarks && (
-                                            <div className="mt-6 p-4 bg-surface-dark border border-border-dark rounded-lg italic text-slate-400 text-sm">
-                                                <span className="font-bold text-white not-italic block mb-1">Admin Remarks:</span>
-                                                "{selectedOrder.adminRemarks}"
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-[500px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
+                                <div className="h-[600px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
                                     <span className="material-symbols-outlined text-border-dark text-6xl mb-4">description</span>
-                                    <p className="text-text-secondary font-medium tracking-wide">Select a Purchase Order to view details and perform actions</p>
+                                    <p className="text-text-secondary font-medium tracking-wide">Select a Purchase Order to view the document details</p>
                                 </div>
                             )}
                         </div>

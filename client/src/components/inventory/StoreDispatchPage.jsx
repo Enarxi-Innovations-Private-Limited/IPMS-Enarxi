@@ -51,7 +51,7 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">
+                        <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">
                             Stock Dispatches
                         </h1>
                         <p className="text-text-secondary text-lg">
@@ -63,11 +63,11 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                         {/* List Section */}
                         <div className="space-y-4 overflow-y-auto max-h-[calc(100vh-250px)] pr-2 custom-scrollbar">
                             {loading ? (
-                                <div className="p-20 text-center bg-surface-dark rounded-xl border border-border-dark animate-pulse">
-                                    <div className="size-8 bg-border-dark rounded-full mx-auto mb-4"></div>
+                                <div className="p-20 text-center bg-white rounded-xl border border-slate-200 animate-pulse">
+                                    <div className="size-8 bg-slate-200 rounded-full mx-auto mb-4"></div>
                                 </div>
                             ) : dispatches.length === 0 ? (
-                                <div className="p-20 text-center bg-surface-dark rounded-xl border border-border-dark border-dashed">
+                                <div className="p-20 text-center bg-white rounded-xl border border-slate-200 border-dashed">
                                     <span className="material-symbols-outlined text-text-secondary text-5xl mb-4">local_shipping</span>
                                     <p className="text-text-secondary font-medium">No pending dispatches found.</p>
                                 </div>
@@ -76,7 +76,7 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                                     <button
                                         key={dispatch.id}
                                         onClick={() => setSelectedDispatch(dispatch)}
-                                        className={`w-full text-left bg-surface-dark border rounded-xl overflow-hidden shadow-lg transition-all ${selectedDispatch?.id === dispatch.id ? 'border-primary ring-1 ring-primary/30 bg-primary/5' : 'border-border-dark hover:border-text-secondary/30'
+                                        className={`w-full text-left bg-white border rounded-xl overflow-hidden shadow-lg transition-all ${selectedDispatch?.id === dispatch.id ? 'border-primary ring-1 ring-primary/30 bg-primary/5' : 'border-slate-200 hover:border-text-secondary/30'
                                             }`}
                                     >
                                         <div className="p-5">
@@ -86,7 +86,7 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                                                         <span className="material-symbols-outlined text-primary text-sm font-bold">package_2</span>
                                                     </div>
                                                     <div>
-                                                        <h3 className="text-white font-bold">{dispatch.dispatchNumber}</h3>
+                                                        <h3 className="text-[#556070] font-bold">{dispatch.dispatchNumber}</h3>
                                                         <p className="text-text-secondary text-[10px] uppercase font-black tracking-widest">{new Date(dispatch.dispatchedAt).toLocaleDateString()}</p>
                                                     </div>
                                                 </div>
@@ -97,7 +97,7 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-[10px] font-bold text-text-secondary uppercase">Project:</span>
-                                                <span className="text-white text-xs font-semibold truncate">{dispatch.storeRequest?.materialRequest?.project?.name}</span>
+                                                <span className="text-[#556070] text-xs font-semibold truncate">{dispatch.storeRequest?.materialRequest?.project?.name}</span>
                                             </div>
                                         </div>
                                     </button>
@@ -108,23 +108,23 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                         {/* Detail / Action Section */}
                         <div className="lg:col-span-1">
                             {selectedDispatch ? (
-                                <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4">
-                                    <div className="p-6 border-b border-border-dark bg-gradient-surface">
-                                        <h3 className="text-xl font-bold text-white mb-1">Verify Shipment</h3>
+                                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+                                    <div className="p-6 border-b border-slate-200 bg-[#ECF1FF]/40">
+                                        <h3 className="text-xl font-bold text-[#556070] mb-1">Verify Shipment</h3>
                                         <p className="text-text-secondary text-sm">Please inspect the items listed below before acknowledging receipt.</p>
                                     </div>
                                     <div className="p-6 space-y-6">
                                         <div className="space-y-4">
                                             <h4 className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em]">Package Contents</h4>
-                                            <div className="divide-y divide-border-dark">
+                                            <div className="divide-y divide-slate-200">
                                                 {selectedDispatch.lines?.map((line, idx) => (
                                                     <div key={idx} className="py-3 flex justify-between items-center">
                                                         <div>
-                                                            <div className="text-white text-sm font-bold">{line.itemId?.name}</div>
+                                                            <div className="text-[#556070] text-sm font-bold">{line.itemId?.name}</div>
                                                             <div className="text-primary text-[10px] font-mono">{line.itemId?.itemCode}</div>
                                                         </div>
                                                         <div className="text-right">
-                                                            <div className="text-white font-black">{line.dispatchedQuantity}</div>
+                                                            <div className="text-[#556070] font-black">{line.dispatchedQuantity}</div>
                                                             <div className="text-[10px] text-text-secondary uppercase">{line.itemId?.uom}</div>
                                                         </div>
                                                     </div>
@@ -133,11 +133,11 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                                         </div>
 
                                         {selectedDispatch.status === 'DISPATCHED' ? (
-                                            <div className="space-y-4 pt-4 border-t border-border-dark">
+                                            <div className="space-y-4 pt-4 border-t border-slate-200">
                                                 <div>
                                                     <label className="block text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Acknowledgment Remarks</label>
                                                     <textarea
-                                                        className="w-full bg-background-dark border border-border-dark rounded-xl p-3 text-white text-sm outline-none focus:ring-1 focus:ring-primary h-24"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[#556070] text-sm outline-none focus:ring-1 focus:ring-primary h-24"
                                                         placeholder="e.g. Received in good condition..."
                                                         value={remarks}
                                                         onChange={(e) => setRemarks(e.target.value)}
@@ -166,8 +166,8 @@ export default function StoreDispatchPage({ currentPage: propCurrentPage }) {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-[400px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
-                                    <span className="material-symbols-outlined text-border-dark text-6xl mb-4">move_to_inbox</span>
+                                <div className="h-[400px] flex flex-col items-center justify-center bg-white/30 border border-dashed border-slate-200 rounded-2xl">
+                                    <span className="material-symbols-outlined text-slate-400 text-6xl mb-4">move_to_inbox</span>
                                     <p className="text-text-secondary font-medium tracking-wide">Select a dispatch from the queue to verify</p>
                                 </div>
                             )}

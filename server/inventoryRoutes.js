@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
+const { generatePurchaseOrderPdf } = require('./services/poPdfService');
 const { 
     Classification, Vendor, Item, ItemVendorSku, StockLocation, StockBalance, StockMovement, 
     MaterialRequest, StoreRequestBatch, DispatchBatch, PurchaseRequestBatch,
@@ -594,6 +595,68 @@ async function buildPurchasePlanningRows() {
     });
 
     return Array.from(totals.values()).sort((a, b) => a.itemCode.localeCompare(b.itemCode));
+}
+
+async function buildIndividualPurchaseRequestRows() {
+    const requests = await PurchaseRequestBatch.find({ status: 'PENDING' })
+        .populate({
+            path: 'materialRequestId',
+            select: 'requestNumber projectId engineerId',
+            populate: [
+                { path: 'projectId', select: 'name projectCode' },
+                { path: 'engineerId', select: 'name' }
+            ]
+        })
+        .populate({
+            path: 'lines.itemId',
+            populate: [
+                { path: 'classificationId', select: 'name tracksSerial' },
+                { path: 'skuMappings.vendorId', select: 'vendorCode name gstin' }
+            ]
+        });
+
+    const rows = [];
+
+    requests.forEach((batch) => {
+        batch.lines.forEach((line) => {
+            const quantity = Number(line.pendingQuantity || 0);
+            if (quantity <= 0 || !line.itemId) return;
+
+            const item = line.itemId;
+            const skuMappings = (item.skuMappings || []).map((mapping) => ({
+                vendorId: normalizeId(mapping.vendorId?._id || mapping.vendorId),
+                vendorCode: mapping.vendorId?.vendorCode || '',
+                vendorName: mapping.vendorId?.name || '',
+                sku: mapping.sku || ''
+            }));
+
+            rows.push({
+                id: normalizeId(line._id),
+                itemId: normalizeId(item._id),
+                itemCode: item.itemCode,
+                name: item.name,
+                package: item.package || null,
+                classification: item.classificationId?.name || '',
+                requestedQuantity: quantity,
+                sourceLineIds: [normalizeId(line._id)],
+                sourceLines: [{
+                    purchaseRequestLineId: normalizeId(line._id),
+                    requestedQuantity: quantity,
+                    batchId: normalizeId(batch._id),
+                    materialRequestId: normalizeId(batch.materialRequestId?._id || batch.materialRequestId),
+                    requestNumber: batch.materialRequestId?.requestNumber || '',
+                    projectId: normalizeId(batch.materialRequestId?.projectId?._id || batch.materialRequestId?.projectId),
+                    projectName: batch.materialRequestId?.projectId?.name || 'Unknown Project'
+                }],
+                project: batch.materialRequestId?.projectId?.name || 'Unknown Project',
+                requestNumber: batch.materialRequestId?.requestNumber || 'N/A',
+                requestedBy: batch.materialRequestId?.engineerId?.name || 'System',
+                skuMappings
+            });
+        });
+    });
+
+    return rows.sort((a, b) => b.id.localeCompare(a.id));
 }
 
 // --- Master Data Routes ---
@@ -2038,7 +2101,19 @@ router.post('/routeMaterialRequestBulk', handleRouteMaterialRequestBulk);
 
 router.get('/inventory/purchase-planning', async (req, res) => {
     try {
-        const rows = await buildPurchasePlanningRows();
+        const { mode } = req.query;
+        const rows = mode === 'individual' 
+            ? await buildIndividualPurchaseRequestRows() 
+            : await buildPurchasePlanningRows();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/inventory/purchase-requests/individual', async (req, res) => {
+    try {
+        const rows = await buildIndividualPurchaseRequestRows();
         res.json(rows);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -2818,6 +2893,68 @@ router.post('/submitMaterialRequest', async (req, res) => {
     }
 });
 
+router.post('/projects/material-request/:id/add-items-bulk', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { items: newItems } = req.body;
+
+        if (!Array.isArray(newItems) || newItems.length === 0) {
+            return res.status(400).json({ message: 'No items provided for upload.' });
+        }
+
+        const request = await MaterialRequest.findById(id);
+        if (!request) return res.status(404).json({ message: 'Material Request not found.' });
+
+        if (request.status !== 'SUBMITTED') {
+            return res.status(400).json({ message: 'Cannot add items to a request that has already been routed or processed.' });
+        }
+
+        const startRowNumber = request.lines.length > 0 
+            ? Math.max(...request.lines.map(l => l.rowNumber || 0)) + 1 
+            : 1;
+
+        const enrichedLines = await Promise.all(newItems.map(async (line, index) => {
+            let itemId = line.itemId;
+            
+            if (!itemId && line.itemCode) {
+                const item = await Item.findOne({ itemCode: line.itemCode });
+                if (item) itemId = item._id;
+            }
+
+            if (!itemId) {
+                throw new Error(`Item Code "${line.itemCode || 'Unknown'}" not found in database.`);
+            }
+
+            // Check if item already exists in this MR
+            const exists = request.lines.some(l => l.itemId.toString() === itemId.toString());
+            if (exists) {
+                 // Option: Skip or merge? User didn't specify. I'll allow duplicates as it might be for different sub-assemblies.
+            }
+
+            const stock = await StockBalance.find({ itemId });
+            const totalAvailable = stock.reduce((sum, s) => sum + (s.quantityOnHand - s.reservedQuantity), 0);
+            
+            return {
+                itemId,
+                requiredQuantity: Number(line.quantity || line.requiredQuantity || 0),
+                availableAtUpload: totalAvailable,
+                status: 'SUBMITTED',
+                rowNumber: startRowNumber + index
+            };
+        }));
+
+        request.lines.push(...enrichedLines);
+        await request.save();
+
+        await logInvActivity('INV_MR_BULK_ADD', `Added ${newItems.length} items to MR ${request.requestNumber} via Excel`, req.user._id, req.user.name, request._id, request.requestNumber);
+        
+        res.json(request);
+    } catch (err) {
+        console.error('❌ [Bulk Add Items Error]:', err);
+        res.status(400).json({ message: err.message });
+    }
+});
+
 
 router.post('/routeMaterialRequestBulk', async (req, res) => {
     try {
@@ -2909,15 +3046,75 @@ router.get('/material-requests', async (req, res) => {
     }
 });
 
-router.get('/material-requests/:id', async (req, res) => {
+router.get('/bridge/material-requests/:id', async (req, res) => {
     try {
-        const request = await MaterialRequest.findById(req.params.id)
-            .populate('projectId')
+        const mr = await MaterialRequest.findById(req.params.id)
+            .populate('projectId', 'name projectCode')
             .populate('engineerId', 'name')
             .populate('lines.itemId');
-        res.json(request);
+        
+        if (!mr) return res.status(404).json({ message: 'Request not found' });
+
+        // Deep lifecycle lookup for each line
+        const enrichedLines = await Promise.all(mr.lines.map(async (line) => {
+            const lineObj = line.toObject();
+            lineObj.lifecycle = { status: line.status, details: null };
+
+            if (line.status === 'ROUTED_TO_PURCHASE') {
+                // Find associated PO
+                const po = await PurchaseOrder.findOne({
+                    'lines.sourceLines.purchaseRequestLineId': { $exists: true },
+                    'lines.itemId': line.itemId?._id
+                }).select('poNumber status expectedDeliveryDate');
+
+                // Cross-check with PR Batch to be sure
+                const prBatch = await PurchaseRequestBatch.findOne({ 'lines.materialRequestLineId': line._id });
+                
+                if (po) {
+                    lineObj.lifecycle.details = {
+                        type: 'PURCHASE',
+                        poNumber: po.poNumber,
+                        poStatus: po.status,
+                        expectedDate: po.expectedDeliveryDate,
+                        label: po.status === 'PLACED' ? `PO Placed (${po.poNumber})` : 
+                               po.status === 'RECEIVED' ? `Received via ${po.poNumber}` : `PO Drafted (${po.poNumber})`
+                    };
+                } else if (prBatch) {
+                    lineObj.lifecycle.details = {
+                        type: 'PURCHASE',
+                        label: 'Waiting for Purchase Order'
+                    };
+                }
+            } else if (line.status === 'ROUTED_TO_STORE') {
+                const storeBatch = await StoreRequestBatch.findOne({ 'lines.materialRequestLineId': line._id });
+                const dispatch = await DispatchBatch.findOne({ 'storeRequestId': storeBatch?._id });
+
+                if (dispatch) {
+                    lineObj.lifecycle.details = {
+                        type: 'STORE',
+                        dispatchNumber: dispatch.dispatchNumber,
+                        dispatchStatus: dispatch.status,
+                        label: dispatch.status === 'ACKNOWLEDGED' ? 'Received at Site' : 'Dispatched to Site'
+                    };
+                } else if (storeBatch) {
+                    lineObj.lifecycle.details = {
+                        type: 'STORE',
+                        label: storeBatch.status === 'CONFIRMED' ? 'Confirmed (Ready to Dispatch)' : 'Waiting for Store Confirmation'
+                    };
+                }
+            }
+
+            return lineObj;
+        }));
+
+        res.json({
+            ...mr.toObject(),
+            lines: enrichedLines,
+            id: mr._id
+        });
     } catch (err) {
-        res.status(404).json({ message: 'Request not found' });
+        console.error('MR Details Error:', err);
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -3145,6 +3342,24 @@ router.get('/purchase/orders/:id', async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/purchase/orders/:id/pdf', async (req, res) => {
+    try {
+        const order = await PurchaseOrder.findById(req.params.id)
+            .populate('vendorId')
+            .populate('lines.itemId');
+
+        if (!order) return res.status(404).json({ message: 'Purchase Order not found.' });
+
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename=PO_${order.poNumber}.pdf`);
+
+        generatePurchaseOrderPdf(order, res);
+    } catch (err) {
+        console.error('PDF Generation Error:', err);
+        res.status(500).json({ message: 'Error generating PDF report.' });
     }
 });
 

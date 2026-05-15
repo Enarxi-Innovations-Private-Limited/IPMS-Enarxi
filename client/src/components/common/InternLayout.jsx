@@ -62,16 +62,16 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
   ];
 
   return (
-    <div className="flex h-screen w-full overflow-hidden">
+    <div className="light-theme flex h-screen w-full overflow-hidden">
       {/* Sidebar */}
-      <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
+      <aside className="hidden lg:flex w-72 flex-col border-r border-slate-200 shadow-sm bg-white border-r border-slate-200 shadow-sm">
         <div className="flex flex-col gap-6 p-4">
           <div className="flex gap-3 px-2 mt-2">
-            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-primary flex items-center justify-center">
+            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-slate-100 bg-gradient-primary flex items-center justify-center">
               <span className="text-white font-bold text-lg">IP</span>
             </div>
             <div className="flex flex-col justify-center">
-              <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+              <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
               <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
             </div>
           </div>
@@ -80,8 +80,8 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
               <a
                 key={item.id}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${currentPage === item.id
-                  ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
-                  : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                  ? 'bg-primary/10 text-[#556070] border-l-4 border-primary shadow-sm'
+                  : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
                   }`}
                 href={item.path}
                 onClick={(e) => {
@@ -115,16 +115,16 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
           <div className="flex items-center justify-between px-2 mt-2">
             <div className="flex gap-3">
               <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-primary flex items-center justify-center">
-                <span className="text-white font-bold text-lg">IP</span>
+                <span className="text-[#556070] font-bold text-lg">IP</span>
               </div>
               <div className="flex flex-col justify-center">
-                <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
                 <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
               </div>
             </div>
             <button
               onClick={() => setShowMobileSidebar(false)}
-              className="text-text-secondary hover:text-white"
+              className="text-text-secondary hover:text-[#556070]"
             >
               <span className="material-symbols-outlined">close</span>
             </button>
@@ -134,8 +134,8 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
               <a
                 key={item.id}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors group ${currentPage === item.id
-                  ? 'bg-primary/10 text-white border-l-4 border-primary shadow-sm'
-                  : 'text-text-secondary hover:bg-surface-dark hover:text-white'
+                  ? 'bg-primary/10 text-[#556070] border-l-4 border-primary shadow-sm'
+                  : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
                   }`}
                 href={item.path}
                 onClick={(e) => {
@@ -159,17 +159,17 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background-dark">
+      <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-[#ECF1FF]">
         {/* Header */}
-        <header className="flex items-center justify-between border-b border-border-dark bg-background-dark/95 backdrop-blur-sm px-6 py-4 z-10 sticky top-0">
+        <header className="flex items-center justify-between border-b border-slate-200 shadow-sm bg-white border-b border-slate-200 shadow-sm">
           <div className="flex items-center gap-4 lg:hidden">
             <button
-              className="text-text-secondary hover:text-white"
+              className="text-text-secondary hover:text-[#556070]"
               onClick={() => setShowMobileSidebar(true)}
             >
               <span className="material-symbols-outlined">menu</span>
             </button>
-            <span className="text-white font-bold text-lg">IPMS</span>
+            <span className="text-[#556070] font-bold text-lg">IPMS</span>
           </div>
           <div className="hidden md:flex flex-1 max-w-xl mx-4">
             <GlobalSearch placeholder="Search projects, tasks..." />
@@ -182,10 +182,10 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
             <div className="relative">
               <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
+                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-200 shadow-sm"
               >
                 <div className="hidden md:flex flex-col items-end">
-                  <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                  <span className="text-[#556070] text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
                   <span className="text-xs text-text-secondary font-medium">{user?.role?.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) || 'Intern'}</span>
                 </div>
                 <div className="size-9 rounded-lg bg-gradient-primary flex items-center justify-center text-white font-bold shadow-md shadow-primary/20 ring-2 ring-background-dark">
@@ -200,17 +200,17 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
               {showProfileDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowProfileDropdown(false)}></div>
-                  <div className="absolute right-0 mt-2 w-72 bg-surface-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 shadow-sm rounded-xl shadow-2xl z-50 overflow-hidden">
                     {/* User Info */}
-                    <div className="p-4 border-b border-border-dark bg-gradient-surface">
+                    <div className="p-4 border-b border-slate-200 shadow-sm bg-gradient-surface">
                       <div className="flex items-center gap-3">
                         <div className="size-12 rounded-full bg-gradient-primary flex items-center justify-center">
-                          <span className="text-white font-bold text-lg">
+                          <span className="text-[#556070] font-bold text-lg">
                             {user?.name?.charAt(0)?.toUpperCase() || 'U'}
                           </span>
                         </div>
                         <div>
-                          <p className="text-white font-semibold">{user?.name || 'User'}</p>
+                          <p className="text-[#556070] font-semibold">{user?.name || 'User'}</p>
                           <p className="text-text-secondary text-sm">{user?.email || 'email@example.com'}</p>
                           <span className="inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-500/20 text-purple-400">
                             {user?.role || 'INTERN'}
@@ -223,13 +223,13 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
                     <div className="p-2">
                       <button
                         onClick={() => { setShowProfileDropdown(false); setShowChangePassword(true); }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors"
                       >
                         <span className="material-symbols-outlined text-xl">lock</span>
                         <span className="text-sm font-medium">Change Password</span>
                       </button>
                       <button
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors"
                       >
                         <span className="material-symbols-outlined text-xl">help</span>
                         <span className="text-sm font-medium">Help & Support</span>
@@ -237,7 +237,7 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
                     </div>
 
                     {/* Logout */}
-                    <div className="p-2 border-t border-border-dark">
+                    <div className="p-2 border-t border-slate-200 shadow-sm">
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -261,9 +261,9 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
       {showChangePassword && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}></div>
-          <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+          <div className="relative bg-white border border-slate-200 shadow-sm rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-200 shadow-sm bg-gradient-surface">
+              <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">lock</span>
                 Change Password
               </h2>
@@ -271,20 +271,20 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
             <form onSubmit={handleChangePassword} className="p-6 space-y-4">
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Current Password *</label>
-                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+                <input type="password" required className="w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">New Password *</label>
-                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter new password (min 6 characters)" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
+                <input type="password" required className="w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter new password (min 6 characters)" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
               </div>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Confirm New Password *</label>
-                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
+                <input type="password" required className="w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
               </div>
               {passwordError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{passwordError}</div>}
               {passwordSuccess && <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg text-sm">{passwordSuccess}</div>}
               <div className="flex justify-end gap-3 pt-4">
-                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
+                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
                 <button type="submit" disabled={isChangingPassword} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
                   {isChangingPassword ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Changing...</> : <><span className="material-symbols-outlined text-lg">check</span>Change Password</>}
                 </button>

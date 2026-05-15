@@ -560,7 +560,7 @@ export default function ManagerProjectsPage() {
                     {/* Header & Filter */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 shrink-0">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Projects</h1>
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">Projects</h1>
                             <p className="text-text-secondary text-lg">Monitor and manage all team projects.</p>
                         </div>
                         <div className="flex gap-3">
@@ -570,7 +570,7 @@ export default function ManagerProjectsPage() {
                                     onClick={() => setFilter(status)}
                                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === status
                                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                                        : 'bg-surface-dark text-text-secondary hover:text-white border border-border-dark'
+                                        : 'bg-white text-text-secondary hover:text-[#1e293b] border border-slate-200'
                                         }`}
                                 >
                                     {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
@@ -581,7 +581,7 @@ export default function ManagerProjectsPage() {
 
                     {/* Content */}
                     {loading ? (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-8 text-center">
+                        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
                             <p className="text-text-secondary">Loading projects...</p>
                         </div>
                     ) : (
@@ -596,12 +596,12 @@ export default function ManagerProjectsPage() {
                                     <div
                                         key={p.id}
                                         onClick={() => openDetailsModal(p)}
-                                        className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden hover:border-emerald-500/50 transition-colors cursor-pointer relative group h-full max-h-[300px] flex flex-col"
+                                        className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden hover:border-emerald-500/50 transition-colors cursor-pointer relative group h-full max-h-[300px] flex flex-col"
                                     >
                                         <div className="p-6 flex-1 flex flex-col">
                                             <div className="flex items-start justify-between mb-4">
                                                 <div>
-                                                    <h3 className="text-white font-semibold text-lg">{p.name}</h3>
+                                                    <h3 className="text-[#556070] font-semibold text-lg">{p.name}</h3>
                                                     {p.projectCode && (
                                                         <p className="text-primary text-xs font-mono">{p.projectCode}</p>
                                                     )}
@@ -618,7 +618,7 @@ export default function ManagerProjectsPage() {
                                             {p.budget > 0 && (
                                                 <div className="mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-emerald-400 text-sm">payments</span>
-                                                    <span className="text-white text-sm font-semibold">₹ {p.budget?.toLocaleString('en-IN')}</span>
+                                                    <span className="text-[#556070] text-sm font-semibold">₹ {p.budget?.toLocaleString('en-IN')}</span>
                                                 </div>
                                             )}
 
@@ -626,9 +626,9 @@ export default function ManagerProjectsPage() {
                                             <div className="mb-4">
                                                 <div className="flex justify-between text-sm mb-2">
                                                     <span className="text-text-secondary">Progress</span>
-                                                    <span className="text-white">{progress}%</span>
+                                                    <span className="text-[#556070]">{progress}%</span>
                                                 </div>
-                                                <div className="h-2 bg-background-dark rounded-full overflow-hidden">
+                                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                                                     <div
                                                         className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
                                                         style={{ width: `${progress}%` }}
@@ -651,7 +651,7 @@ export default function ManagerProjectsPage() {
                                             {/* Actions */}
                                             <div className="mt-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <select
-                                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
+                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
                                                     value={p.status}
                                                     onChange={(e) => handleStatusChange(p.id, e.target.value)}
                                                 >
@@ -664,7 +664,7 @@ export default function ManagerProjectsPage() {
                                                         e.stopPropagation();
                                                         openDetailsModal(p);
                                                     }}
-                                                    className="p-2 rounded-lg bg-background-dark border border-border-dark text-text-secondary hover:text-white hover:bg-surface-dark transition-colors"
+                                                    className="p-2 rounded-lg bg-white border border-slate-200 text-text-secondary hover:text-[#1e293b] hover:bg-slate-50 transition-colors"
                                                     title="View Details"
                                                 >
                                                     <span className="material-symbols-outlined">visibility</span>

@@ -66,7 +66,7 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Project Return Review</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Project Return Review</h1>
                         <p className="text-text-secondary">Review good and damaged materials coming back from project teams.</p>
                     </div>
 
@@ -94,8 +94,8 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
                                         }`}
                                     >
                                         <div className="flex items-start justify-between gap-3 mb-3">
-                                            <div>
-                                                <div className="text-white font-bold">{batch.returnNumber}</div>
+                                        <div>
+                                            <div className="text-[#556070] font-bold">{batch.returnNumber}</div>
                                                 <div className="text-sm text-text-secondary">{batch.project?.name || 'Project'}</div>
                                             </div>
                                             <span className={`px-2 py-1 rounded text-[10px] font-black uppercase ${
@@ -118,11 +118,11 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
 
                         <div>
                             {selectedBatch ? (
-                                <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                                    <div className="p-6 border-b border-border-dark bg-gradient-surface">
+                                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl">
+                                    <div className="p-6 border-b border-slate-200 bg-slate-50">
                                         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                                             <div>
-                                                <h2 className="text-2xl font-bold text-white">{selectedBatch.returnNumber}</h2>
+                                                <h2 className="text-2xl font-bold text-[#556070]">{selectedBatch.returnNumber}</h2>
                                                 <p className="text-text-secondary">{selectedBatch.project?.name || 'Project'} | Return to {selectedBatch.destinationLocation?.name || 'Warehouse'}</p>
                                             </div>
                                             <div className="text-sm text-text-secondary">
@@ -133,26 +133,26 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
 
                                     <div className="p-6 space-y-6">
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                                 <div className="text-[10px] uppercase font-black text-text-secondary mb-1">Status</div>
-                                                <div className="text-white font-bold">{selectedBatch.status}</div>
+                                                <div className="text-[#556070] font-bold">{selectedBatch.status}</div>
                                             </div>
-                                            <div className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                                 <div className="text-[10px] uppercase font-black text-text-secondary mb-1">Pending Queue</div>
-                                                <div className="text-white font-bold">{pendingBatches.length} batch(es)</div>
+                                                <div className="text-[#556070] font-bold">{pendingBatches.length} batch(es)</div>
                                             </div>
-                                            <div className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                                 <div className="text-[10px] uppercase font-black text-text-secondary mb-1">Summary</div>
-                                                <div className="text-white font-bold">
+                                                <div className="text-[#556070] font-bold">
                                                     {(selectedBatch.lines || []).reduce((sum, line) => sum + Number(line.goodQuantity || 0) + Number(line.damagedQuantity || 0), 0)} qty
                                                 </div>
                                             </div>
                                         </div>
 
                                         {selectedBatch.overallRemarks && (
-                                            <div className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                                 <div className="text-[10px] uppercase font-black text-text-secondary mb-2">Overall Remarks</div>
-                                                <div className="text-white/90 text-sm">{selectedBatch.overallRemarks}</div>
+                                                <div className="text-[#556070] text-sm">{selectedBatch.overallRemarks}</div>
                                             </div>
                                         )}
 
@@ -167,11 +167,11 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
                                                         <th className="pb-3">Damage Reason</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-border-dark">
+                                                <tbody className="divide-y divide-slate-200">
                                                     {(selectedBatch.lines || []).map((line) => (
                                                         <tr key={getEntityId(line)}>
                                                             <td className="py-4">
-                                                                <div className="text-white font-medium">{line.item?.name || line.itemId?.name}</div>
+                                                                <div className="text-[#556070] font-medium">{line.item?.name || line.itemId?.name}</div>
                                                                 <div className="text-primary text-[10px]">{line.item?.itemCode || line.itemId?.itemCode}</div>
                                                                 {line.remarks && <div className="text-text-secondary text-xs mt-1">{line.remarks}</div>}
                                                             </td>
@@ -190,7 +190,7 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
                                                 <div>
                                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-2">Review Remarks</label>
                                                     <textarea
-                                                        className="w-full bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white outline-none focus:ring-1 focus:ring-primary h-24"
+                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[#556070] outline-none focus:ring-1 focus:ring-primary h-24"
                                                         placeholder="Optional review note for approval or rejection..."
                                                         value={remarks}
                                                         onChange={(e) => setRemarks(e.target.value)}
@@ -216,9 +216,9 @@ export default function ProjectReturnReview({ currentPage: propCurrentPage }) {
                                                 </div>
                                             </div>
                                         ) : (
-                                            <div className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                                                 <div className="text-[10px] uppercase font-black text-text-secondary mb-2">Reviewed</div>
-                                                <div className="text-white text-sm">
+                                                <div className="text-[#556070] text-sm">
                                                     {selectedBatch.reviewedBy?.name || 'System'} on {selectedBatch.reviewedAt ? new Date(selectedBatch.reviewedAt).toLocaleString() : 'N/A'}
                                                 </div>
                                                 {selectedBatch.reviewRemarks && (

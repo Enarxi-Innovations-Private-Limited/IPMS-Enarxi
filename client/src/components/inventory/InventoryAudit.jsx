@@ -35,15 +35,15 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="mb-8">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Audit & Intelligence</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Audit & Intelligence</h1>
                         <p className="text-text-secondary">Historical ledger and predictive inventory reports.</p>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {/* Stock History Ledger */}
                         <div className="lg:col-span-2 space-y-4">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                                <div className="px-6 py-5 border-b border-border-dark bg-background-dark/30 flex justify-between items-center">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden shadow-2xl">
+                                <div className="bg-slate-50 flex justify-between items-center px-6 py-5 border-b border-slate-200 shadow-sm">
                                     <div className="flex items-center gap-3">
                                         <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
                                             <span className="material-symbols-outlined">history_edu</span>
@@ -58,7 +58,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                         <input 
                                             type="text" 
                                             placeholder="Search ledger..." 
-                                            className="bg-background-dark/50 border border-border-dark rounded-lg pl-10 pr-4 py-2 text-xs text-white focus:ring-1 focus:ring-amber-500 outline-none transition-all w-64"
+                                            className="bg-slate-100 border border-slate-200 shadow-sm rounded-lg pl-10 pr-4 py-2 text-xs text-[#556070] focus:ring-1 focus:ring-amber-500 outline-none transition-all w-64"
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
                                         />
@@ -72,7 +72,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                 ) : (
                                     <div className="overflow-x-auto max-h-[700px] overflow-y-auto custom-scrollbar">
                                         <table className="w-full text-left border-collapse">
-                                            <thead className="bg-background-dark/80 sticky top-0 z-10 backdrop-blur-md border-b border-border-dark">
+                                            <thead className="bg-slate-50 sticky top-0 z-10 backdrop-blur-md border-b border-slate-200 shadow-sm">
                                                 <tr>
                                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Timestamp</th>
                                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary">Item Details</th>
@@ -81,7 +81,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                                     <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-text-secondary text-right">Qty Change</th>
                                                 </tr>
                                             </thead>
-                                            <tbody className="divide-y divide-border-dark/30">
+                                            <tbody className="divide-y divide-slate-200">
                                                 {history.map((log, idx) => (
                                                     <tr key={idx} className="hover:bg-amber-500/[0.02] transition-colors group">
                                                         <td className="px-6 py-4">
@@ -130,7 +130,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
 
                         {/* Intelligence Sidebar */}
                         <div className="space-y-6">
-                            <div className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-2xl p-6 shadow-xl relative overflow-hidden">
                                 <div className="absolute top-0 right-0 p-4 opacity-10">
                                     <span className="material-symbols-outlined text-6xl text-amber-500">warning</span>
                                 </div>
@@ -140,7 +140,7 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                         <p className="text-text-secondary text-sm">All inventory levels are healthy.</p>
                                     ) : (
                                         lowStock.map(item => (
-                                            <div key={item.id} className="flex justify-between items-center p-3 bg-background-dark/50 rounded-xl border border-border-dark">
+                                            <div key={item.id} className="bg-slate-50 border border-slate-200 shadow-sm rounded-xl p-3 hover:bg-slate-100 transition-all">
                                                 <div>
                                                     <div className="text-white text-sm font-bold truncate max-w-[120px]">{item.name}</div>
                                                     <div className="text-primary text-[10px] font-mono">{item.itemCode}</div>

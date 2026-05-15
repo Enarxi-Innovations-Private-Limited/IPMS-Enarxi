@@ -79,7 +79,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                             <div className="flex items-center gap-2 mb-2">
                                 <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-500 text-[10px] font-black uppercase tracking-widest border border-amber-500/20">Inventory Hub</span>
                             </div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">
                                 Current Stock
                             </h1>
                             <p className="text-text-secondary text-lg">
@@ -90,43 +90,43 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
 
                     {/* Stats Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-amber-500/30 transition-all">
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-amber-500/30 transition-all">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 blur-3xl -mr-12 -mt-12 transition-all group-hover:bg-amber-500/10"></div>
                             <div className="flex items-center justify-between mb-4 text-amber-500">
                                 <h3 className="text-text-secondary text-xs font-black uppercase tracking-widest">Total SKUs</h3>
                                 <span className="material-symbols-outlined">inventory_2</span>
                             </div>
-                            <p className="text-3xl font-black text-white leading-none">{totalItems}</p>
+                            <p className="text-3xl font-black text-[#556070] leading-none">{totalItems}</p>
                         </div>
 
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-red-500/30 transition-all">
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-red-500/30 transition-all">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 blur-3xl -mr-12 -mt-12 transition-all group-hover:bg-red-500/10"></div>
                             <div className="flex items-center justify-between mb-4 text-red-500">
                                 <h3 className="text-text-secondary text-xs font-black uppercase tracking-widest">Low Stock</h3>
                                 <span className="material-symbols-outlined">warning</span>
                             </div>
-                            <p className="text-3xl font-black text-white leading-none">{lowStockCount}</p>
+                            <p className="text-3xl font-black text-[#556070] leading-none">{lowStockCount}</p>
                         </div>
 
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition-all">
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl relative overflow-hidden group hover:border-emerald-500/30 transition-all">
                             <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-500/5 blur-3xl -mr-12 -mt-12 transition-all group-hover:bg-emerald-500/10"></div>
                             <div className="flex items-center justify-between mb-4 text-emerald-500">
                                 <h3 className="text-text-secondary text-xs font-black uppercase tracking-widest">Warehouses</h3>
                                 <span className="material-symbols-outlined">location_on</span>
                             </div>
-                            <p className="text-3xl font-black text-white leading-none">{locations.length}</p>
+                            <p className="text-3xl font-black text-[#556070] leading-none">{locations.length}</p>
                         </div>
                     </div>
 
                     {/* Table Section */}
-                    <div className="bg-surface-dark border border-border-dark rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="px-6 py-5 border-b border-border-dark bg-background-dark/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-6 py-5 border-b border-border-dark bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
                                     <span className="material-symbols-outlined">format_list_bulleted</span>
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-white leading-none">Stock Registry</h2>
+                                    <h2 className="text-lg font-bold text-[#556070] leading-none">Stock Registry</h2>
                                     <p className="text-text-secondary text-[11px] font-medium mt-1 uppercase tracking-wider">Live Inventory Sync</p>
                                 </div>
                             </div>
@@ -135,7 +135,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                 <input
                                     type="text"
                                     placeholder="Search by ID, name or location..."
-                                    className="w-full bg-background-dark/50 border border-border-dark rounded-xl py-3 pl-12 pr-4 text-white placeholder-text-secondary/30 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all"
+                                    className="w-full bg-background-dark/50 border border-border-dark rounded-xl py-3 pl-12 pr-4 text-[#556070] placeholder-text-secondary/30 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
@@ -150,13 +150,13 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                         ) : error ? (
                             <div className="p-20 text-center bg-red-500/5">
                                 <span className="material-symbols-outlined text-red-500 text-6xl mb-4 drop-shadow-xl">error</span>
-                                <p className="text-white font-bold text-xl">{error}</p>
-                                <button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 transition-colors">Retry Connection</button>
+                                <p className="text-[#556070] font-bold text-xl">{error}</p>
+                                <button onClick={() => window.location.reload()} className="mt-6 px-6 py-2 bg-red-500 text-[#556070] rounded-lg font-bold hover:bg-red-600 transition-colors">Retry Connection</button>
                             </div>
                         ) : (
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-background-dark/50 border-b border-border-dark">
+                                    <thead className="bg-slate-50 border-b border-slate-200 shadow-sm">
                                         <tr>
                                             <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">Item ID</th>
                                             <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary">Name</th>
@@ -168,7 +168,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                             <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-text-secondary text-right">Available</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-border-dark/50">
+                                    <tbody className="divide-y divide-slate-200">
                                         {filteredStock.map((item) => {
                                             const available = item.availableQuantity ?? ((item.quantityOnHand ?? 0) - (item.reservedQuantity ?? 0));
                                             return (
@@ -181,11 +181,11 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                                         <span className="font-mono text-amber-500 text-sm font-black tracking-tight">{item.itemCode}</span>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <div className="text-white font-bold group-hover:text-amber-500 transition-colors">{item.name}</div>
+                                                        <div className="text-[#556070] font-bold group-hover:text-amber-500 transition-colors">{item.name}</div>
                                                         <div className="text-text-secondary text-[10px] uppercase font-medium mt-0.5 tracking-wider opacity-60">Serial Tracking: {item.tracksSerial ? 'Yes' : 'No'}</div>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary bg-surface-dark px-2 py-1 rounded border border-border-dark/50 group-hover:border-amber-500/20 group-hover:text-white transition-all">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary bg-surface-dark px-2 py-1 rounded border border-border-dark/50 group-hover:border-amber-500/20 group-hover:text-[#556070] transition-all">
                                                             {item.classificationId?.name || 'GENERIC'}
                                                         </span>
                                                     </td>
@@ -197,7 +197,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="text-white font-black text-base">{item.quantityOnHand ?? 0}</span>
+                                                        <span className="text-[#556070] font-black text-base">{item.quantityOnHand ?? 0}</span>
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className="text-amber-500/60 font-black text-base">{item.reservedQuantity ?? 0}</span>
@@ -242,20 +242,20 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                 <div className="size-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6">
                                     <span className="material-symbols-outlined text-3xl font-bold">memory</span>
                                 </div>
-                                <h3 className="text-2xl font-black text-white leading-tight mb-2">{selectedItem.name}</h3>
+                                <h3 className="text-2xl font-black text-[#556070] leading-tight mb-2">{selectedItem.name}</h3>
                                 <div className="text-primary font-mono text-sm mb-6">{selectedItem.itemCode}</div>
 
                                 <div className="space-y-6">
                                     <div>
                                         <div className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] mb-1">Available Quantity</div>
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-4xl font-black text-white">{selectedItem.availableQuantity ?? selectedItem.quantityOnHand}</span>
+                                            <span className="text-4xl font-black text-[#556070]">{selectedItem.availableQuantity ?? selectedItem.quantityOnHand}</span>
                                             <span className="text-text-secondary font-bold uppercase text-xs">{selectedItem.uom}</span>
                                         </div>
                                     </div>
                                     <div>
                                         <div className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] mb-1">Classification</div>
-                                        <div className="text-white font-bold">{selectedItem.classification?.name || selectedItem.classificationId?.name || 'Unclassified'}</div>
+                                        <div className="text-[#556070] font-bold">{selectedItem.classification?.name || selectedItem.classificationId?.name || 'Unclassified'}</div>
                                     </div>
                                 </div>
                             </div>
@@ -263,8 +263,8 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                             {/* Ledger Side */}
                             <div className="w-full md:w-2/3 p-8 overflow-y-auto custom-scrollbar">
                                 <div className="flex justify-between items-center mb-6">
-                                    <h4 className="text-sm font-black text-white uppercase tracking-widest">Movement Ledger</h4>
-                                    <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-white">
+                                    <h4 className="text-sm font-black text-[#556070] uppercase tracking-widest">Movement Ledger</h4>
+                                    <button onClick={() => setSelectedItem(null)} className="text-text-secondary hover:text-[#556070]">
                                         <span className="material-symbols-outlined">close</span>
                                     </button>
                                 </div>
@@ -289,7 +289,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                                         {log.quantityChange > 0 ? 'IN' : 'OUT'}
                                                     </div>
                                                     <div>
-                                                        <div className="text-white text-sm font-bold">{log.movementType?.replace(/_/g, ' ')}</div>
+                                                        <div className="text-[#556070] text-sm font-bold">{log.movementType?.replace(/_/g, ' ')}</div>
                                                         <div className="text-text-secondary text-[10px] uppercase font-bold tracking-wider">
                                                             {new Date(log.createdAt).toLocaleString()} • {log.locationId?.name}
                                                         </div>

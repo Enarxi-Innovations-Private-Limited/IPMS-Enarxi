@@ -50,7 +50,7 @@ export default function StockLocationsPage() {
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="flex justify-between items-end mb-8">
                         <div>
-                            <h1 className="text-3xl font-bold text-white tracking-tight">Stock Locations</h1>
+                            <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Stock Locations</h1>
                             <p className="text-text-secondary text-lg">Manage warehouses, zones, and storage bins.</p>
                         </div>
                         <button 
@@ -68,27 +68,27 @@ export default function StockLocationsPage() {
                                 <div className="animate-spin size-10 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
                             </div>
                         ) : locations.length === 0 ? (
-                            <div className="col-span-full p-20 text-center bg-surface-dark border border-dashed border-border-dark rounded-2xl">
+                            <div className="col-span-full p-20 text-center bg-white border border-dashed border-slate-200 rounded-2xl">
                                 <span className="material-symbols-outlined text-6xl text-text-secondary/20 mb-4 block">location_off</span>
-                                <h3 className="text-xl font-bold text-white mb-1">No locations found</h3>
+                                <h3 className="text-xl font-bold text-[#556070] mb-1">No locations found</h3>
                                 <p className="text-text-secondary">Start by adding a warehouse or storage zone.</p>
                             </div>
                         ) : locations.map(loc => (
-                            <div key={loc._id || loc.id} className="bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
+                            <div key={loc._id || loc.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-3xl -mr-12 -mt-12 group-hover:bg-primary/10 transition-all"></div>
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
                                         <span className="material-symbols-outlined">location_on</span>
                                     </div>
-                                    <span className="text-[10px] font-black tracking-widest text-text-secondary uppercase bg-background-dark px-2 py-1 rounded border border-border-dark">
+                                    <span className="text-[10px] font-black tracking-widest text-text-secondary uppercase bg-slate-50 px-2 py-1 rounded border border-slate-200">
                                         {loc.locationCode}
                                     </span>
                                 </div>
-                                <h3 className="text-xl font-bold text-white mb-1">{loc.name}</h3>
+                                <h3 className="text-xl font-bold text-[#556070] mb-1">{loc.name}</h3>
                                 <p className="text-text-secondary text-sm line-clamp-2 mt-2">
                                     {loc.description || 'No description provided.'}
                                 </p>
-                                <div className="mt-6 pt-6 border-t border-border-dark flex justify-between items-center">
+                                <div className="mt-6 pt-6 border-t border-slate-200 flex justify-between items-center">
                                     <div className="flex items-center gap-2">
                                         <div className="size-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></div>
                                         <span className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Active Location</span>

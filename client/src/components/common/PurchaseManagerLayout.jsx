@@ -136,7 +136,7 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
         <div className="space-y-1">
             <button
                 onClick={onToggle}
-                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isOpen ? 'text-white' : 'text-text-secondary hover:text-white hover:bg-surface-dark'}`}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070] hover:bg-slate-50'}`}
             >
                 <div className="flex items-center gap-3">
                     <span className={`material-symbols-outlined ${isOpen ? accent.icon : accent.hoverIcon}`}>{icon}</span>
@@ -145,12 +145,12 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                 <span className={`material-symbols-outlined text-sm transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>expand_more</span>
             </button>
             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[500px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                <div className="pl-3 border-l border-border-dark/50 ml-4 py-1 space-y-0.5">
+                <div className="pl-3 border-l border-slate-200 shadow-sm/50 ml-4 py-1 space-y-0.5">
                     <h3 className="px-3 text-[9px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-40">{groupLabel}</h3>
                     {items.map(item => (
                         <a key={item.id} href={item.path}
                             onClick={(e) => { e.preventDefault(); navigate(item.path); }}
-                            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.text} font-bold` : 'text-text-secondary hover:text-white'}`}
+                            className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.text} font-bold` : 'text-text-secondary hover:text-[#556070]'}`}
                         >
                             <span className={`material-symbols-outlined text-lg ${currentPage === item.id ? accent.icon : accent.hoverIcon}`}>{item.icon}</span>
                             <span className="text-[13px]">{item.label}</span>
@@ -166,11 +166,11 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
         <div className="flex flex-col h-full">
             <div className="p-6 shrink-0">
                 <div className="flex gap-3 px-2">
-                    <div className={`size-10 rounded-full shadow-lg ring-2 ring-border-dark bg-gradient-to-br ${accent.gradient} flex items-center justify-center shrink-0`}>
+                    <div className={`size-10 rounded-full shadow-lg ring-2 ring-slate-100 bg-gradient-to-br ${accent.gradient} flex items-center justify-center shrink-0`}>
                         <span className="text-white font-bold text-sm">PM</span>
                     </div>
                     <div className="flex flex-col justify-center">
-                        <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                        <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
                         <p className="text-text-secondary text-xs font-normal leading-normal mt-0.5">Purchase Manager</p>
                     </div>
                 </div>
@@ -186,7 +186,7 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                     <a
                         href="/purchase"
                         onClick={(e) => { e.preventDefault(); onNav('/purchase'); }}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === 'purchase-dashboard' ? `${accent.bg} text-white shadow-sm` : 'text-text-secondary hover:bg-surface-dark hover:text-white'}`}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === 'purchase-dashboard' ? `${accent.bg} text-[#556070] shadow-sm` : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'}`}
                     >
                         {currentPage === 'purchase-dashboard' && <div className="absolute left-0 top-2 bottom-2 w-1 bg-violet-500 rounded-r-full"></div>}
                         <span className={`material-symbols-outlined ${currentPage === 'purchase-dashboard' ? accent.icon : accent.hoverIcon}`}
@@ -215,9 +215,9 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
     );
 
     return (
-        <div className="flex h-screen w-full overflow-hidden">
+        <div className="light-theme flex h-screen w-full overflow-hidden">
             {/* Desktop Sidebar */}
-            <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
+            <aside className="hidden lg:flex w-72 flex-col border-r border-slate-200 shadow-sm bg-white border-r border-slate-200 shadow-sm">
                 <SidebarContent onNav={(p) => navigate(p)} />
             </aside>
 
@@ -226,9 +226,9 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
 
             {/* Mobile Sidebar */}
             <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
-                <div className="flex items-center justify-between p-4 border-b border-border-dark">
-                    <span className="text-white font-bold">Purchase Manager</span>
-                    <button onClick={() => setShowMobileSidebar(false)} className="text-text-secondary hover:text-white">
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 shadow-sm">
+                    <span className="text-[#556070] font-bold">Purchase Manager</span>
+                    <button onClick={() => setShowMobileSidebar(false)} className="text-text-secondary hover:text-[#556070]">
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -236,13 +236,13 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
             </aside>
 
             {/* Main Content */}
-            <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background-dark">
-                <header className="flex items-center justify-between border-b border-border-dark bg-background-dark/95 backdrop-blur-sm px-6 py-4 z-10 sticky top-0">
+            <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-[#ECF1FF]">
+                <header className="flex items-center justify-between border-b border-slate-200 shadow-sm bg-white border-b border-slate-200 shadow-sm">
                     <div className="flex items-center gap-4 lg:hidden">
-                        <button className="text-text-secondary hover:text-white" onClick={() => setShowMobileSidebar(true)}>
+                        <button className="text-text-secondary hover:text-[#556070]" onClick={() => setShowMobileSidebar(true)}>
                             <span className="material-symbols-outlined">menu</span>
                         </button>
-                        <span className="text-white font-bold text-lg">IPMS</span>
+                        <span className="text-[#556070] font-bold text-lg">IPMS</span>
                     </div>
                     <div className="hidden md:flex flex-1 max-w-xl mx-4">
                         <GlobalSearch placeholder="Search vendors, orders, requests..." />
@@ -257,10 +257,10 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
+                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-slate-200 shadow-sm"
                             >
                                 <div className="hidden md:flex flex-col items-end">
-                                    <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                                    <span className="text-[#556070] text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
                                     <span className="text-xs text-text-secondary font-medium">Purchase Manager</span>
                                 </div>
                                 <div className={`size-9 rounded-lg bg-gradient-to-br ${accent.gradient} flex items-center justify-center text-white font-bold shadow-md ${accent.shadow} ring-2 ring-background-dark`}>
@@ -272,14 +272,14 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                             {showProfileDropdown && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileDropdown(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-72 bg-surface-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden">
-                                        <div className="p-4 border-b border-border-dark">
+                                    <div className="absolute right-0 mt-2 w-72 bg-white border border-slate-200 shadow-sm rounded-xl shadow-2xl z-50 overflow-hidden">
+                                        <div className="p-4 border-b border-slate-200 shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className={`size-12 rounded-full bg-gradient-to-br ${accent.gradient} flex items-center justify-center`}>
-                                                    <span className="text-white font-bold text-lg">{user?.name?.charAt(0)?.toUpperCase() || 'P'}</span>
+                                                    <span className="text-[#556070] font-bold text-lg">{user?.name?.charAt(0)?.toUpperCase() || 'P'}</span>
                                                 </div>
                                                 <div>
-                                                    <p className="text-white font-semibold">{user?.name || 'User'}</p>
+                                                    <p className="text-[#556070] font-semibold">{user?.name || 'User'}</p>
                                                     <p className="text-text-secondary text-sm">{user?.email || ''}</p>
                                                     <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded-full ${accent.badge}`}>PURCHASE_MANAGER</span>
                                                 </div>
@@ -287,12 +287,12 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                                         </div>
                                         <div className="p-2">
                                             <button onClick={() => { setShowProfileDropdown(false); setShowChangePassword(true); }}
-                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors">
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors">
                                                 <span className="material-symbols-outlined text-xl">lock</span>
                                                 <span className="text-sm font-medium">Change Password</span>
                                             </button>
                                         </div>
-                                        <div className="p-2 border-t border-border-dark">
+                                        <div className="p-2 border-t border-slate-200 shadow-sm">
                                             <button onClick={handleLogout}
                                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
                                                 <span className="material-symbols-outlined text-xl">logout</span>
@@ -313,9 +313,9 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
             {showChangePassword && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="relative bg-white border border-slate-200 shadow-sm rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 shadow-sm">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className={`material-symbols-outlined ${accent.icon}`}>lock</span>
                                 Change Password
                             </h2>
@@ -323,20 +323,20 @@ export default function PurchaseManagerLayout({ children, currentPage = 'purchas
                         <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Current Password *</label>
-                                <input type="password" required className={`w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+                                <input type="password" required className={`w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">New Password *</label>
-                                <input type="password" required className={`w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Min 6 characters" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
+                                <input type="password" required className={`w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Min 6 characters" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Confirm New Password *</label>
-                                <input type="password" required className={`w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
+                                <input type="password" required className={`w-full bg-white border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 ${accent.focusRing} focus:border-transparent outline-none focus:ring-2`} placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
                             </div>
                             {passwordError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{passwordError}</div>}
                             {passwordSuccess && <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg text-sm">{passwordSuccess}</div>}
                             <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
+                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
                                 <button type="submit" disabled={isChangingPassword} className={`inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r ${accent.gradient} text-white font-bold shadow-lg disabled:opacity-50`}>
                                     {isChangingPassword ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Changing...</> : <><span className="material-symbols-outlined text-lg">check</span>Change Password</>}
                                 </button>

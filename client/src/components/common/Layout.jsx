@@ -11,7 +11,7 @@ export default function Layout({ title, children }) {
   };
 
   return (
-    <div className="layout">
+    <div className="layout light-theme">
       <header className="topbar">
         <div className="topbar-left">
           <span className="app-name">Internal PMS</span>

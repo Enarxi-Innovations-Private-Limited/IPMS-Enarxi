@@ -139,14 +139,14 @@ export default function ManagerTeamPage() {
                             <li>
                                 <button
                                     onClick={() => navigate('/engineer')}
-                                    className="text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                    className="text-[#556070] hover:text-[#0f172a] text-sm font-medium transition-colors"
                                 >
                                     Dashboard
                                 </button>
                             </li>
                             <li className="flex items-center">
                                 <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                <span className="ml-2 text-white text-sm font-medium">Team</span>
+                                <span className="ml-2 text-[#556070] text-sm font-medium">Team</span>
                             </li>
                         </ol>
                     </nav>
@@ -154,7 +154,7 @@ export default function ManagerTeamPage() {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">
                                 {managerDepartment === 'SOFTWARE' ? 'Software' : managerDepartment === 'HARDWARE' ? 'Hardware' : 'My'} Team
                             </h1>
                             <p className="text-text-secondary text-lg">View all team members in your department and their assigned tasks.</p>
@@ -163,31 +163,31 @@ export default function ManagerTeamPage() {
 
                     {/* Stats */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Total Team</h3>
                                 <span className="material-symbols-outlined text-emerald-500">group</span>
                             </div>
-                            <p className="text-3xl font-bold text-white">{teamMembers.length}</p>
+                            <p className="text-3xl font-bold text-[#556070]">{teamMembers.length}</p>
                         </div>
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Employees</h3>
                                 <span className="material-symbols-outlined text-blue-500">person</span>
                             </div>
-                            <p className="text-3xl font-bold text-white">{totalEmployees}</p>
+                            <p className="text-3xl font-bold text-[#556070]">{totalEmployees}</p>
                         </div>
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Interns</h3>
                                 <span className="material-symbols-outlined text-purple-500">school</span>
                             </div>
-                            <p className="text-3xl font-bold text-white">{totalInterns}</p>
+                            <p className="text-3xl font-bold text-[#556070]">{totalInterns}</p>
                         </div>
                     </div>
 
                     {/* Search and Filter Bar */}
-                    <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
                             <span className="absolute inset-y-0 left-3 flex items-center text-text-secondary">
                                 <span className="material-symbols-outlined text-xl">search</span>
@@ -195,14 +195,14 @@ export default function ManagerTeamPage() {
                             <input
                                 type="text"
                                 placeholder="Search by name, email, or employee ID..."
-                                className="w-full pl-10 pr-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
+                                className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-[#556070] placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
                         </div>
                         <div className="flex gap-3">
                             <select
-                                className="px-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
+                                className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-[#556070] focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
                                 value={filterRole}
                                 onChange={(e) => setFilterRole(e.target.value)}
                             >
@@ -221,12 +221,12 @@ export default function ManagerTeamPage() {
                     )}
 
                     {/* Team Members Grid */}
-                    <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 bg-[#ECF1FF]/40">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-emerald-500">group</span>
                                 Team Members
-                                <span className="ml-2 px-2 py-0.5 bg-background-dark rounded-full text-xs text-text-secondary">
+                                <span className="ml-2 px-2 py-0.5 bg-slate-100 rounded-full text-xs text-slate-500">
                                     {filteredMembers.length}
                                 </span>
                             </h2>
@@ -241,7 +241,7 @@ export default function ManagerTeamPage() {
                                     {filteredMembers.map((member) => (
                                         <div
                                             key={member.id}
-                                            className="bg-background-dark/50 border border-border-dark rounded-lg p-4 hover:bg-background-dark hover:border-emerald-500/30 transition-all group"
+                                            className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:bg-slate-100 hover:border-emerald-500/30 transition-all group"
                                         >
                                             <div className="flex items-start gap-4">
                                                 <div className="size-12 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shrink-0">
@@ -250,8 +250,8 @@ export default function ManagerTeamPage() {
                                                     </span>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <h3 className="text-white font-semibold truncate">{member.name}</h3>
-                                                    <p className="text-text-secondary text-sm">{member.employeeId}</p>
+                                                    <h3 className="text-[#556070] font-semibold truncate">{member.name}</h3>
+                                                    <p className="text-slate-500 text-sm">{member.employeeId}</p>
                                                     <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-medium rounded-full ${getRoleBadgeColor(member.role)}`}>
                                                         {member.role}
                                                     </span>
@@ -259,8 +259,8 @@ export default function ManagerTeamPage() {
                                             </div>
 
                                             {/* Projects assigned */}
-                                            <div className="mt-3 pt-3 border-t border-border-dark">
-                                                <p className="text-text-secondary text-xs mb-2">Assigned Projects:</p>
+                                            <div className="mt-3 pt-3 border-t border-slate-200">
+                                                <p className="text-slate-500 text-xs mb-2">Assigned Projects:</p>
                                                 <div className="flex flex-wrap gap-1">
                                                     {getUserProjects(member.id).slice(0, 3).map(p => (
                                                         <span key={p.id} className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-xs font-mono">
@@ -268,7 +268,7 @@ export default function ManagerTeamPage() {
                                                         </span>
                                                     ))}
                                                     {getUserProjects(member.id).length > 3 && (
-                                                        <span className="px-2 py-0.5 bg-surface-dark text-text-secondary rounded text-xs">
+                                                        <span className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded text-xs">
                                                             +{getUserProjects(member.id).length - 3} more
                                                         </span>
                                                     )}
@@ -302,9 +302,9 @@ export default function ManagerTeamPage() {
             {showDetailsModal && selectedUser && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowDetailsModal(false); setSelectedUser(null); setUserTasks([]); setUserPerformance(null); }}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="relative bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl mx-4 max-h-[85vh] overflow-hidden flex flex-col">
+                        <div className="px-6 py-4 border-b border-slate-200 bg-[#ECF1FF]/40 shrink-0">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-emerald-500">person</span>
                                 Team Member Details & Performance
                             </h2>
@@ -317,13 +317,13 @@ export default function ManagerTeamPage() {
                                         <span className="text-white font-bold text-2xl">{selectedUser.name.charAt(0).toUpperCase()}</span>
                                     </div>
                                     <div>
-                                        <h3 className="text-xl font-bold text-white">{selectedUser.name}</h3>
-                                        <p className="text-text-secondary">{selectedUser.email}</p>
+                                        <h3 className="text-xl font-bold text-[#556070]">{selectedUser.name}</h3>
+                                        <p className="text-slate-500">{selectedUser.email}</p>
                                         <div className="flex gap-2 mt-1">
                                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getRoleBadgeColor(selectedUser.role)}`}>
                                                 {selectedUser.role}
                                             </span>
-                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-surface-dark text-text-secondary">
+                                            <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-slate-100 text-slate-500">
                                                 {selectedUser.employeeId}
                                             </span>
                                         </div>
@@ -332,14 +332,14 @@ export default function ManagerTeamPage() {
 
                                 {/* Performance Summary */}
                                 {userPerformance?.stats && (
-                                    <div className="bg-background-dark/50 border border-border-dark rounded-xl p-4">
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                                         <h4 className="text-sm font-medium uppercase tracking-wider text-text-secondary mb-4 flex items-center gap-2">
                                             <span className="material-symbols-outlined text-base">insights</span>
                                             Performance Summary
                                         </h4>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                             <div className="text-center">
-                                                <p className="text-2xl font-bold text-white">
+                                                <p className="text-2xl font-bold text-[#556070]">
                                                     {userPerformance.stats.averagePerformance ? `${userPerformance.stats.averagePerformance}%` : '-'}
                                                 </p>
                                                 <p className="text-xs text-text-secondary">Avg Performance</p>
@@ -353,8 +353,8 @@ export default function ManagerTeamPage() {
                                                 <p className="text-xs text-text-secondary">⚠️ Late (&lt;90%)</p>
                                             </div>
                                         </div>
-                                        <div className="mt-4 pt-4 border-t border-border-dark/50 flex justify-between text-sm">
-                                            <span className="text-text-secondary">Total Tasks: <span className="text-white">{userPerformance.stats.totalTasks}</span></span>
+                                        <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between text-sm">
+                                            <span className="text-slate-500">Total Tasks: <span className="text-[#556070]">{userPerformance.stats.totalTasks}</span></span>
                                             <span className="text-text-secondary">Completed: <span className="text-green-400">{userPerformance.stats.completedTasks}</span></span>
                                             <span className="text-text-secondary">Pending: <span className="text-yellow-400">{userPerformance.stats.pendingTasks}</span></span>
                                         </div>
@@ -409,9 +409,9 @@ export default function ManagerTeamPage() {
                                                         const badge = getPerformanceBadge(task.performanceScore);
 
                                                         return (
-                                                            <tr key={task.id} className="hover:bg-background-dark/30">
+                                                            <tr key={task.id} className="hover:bg-slate-100">
                                                                 <td className="py-2">
-                                                                    <div className="text-white font-medium">{task.title}</div>
+                                                                    <div className="text-[#556070] font-medium">{task.title}</div>
                                                                     <div className="text-xs text-text-secondary">{task.projectCode}</div>
                                                                 </td>
                                                                 <td className="py-2 text-text-secondary">
@@ -435,11 +435,11 @@ export default function ManagerTeamPage() {
                                 </div>
                             </div>
                         </div>
-                        <div className="px-6 py-4 border-t border-border-dark flex justify-end shrink-0">
+                        <div className="px-6 py-4 border-t border-slate-200 flex justify-end shrink-0">
                             <button
                                 type="button"
                                 onClick={() => { setShowDetailsModal(false); setSelectedUser(null); setUserTasks([]); setUserPerformance(null); }}
-                                className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
+                                className="px-4 py-2 rounded-lg border border-slate-300 text-[#556070] font-medium hover:bg-slate-50 transition-colors"
                             >
                                 Close
                             </button>

@@ -143,10 +143,10 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
             <div className="p-6 shrink-0">
                 <div className="flex gap-3 px-2">
                     <div className={`size-10 rounded-full shadow-lg ring-2 ring-border-dark bg-gradient-to-br ${accent.gradient} flex items-center justify-center shrink-0`}>
-                        <span className="text-white font-bold text-sm">SM</span>
+                        <span className="text-[#556070] font-bold text-sm">SM</span>
                     </div>
                     <div className="flex flex-col justify-center">
-                        <h1 className="text-white text-base font-bold leading-none">IPMS</h1>
+                        <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
                         <p className="text-text-secondary text-xs font-normal leading-normal mt-0.5">Store Manager</p>
                     </div>
                 </div>
@@ -166,7 +166,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                     {overviewMenu.map(item => (
                         <a key={item.id} href={item.path}
                             onClick={(e) => { e.preventDefault(); onNavigate(item.path); }}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-white shadow-sm` : 'text-text-secondary hover:bg-surface-dark hover:text-white'}`}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-[#556070] shadow-sm` : 'text-text-secondary hover:bg-surface-dark hover:text-[#556070]'}`}
                         >
                             {currentPage === item.id && <div className={`absolute left-0 top-2 bottom-2 w-1 bg-amber-500 rounded-r-full`}></div>}
                             <span className={`material-symbols-outlined ${currentPage === item.id ? accent.icon : 'group-hover:text-amber-500'}`}
@@ -180,7 +180,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 <div className="space-y-1">
                     <button
                         onClick={toggleAdmin}
-                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isAdminSetupOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isAdminSetupOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070]'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Admin Setup</span>
                         <span className={`material-symbols-outlined text-xs transition-transform duration-300 ${isAdminSetupOpen ? '' : 'rotate-180'}`}>{isAdminSetupOpen ? 'remove' : 'add'}</span>
@@ -190,7 +190,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                             {adminSetupMenu.map(item => (
                                 <a key={item.id} href={item.path}
                                     onClick={(e) => { e.preventDefault(); onNavigate(item.path); }}
-                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-white` : 'text-text-secondary hover:text-white hover:bg-surface-dark/50'}`}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-[#556070]` : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'}`}
                                 >
                                     <span className={`material-symbols-outlined text-lg ${currentPage === item.id ? accent.icon : 'group-hover:text-amber-500'}`}>{item.icon}</span>
                                     <span className="text-sm">{item.label}</span>
@@ -205,7 +205,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 <div className="space-y-1">
                     <button
                         onClick={toggleStore}
-                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isStoreOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isStoreOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070]'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Store</span>
                         <span className={`material-symbols-outlined text-xs transition-transform duration-300 ${isStoreOpen ? '' : 'rotate-180'}`}>{isStoreOpen ? 'remove' : 'add'}</span>
@@ -215,7 +215,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                             {storeMenu.map(item => (
                                 <a key={item.id} href={item.path}
                                     onClick={(e) => { e.preventDefault(); onNavigate(item.path); }}
-                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-white` : 'text-text-secondary hover:text-white hover:bg-surface-dark/50'}`}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-[#556070]` : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'}`}
                                 >
                                     <span className={`material-symbols-outlined text-lg ${currentPage === item.id ? accent.icon : 'group-hover:text-amber-500'}`}>{item.icon}</span>
                                     <span className="text-sm">{item.label}</span>
@@ -230,7 +230,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                 <div className="space-y-1">
                     <button
                         onClick={toggleReports}
-                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isReportsOpen ? 'text-white' : 'text-text-secondary hover:text-white'}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 group cursor-pointer transition-colors ${isReportsOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070]'}`}
                     >
                         <span className="text-[10px] font-black tracking-widest uppercase opacity-50">Stock Reports</span>
                         <span className={`material-symbols-outlined text-xs transition-transform duration-300 ${isReportsOpen ? '' : 'rotate-180'}`}>{isReportsOpen ? 'remove' : 'add'}</span>
@@ -240,7 +240,7 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                             {reportsMenu.map(item => (
                                 <a key={item.id} href={item.path}
                                     onClick={(e) => { e.preventDefault(); onNavigate(item.path); }}
-                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-white` : 'text-text-secondary hover:text-white hover:bg-surface-dark/50'}`}
+                                    className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === item.id ? `${accent.bg} text-[#556070]` : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'}`}
                                 >
                                     <span className={`material-symbols-outlined text-lg ${currentPage === item.id ? accent.icon : 'group-hover:text-amber-500'}`}>{item.icon}</span>
                                     <span className="text-sm">{item.label}</span>
@@ -255,9 +255,9 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
     );
 
     return (
-        <div className="flex h-screen w-full overflow-hidden">
+        <div className="light-theme flex h-screen w-full overflow-hidden">
             {/* Desktop Sidebar */}
-            <aside className="hidden lg:flex w-72 flex-col border-r border-border-dark bg-background-dark h-full shrink-0">
+            <aside className="hidden lg:flex w-72 flex-col border-r border-slate-200 shadow-sm bg-white border-r border-slate-200">
                 <SidebarContent onNavigate={(path) => navigate(path)} />
             </aside>
 
@@ -266,9 +266,9 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
 
             {/* Mobile Sidebar */}
             <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}>
-                <div className="flex items-center justify-between p-4 border-b border-border-dark">
-                    <span className="text-white font-bold">Store Manager</span>
-                    <button onClick={() => setShowMobileSidebar(false)} className="text-text-secondary hover:text-white">
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 shadow-sm">
+                    <span className="text-[#556070] font-bold">Store Manager</span>
+                    <button onClick={() => setShowMobileSidebar(false)} className="text-text-secondary hover:text-[#556070]">
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -278,12 +278,12 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
             {/* Main Content */}
             <main className="flex-1 flex flex-col h-full relative overflow-hidden bg-background-dark">
                 {/* Header */}
-                <header className="flex items-center justify-between border-b border-border-dark bg-background-dark/95 backdrop-blur-sm px-6 py-4 z-10 sticky top-0">
+                <header className="flex items-center justify-between border-b border-slate-200 shadow-sm bg-white border-b border-slate-200">
                     <div className="flex items-center gap-4 lg:hidden">
-                        <button className="text-text-secondary hover:text-white" onClick={() => setShowMobileSidebar(true)}>
+                        <button className="text-text-secondary hover:text-[#556070]" onClick={() => setShowMobileSidebar(true)}>
                             <span className="material-symbols-outlined">menu</span>
                         </button>
-                        <span className="text-white font-bold text-lg">IPMS</span>
+                        <span className="text-[#556070] font-bold text-lg">IPMS</span>
                     </div>
                     <div className="hidden md:flex flex-1 max-w-xl mx-4">
                         <GlobalSearch placeholder="Search stock, requests, dispatches..." />
@@ -299,13 +299,13 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                         <div className="relative">
                             <button
                                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-border-dark"
+                                className="flex items-center gap-3 p-1.5 rounded-xl hover:bg-surface-dark transition-colors border border-transparent hover:border-slate-200 shadow-sm"
                             >
                                 <div className="hidden md:flex flex-col items-end">
-                                    <span className="text-white text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
+                                    <span className="text-[#556070] text-sm font-semibold leading-tight">{user?.name || 'User'}</span>
                                     <span className="text-xs text-text-secondary font-medium">Store Manager</span>
                                 </div>
-                                <div className={`size-9 rounded-lg bg-gradient-to-br ${accent.gradient} flex items-center justify-center text-white font-bold shadow-md ${accent.shadow} ring-2 ring-background-dark`}>
+                                <div className={`size-9 rounded-lg bg-gradient-to-br ${accent.gradient} flex items-center justify-center text-[#556070] font-bold shadow-md ${accent.shadow} ring-2 ring-background-dark`}>
                                     {user?.name?.charAt(0)?.toUpperCase() || 'S'}
                                 </div>
                                 <span className={`material-symbols-outlined text-text-secondary transition-transform duration-200 ${showProfileDropdown ? 'rotate-180' : ''}`}>expand_more</span>
@@ -314,14 +314,14 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                             {showProfileDropdown && (
                                 <>
                                     <div className="fixed inset-0 z-40" onClick={() => setShowProfileDropdown(false)}></div>
-                                    <div className="absolute right-0 mt-2 w-72 bg-surface-dark border border-border-dark rounded-xl shadow-2xl z-50 overflow-hidden">
-                                        <div className="p-4 border-b border-border-dark">
+                                    <div className="absolute right-0 mt-2 w-72 bg-white border-slate-200 shadow-sm rounded-xl shadow-2xl z-50 overflow-hidden">
+                                        <div className="p-4 border-b border-slate-200 shadow-sm">
                                             <div className="flex items-center gap-3">
                                                 <div className={`size-12 rounded-full bg-gradient-to-br ${accent.gradient} flex items-center justify-center`}>
-                                                    <span className="text-white font-bold text-lg">{user?.name?.charAt(0)?.toUpperCase() || 'S'}</span>
+                                                    <span className="text-[#556070] font-bold text-lg">{user?.name?.charAt(0)?.toUpperCase() || 'S'}</span>
                                                 </div>
                                                 <div>
-                                                    <p className="text-white font-semibold">{user?.name || 'User'}</p>
+                                                    <p className="text-[#556070] font-semibold">{user?.name || 'User'}</p>
                                                     <p className="text-text-secondary text-sm">{user?.email || ''}</p>
                                                     <span className={`inline-block mt-1 px-2 py-0.5 text-xs font-bold rounded-full ${accent.badge}`}>STORE_MANAGER</span>
                                                 </div>
@@ -329,12 +329,12 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                                         </div>
                                         <div className="p-2">
                                             <button onClick={() => { setShowProfileDropdown(false); setShowChangePassword(true); }}
-                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-white hover:bg-background-dark transition-colors">
+                                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-text-secondary hover:text-[#556070] hover:bg-background-dark transition-colors">
                                                 <span className="material-symbols-outlined text-xl">lock</span>
                                                 <span className="text-sm font-medium">Change Password</span>
                                             </button>
                                         </div>
-                                        <div className="p-2 border-t border-border-dark">
+                                        <div className="p-2 border-t border-slate-200 shadow-sm">
                                             <button onClick={handleLogout}
                                                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors">
                                                 <span className="material-symbols-outlined text-xl">logout</span>
@@ -356,9 +356,9 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
             {showChangePassword && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowChangePassword(false)}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="relative bg-white border-slate-200 shadow-sm rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 shadow-sm">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className={`material-symbols-outlined ${accent.icon}`}>lock</span>
                                 Change Password
                             </h2>
@@ -366,21 +366,21 @@ export default function StoreManagerLayout({ children, currentPage = 'store-dash
                         <form onSubmit={handleChangePassword} className="p-6 space-y-4">
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Current Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Enter current password" value={passwordForm.currentPassword} onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">New Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Min 6 characters" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Min 6 characters" value={passwordForm.newPassword} onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Confirm New Password *</label>
-                                <input type="password" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
+                                <input type="password" required className="w-full bg-background-dark border border-slate-200 shadow-sm rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none" placeholder="Confirm new password" value={passwordForm.confirmPassword} onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })} />
                             </div>
                             {passwordError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{passwordError}</div>}
                             {passwordSuccess && <div className="bg-green-500/10 border border-green-500/50 text-green-400 px-4 py-3 rounded-lg text-sm">{passwordSuccess}</div>}
                             <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
-                                <button type="submit" disabled={isChangingPassword} className={`inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r ${accent.gradient} text-white font-bold shadow-lg disabled:opacity-50`}>
+                                <button type="button" onClick={() => { setShowChangePassword(false); setPasswordError(''); setPasswordSuccess(''); }} className="px-4 py-2 rounded-lg border border-slate-200 shadow-sm text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isChangingPassword}>Cancel</button>
+                                <button type="submit" disabled={isChangingPassword} className={`inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-to-r ${accent.gradient} text-[#556070] font-bold shadow-lg disabled:opacity-50`}>
                                     {isChangingPassword ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Changing...</> : <><span className="material-symbols-outlined text-lg">check</span>Change Password</>}
                                 </button>
                             </div>

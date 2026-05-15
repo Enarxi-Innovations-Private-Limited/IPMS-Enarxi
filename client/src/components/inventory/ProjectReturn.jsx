@@ -160,16 +160,16 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
             <div className="p-4 lg:px-12 pb-24">
                 <div className="max-w-5xl mx-auto w-full">
                     <div className="mb-8 text-center">
-                        <h1 className="text-3xl font-bold text-white tracking-tight">Project Return to Store</h1>
+                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Project Return to Store</h1>
                         <p className="text-text-secondary text-lg">Return unused and damaged project stock with accountability tracking.</p>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="bg-surface-dark border border-border-dark rounded-2xl p-8 shadow-2xl space-y-8">
+                    <form onSubmit={handleSubmit} className="bg-white border border-slate-200 rounded-2xl p-8 shadow-2xl space-y-8">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label className="block text-xs font-bold text-text-secondary uppercase mb-2 tracking-widest">Select Project</label>
                                 <select
-                                    className="w-full bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-primary"
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[#556070] outline-none focus:ring-2 focus:ring-primary"
                                     value={formData.projectId}
                                     onChange={(e) => setFormData((prev) => ({ ...prev, projectId: e.target.value }))}
                                     required
@@ -190,7 +190,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                             <div>
                                 <label className="block text-xs font-bold text-text-secondary uppercase mb-2 tracking-widest">Good Return Location</label>
                                 <select
-                                    className="w-full bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[#556070] outline-none focus:ring-2 focus:ring-emerald-500"
                                     value={formData.locationId}
                                     onChange={(e) => setFormData((prev) => ({ ...prev, locationId: e.target.value }))}
                                     required
@@ -209,7 +209,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                         <div>
                             <label className="block text-xs font-bold text-text-secondary uppercase mb-2 tracking-widest">Overall Remarks</label>
                             <textarea
-                                className="w-full min-h-24 bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full min-h-24 bg-white border border-slate-200 rounded-xl px-4 py-3 text-[#556070] outline-none focus:ring-2 focus:ring-primary"
                                 placeholder="Optional return summary, packing note, or site context..."
                                 value={formData.overallRemarks}
                                 onChange={(e) => setFormData((prev) => ({ ...prev, overallRemarks: e.target.value }))}
@@ -225,13 +225,13 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                             </div>
 
                             {itemsLoading && (
-                                <div className="rounded-xl border border-border-dark bg-background-dark/30 p-4 text-sm text-text-secondary">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-text-secondary">
                                     Loading dispatched items for the selected project...
                                 </div>
                             )}
 
                             {!itemsLoading && formData.projectId && eligibleItems.length === 0 && (
-                                <div className="rounded-xl border border-border-dark bg-background-dark/30 p-4 text-sm text-text-secondary">
+                                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-text-secondary">
                                     No dispatched project items are currently available to return for this project.
                                 </div>
                             )}
@@ -241,12 +241,12 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                 const remaining = Number(selectedItem?.maxReturnableQuantity || 0);
 
                                 return (
-                                    <div key={index} className="space-y-4 bg-background-dark/30 p-4 rounded-xl border border-border-dark">
+                                    <div key={index} className="space-y-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                                         <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
                                             <div className="xl:col-span-2">
                                                 <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1">Item</label>
                                                 <select
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     value={line.itemId}
                                                     onChange={(e) => handleLineChange(index, 'itemId', e.target.value)}
                                                     required
@@ -272,7 +272,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                                     min="0"
                                                     step="0.01"
                                                     max={remaining || undefined}
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     value={line.goodQuantity}
                                                     onChange={(e) => handleLineChange(index, 'goodQuantity', e.target.value)}
                                                 />
@@ -285,7 +285,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                                     min="0"
                                                     step="0.01"
                                                     max={remaining || undefined}
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     value={line.damagedQuantity}
                                                     onChange={(e) => handleLineChange(index, 'damagedQuantity', e.target.value)}
                                                 />
@@ -308,7 +308,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                             <div>
                                                 <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1">Responsible Team</label>
                                                 <input
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     placeholder="Team / crew / subcontractor"
                                                     value={line.responsibleTeam}
                                                     onChange={(e) => handleLineChange(index, 'responsibleTeam', e.target.value)}
@@ -317,7 +317,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                             <div>
                                                 <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1">Damage Reason</label>
                                                 <input
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     placeholder="Required if damaged qty is entered"
                                                     value={line.damageReason}
                                                     onChange={(e) => handleLineChange(index, 'damageReason', e.target.value)}
@@ -326,7 +326,7 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                                             <div>
                                                 <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1">Remarks</label>
                                                 <input
-                                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm"
+                                                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm"
                                                     placeholder="Unused / bent / scratched / field note"
                                                     value={line.remarks}
                                                     onChange={(e) => handleLineChange(index, 'remarks', e.target.value)}
@@ -347,24 +347,24 @@ export default function ProjectReturn({ currentPage: propCurrentPage }) {
                         </button>
                     </form>
 
-                    <div className="mt-8 bg-surface-dark border border-border-dark rounded-2xl p-6 shadow-2xl">
+                    <div className="mt-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl">
                         <div className="flex items-center justify-between gap-4 mb-4">
                             <div>
-                                <h2 className="text-xl font-bold text-white">Recent Return Batches</h2>
+                                <h2 className="text-xl font-bold text-[#556070]">Recent Return Batches</h2>
                                 <p className="text-sm text-text-secondary">Track whether your submitted returns are still waiting for store/admin review.</p>
                             </div>
                         </div>
 
                         {recentReturns.length === 0 ? (
-                            <div className="rounded-xl border border-border-dark bg-background-dark/30 p-4 text-sm text-text-secondary">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-text-secondary">
                                 No project return batches have been submitted yet.
                             </div>
                         ) : (
                             <div className="space-y-3">
                                 {recentReturns.map((batch) => (
-                                    <div key={getEntityId(batch)} className="rounded-xl border border-border-dark bg-background-dark/30 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                                    <div key={getEntityId(batch)} className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                                         <div>
-                                            <div className="text-white font-semibold">{batch.returnNumber}</div>
+                                            <div className="text-[#556070] font-semibold">{batch.returnNumber}</div>
                                             <div className="text-sm text-text-secondary">
                                                 {batch.project?.name || 'Project'} | {batch.lines?.length || 0} line(s)
                                             </div>

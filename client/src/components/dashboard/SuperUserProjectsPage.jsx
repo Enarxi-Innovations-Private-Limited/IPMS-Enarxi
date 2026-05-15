@@ -440,11 +440,11 @@ export default function SuperUserProjectsPage() {
                     <nav aria-label="Breadcrumb" className="flex mb-6">
                         <ol className="inline-flex items-center space-x-2">
                             <li>
-                                <button onClick={() => navigate('/super')} className="text-text-secondary hover:text-white text-sm font-medium transition-colors">Dashboard</button>
+                                <button onClick={() => navigate('/super')} className="text-text-secondary hover:text-[#556070] text-sm font-medium transition-colors">Dashboard</button>
                             </li>
                             <li className="flex items-center">
                                 <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                <span className="ml-2 text-white text-sm font-medium">Projects</span>
+                                <span className="ml-2 text-[#556070] text-sm font-medium">Projects</span>
                             </li>
                         </ol>
                     </nav>
@@ -452,20 +452,20 @@ export default function SuperUserProjectsPage() {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Projects</h1>
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">Projects</h1>
                             <p className="text-text-secondary text-lg">Manage all projects and their teams.</p>
                         </div>
                         <div className="flex gap-3">
                             <button 
                                 onClick={() => setShowBulkUploadModal(true)} 
-                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-surface-dark border border-border-dark text-white font-bold hover:bg-background-dark transition-all"
+                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-white border border-slate-200 text-[#556070] font-bold hover:bg-background-dark transition-all"
                             >
                                 <span className="material-symbols-outlined text-lg">upload_file</span>
                                 Bulk Upload
                             </button>
                             <button 
                                 onClick={openCreateModal} 
-                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
+                                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-primary text-[#556070] font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all"
                             >
                                 <span className="material-symbols-outlined text-lg">add</span>
                                 New Project
@@ -474,14 +474,14 @@ export default function SuperUserProjectsPage() {
                     </div>
 
                     {/* Search and Filter */}
-                    <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 flex flex-col md:flex-row gap-4">
                         <div className="flex-1 relative">
                             <span className="absolute inset-y-0 left-3 flex items-center text-text-secondary">
                                 <span className="material-symbols-outlined text-xl">search</span>
                             </span>
-                            <input type="text" placeholder="Search projects..." className="w-full pl-10 pr-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                            <input type="text" placeholder="Search projects..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border-slate-200 rounded-lg text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                         </div>
-                        <select className="px-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                        <select className="px-4 py-2.5 bg-slate-50 border-slate-200 rounded-lg text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                             <option value="ALL">All Status</option>
                             <option value="PLANNING">Planning</option>
                             <option value="ACTIVE">Active</option>
@@ -489,7 +489,7 @@ export default function SuperUserProjectsPage() {
                             <option value="WAITING_APPROVAL">⏳ Awaiting Approval</option>
                             <option value="COMPLETED">Completed</option>
                         </select>
-                        <select className="px-4 py-2.5 bg-background-dark border border-border-dark rounded-lg text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
+                        <select className="px-4 py-2.5 bg-slate-50 border-slate-200 rounded-lg text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={filterDepartment} onChange={(e) => setFilterDepartment(e.target.value)}>
                             <option value="ALL">All Departments</option>
                             <option value="SOFTWARE">Software</option>
                             <option value="HARDWARE">Hardware</option>
@@ -505,7 +505,7 @@ export default function SuperUserProjectsPage() {
 
                     {/* Projects Grid */}
                     {loading ? (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-8 text-center">
+                        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
                             <p className="text-text-secondary">Loading projects...</p>
                         </div>
                     ) : filteredProjects.length > 0 ? (
@@ -514,11 +514,11 @@ export default function SuperUserProjectsPage() {
                                 const stats = getTaskStats(project);
                                 const team = getTeamMembers(project);
                                 return (
-                                    <div key={project.id} className="bg-surface-dark border border-border-dark rounded-xl overflow-hidden hover:border-primary/30 transition-all group">
+                                    <div key={project.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-primary/30 transition-all group">
                                         {/* Header */}
                                         <div className="p-5 border-b border-border-dark">
                                             <div className="flex items-start justify-between mb-1">
-                                                <h3 className="text-white font-semibold text-lg line-clamp-1">{project.name}</h3>
+                                                <h3 className="text-[#556070] font-semibold text-lg line-clamp-1">{project.name}</h3>
                                                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(project.status)}`}>
                                                     {project.status.replace('_', ' ')}
                                                 </span>
@@ -535,10 +535,10 @@ export default function SuperUserProjectsPage() {
                                         </div>
 
                                         {/* Progress */}
-                                        <div className="px-5 py-4 bg-background-dark/30">
+                                        <div className="px-5 py-4 bg-slate-50">
                                             <div className="flex justify-between text-sm mb-2">
                                                 <span className="text-text-secondary">Progress</span>
-                                                <span className="text-white font-medium">{stats.completed}/{stats.total} tasks</span>
+                                                <span className="text-[#556070] font-medium">{stats.completed}/{stats.total} tasks</span>
                                             </div>
                                             <div className="w-full h-2 bg-background-dark rounded-full overflow-hidden">
                                                 <div className="h-full bg-gradient-primary rounded-full transition-all" style={{ width: `${stats.progress}%` }}></div>
@@ -553,7 +553,7 @@ export default function SuperUserProjectsPage() {
                                                     <div className="flex -space-x-2">
                                                         {team.slice(0, 3).map((member) => (
                                                             <div key={member.id} className="size-7 rounded-full bg-gradient-primary flex items-center justify-center border-2 border-surface-dark" title={member.name}>
-                                                                <span className="text-white text-xs font-medium">{member.name.charAt(0)}</span>
+                                                                <span className="text-[#556070] text-xs font-medium">{member.name.charAt(0)}</span>
                                                             </div>
                                                         ))}
                                                         {team.length > 3 && (
@@ -566,7 +566,7 @@ export default function SuperUserProjectsPage() {
                                                     <span className="text-text-secondary text-xs">No team assigned</span>
                                                 )}
                                             </div>
-                                            <button onClick={() => openTeamModal(project)} className="text-primary hover:text-white text-xs font-medium transition-colors">View</button>
+                                            <button onClick={() => openTeamModal(project)} className="text-primary hover:text-[#556070] text-xs font-medium transition-colors">View</button>
                                         </div>
 
                                         {/* Actions */}
@@ -574,10 +574,10 @@ export default function SuperUserProjectsPage() {
                                             <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
                                                 <span className="material-symbols-outlined text-base">visibility</span>View Details
                                             </button>
-                                            <button onClick={() => openEditModal(project)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-colors" title="Edit Project">
+                                            <button onClick={() => openEditModal(project)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-[#556070] transition-colors" title="Edit Project">
                                                 <span className="material-symbols-outlined text-base">edit</span>
                                             </button>
-                                            <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-colors" title="Delete Project">
+                                            <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-[#556070] transition-colors" title="Delete Project">
                                                 <span className="material-symbols-outlined text-base">delete</span>
                                             </button>
                                         </div>
@@ -586,11 +586,11 @@ export default function SuperUserProjectsPage() {
                             })}
                         </div>
                     ) : (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-12 text-center">
+                        <div className="bg-white border border-slate-200 rounded-xl p-12 text-center">
                             <span className="material-symbols-outlined text-5xl text-text-secondary mb-4">folder_off</span>
-                            <h3 className="text-white text-lg font-semibold mb-2">No Projects Found</h3>
+                            <h3 className="text-[#556070] text-lg font-semibold mb-2">No Projects Found</h3>
                             <p className="text-text-secondary mb-4">Create your first project to get started.</p>
-                            <button onClick={openCreateModal} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-white font-bold">
+                            <button onClick={openCreateModal} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-[#556070] font-bold">
                                 <span className="material-symbols-outlined text-lg">add</span>Create Project
                             </button>
                         </div>
@@ -609,9 +609,9 @@ export default function SuperUserProjectsPage() {
             {showCreateModal && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { setShowCreateModal(false); setTemplates([]); }}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="relative bg-white border border-slate-200 shadow-sm w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">add_circle</span>Create New Project
                             </h2>
                         </div>
@@ -630,20 +630,20 @@ export default function SuperUserProjectsPage() {
                             {/* Project Name */}
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Name *</label>
-                                <input type="text" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter project name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
+                                <input type="text" required className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter project name" value={createForm.name} onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })} />
                             </div>
 
                             {/* Description */}
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Description</label>
-                                <textarea className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={2} placeholder="Enter project description" value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}></textarea>
+                                <textarea className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={2} placeholder="Enter project description" value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}></textarea>
                             </div>
 
                             {/* Manager & Department */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.department} onChange={(e) => {
+                                    <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.department} onChange={(e) => {
                                         setCreateForm({ ...createForm, department: e.target.value, templateName: '', managerId: '' });
                                         loadTemplates(e.target.value);
                                     }}>
@@ -653,7 +653,7 @@ export default function SuperUserProjectsPage() {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Assign Manager</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.managerId} onChange={(e) => setCreateForm({ ...createForm, managerId: e.target.value })}>
+                                    <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.managerId} onChange={(e) => setCreateForm({ ...createForm, managerId: e.target.value })}>
                                         <option value="">Select Manager</option>
                                         {managers.filter(m => !createForm.department || m.department === createForm.department || m.department === 'ALL').map(m => (
                                             <option key={m.id} value={m.id}>{m.name} ({m.department})</option>
@@ -665,7 +665,7 @@ export default function SuperUserProjectsPage() {
                             {/* Task Template */}
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Task Template</label>
-                                <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.templateName} onChange={(e) => setCreateForm({ ...createForm, templateName: e.target.value })}>
+                                <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.templateName} onChange={(e) => setCreateForm({ ...createForm, templateName: e.target.value })}>
                                     <option value="">No Template (Create tasks manually)</option>
                                     {templates.map(t => (
                                         <option key={t.name} value={t.name}>{t.name} ({t.taskCount} tasks)</option>
@@ -675,7 +675,7 @@ export default function SuperUserProjectsPage() {
 
                             {/* Template Preview */}
                             {createForm.templateName && templates.find(t => t.name === createForm.templateName) && (
-                                <div className="bg-background-dark/50 border border-border-dark rounded-lg p-4">
+                                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
                                     <h4 className="text-xs font-medium uppercase tracking-wider text-text-secondary mb-3 flex items-center gap-2">
                                         <span className="material-symbols-outlined text-sm">task_alt</span>Tasks to be Created
                                     </h4>
@@ -683,7 +683,7 @@ export default function SuperUserProjectsPage() {
                                         {templates.find(t => t.name === createForm.templateName)?.tasks.map((task, idx) => (
                                             <div key={idx} className="flex items-center gap-2 text-sm">
                                                 <span className="text-primary text-xs font-bold">{task.order}.</span>
-                                                <span className="text-white">{task.title}</span>
+                                                <span className="text-[#556070]">{task.title}</span>
                                             </div>
                                         ))}
                                     </div>
@@ -698,7 +698,7 @@ export default function SuperUserProjectsPage() {
                                         type="date"
                                         required
                                         min={new Date().toISOString().split('T')[0]}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.startDate}
                                         onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })}
                                     />
@@ -709,7 +709,7 @@ export default function SuperUserProjectsPage() {
                                         type="date"
                                         required
                                         min={createForm.startDate || new Date().toISOString().split('T')[0]}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.endDate}
                                         onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })}
                                     />
@@ -721,7 +721,7 @@ export default function SuperUserProjectsPage() {
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Budget (₹)</label>
                                 <input
                                     type="text"
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                     placeholder="Enter budget amount"
                                     value={formatBudgetDisplay(createForm.budget)}
                                     onChange={(e) => {
@@ -752,7 +752,7 @@ export default function SuperUserProjectsPage() {
                                             e.target.value = ''; // Reset input
                                         }}
                                     />
-                                    <label htmlFor="project-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-background-dark border border-border-dark text-white text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
+                                    <label htmlFor="project-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-50 border-slate-200 text-[#556070] text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
                                         <span className="material-symbols-outlined text-base">attach_file</span>
                                         Choose Files
                                     </label>
@@ -766,7 +766,7 @@ export default function SuperUserProjectsPage() {
                                             <div key={idx} className="flex items-center justify-between bg-background-dark/50 px-3 py-2 rounded-lg">
                                                 <div className="flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-primary text-base">description</span>
-                                                    <span className="text-white text-sm truncate max-w-[200px]">{file.name}</span>
+                                                    <span className="text-[#556070] text-sm truncate max-w-[200px]">{file.name}</span>
                                                     <span className="text-text-secondary text-xs">({(file.size / 1024).toFixed(1)} KB)</span>
                                                 </div>
                                                 <button type="button" onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300">
@@ -782,8 +782,8 @@ export default function SuperUserProjectsPage() {
                             {formError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{formError}</div>}
 
                             <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => { setShowCreateModal(false); setTemplates([]); }} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="button" onClick={() => { setShowCreateModal(false); setTemplates([]); }} className="px-4 py-2 rounded-lg border border-border-dark text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
+                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-[#556070] font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                                     {isSubmitting ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Creating...</> : <><span className="material-symbols-outlined text-lg">check</span>Create Project</>}
                                 </button>
                             </div>
@@ -816,7 +816,7 @@ export default function SuperUserProjectsPage() {
                                         <div className="w-10 h-10 rounded-xl bg-blue-600/20 flex items-center justify-center text-blue-500">
                                             <span className="material-symbols-outlined text-2xl">folder</span>
                                         </div>
-                                        <h1 className="text-3xl font-bold text-white tracking-tight">{selectedProject.name}</h1>
+                                        <h1 className="text-3xl font-bold text-[#556070] tracking-tight">{selectedProject.name}</h1>
                                         <span className={`ml-4 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${selectedProject.status === 'ACTIVE' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                                             selectedProject.status === 'COMPLETED' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
                                                 'bg-slate-500/10 text-slate-500 border-slate-500/20'
@@ -828,7 +828,7 @@ export default function SuperUserProjectsPage() {
                                         {selectedProject.budget > 0 && (
                                             <div className="flex items-center gap-2 px-4 py-2 bg-white/5 rounded-xl border border-white/5">
                                                 <span className="material-symbols-outlined text-emerald-400 text-lg">payments</span>
-                                                <span className="text-white font-mono font-semibold">₹{selectedProject.budget.toLocaleString('en-IN')}</span>
+                                                <span className="text-[#556070] font-mono font-semibold">₹{selectedProject.budget.toLocaleString('en-IN')}</span>
                                             </div>
                                         )}
                                         <div className="flex items-center gap-2 font-mono text-xs text-slate-400">
@@ -847,7 +847,7 @@ export default function SuperUserProjectsPage() {
                                         </div>
                                     </div>
                                 </div>
-                                <button onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }} className="p-2 text-slate-500 hover:text-white transition-colors">
+                                <button onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }} className="p-2 text-slate-500 hover:text-[#556070] transition-colors">
                                     <span className="material-symbols-outlined">close</span>
                                 </button>
                             </div>
@@ -867,7 +867,7 @@ export default function SuperUserProjectsPage() {
                                 {/* Left Column: Task Management */}
                                 <div className="flex-1 space-y-6 min-w-0">
                                     <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <h3 className="text-lg font-bold text-[#556070] flex items-center gap-2">
                                             <span className="material-symbols-outlined text-blue-400">format_list_bulleted</span>
                                             Task Management
                                         </h3>
@@ -884,7 +884,7 @@ export default function SuperUserProjectsPage() {
                                                         <div key={task.id} className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                             <div className="flex items-start justify-between gap-3">
                                                                 <div>
-                                                                    <div className="font-semibold text-white text-sm leading-tight">{task.title}</div>
+                                                                    <div className="font-semibold text-[#556070] text-sm leading-tight">{task.title}</div>
                                                                     {task.description && <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{task.description}</div>}
                                                                 </div>
                                                                 <span className={`shrink-0 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
@@ -899,7 +899,7 @@ export default function SuperUserProjectsPage() {
                                                                 <div className="flex items-center gap-2">
                                                                     {assignee ? (
                                                                         <>
-                                                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-white ring-1 ring-white/5">{assignee.name.charAt(0)}</div>
+                                                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-[#556070] ring-1 ring-white/5">{assignee.name.charAt(0)}</div>
                                                                             <span className="text-xs text-slate-300">{assignee.name}</span>
                                                                         </>
                                                                     ) : (
@@ -933,13 +933,13 @@ export default function SuperUserProjectsPage() {
                                                             return (
                                                                 <tr key={task.id} className="group hover:bg-white/[0.02] transition-colors">
                                                                     <td className="px-6 py-5">
-                                                                        <div className="font-semibold text-white text-sm">{task.title}</div>
+                                                                        <div className="font-semibold text-[#556070] text-sm">{task.title}</div>
                                                                         {task.description && <div className="text-[11px] text-slate-500 mt-1">{task.description.substring(0, 50)}</div>}
                                                                     </td>
                                                                     <td className="px-6 py-5">
                                                                         {assignee ? (
                                                                             <div className="flex items-center space-x-2">
-                                                                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-white/5">
+                                                                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-[#556070] ring-2 ring-white/5">
                                                                                     {assignee.name.charAt(0)}
                                                                                 </div>
                                                                                 <div className="flex flex-col">
@@ -996,7 +996,7 @@ export default function SuperUserProjectsPage() {
                                         <div className="flex gap-4">
                                             <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Tasks</p>
-                                                <p className="text-2xl font-bold text-white">{projectTasks.length}</p>
+                                                <p className="text-2xl font-bold text-[#556070]">{projectTasks.length}</p>
                                             </div>
                                             <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                 <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</p>
@@ -1006,7 +1006,7 @@ export default function SuperUserProjectsPage() {
                                         <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl w-full" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                             <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">In Progress</p>
                                             <div className="flex items-end justify-between">
-                                                <p className="text-2xl font-bold text-white">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
+                                                <p className="text-2xl font-bold text-[#556070]">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
                                                 {projectTasks.length > 0 && (
                                                     <span className="text-xs text-blue-400 font-bold">
                                                         {Math.round((projectTasks.filter(t => t.status === 'IN_PROGRESS').length / projectTasks.length) * 100)}% Active
@@ -1021,11 +1021,11 @@ export default function SuperUserProjectsPage() {
                                         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Assigned Manager</h4>
                                         {selectedProject.managerName ? (
                                             <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-4" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-blue-900/40">
+                                                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-bold text-[#556070] shadow-lg shadow-blue-900/40">
                                                     {selectedProject.managerName.charAt(0)}
                                                 </div>
                                                 <div>
-                                                    <h5 className="text-white font-bold leading-tight">{selectedProject.managerName}</h5>
+                                                    <h5 className="text-[#556070] font-bold leading-tight">{selectedProject.managerName}</h5>
                                                     <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Project Manager</p>
                                                 </div>
                                             </div>
@@ -1081,14 +1081,14 @@ export default function SuperUserProjectsPage() {
                             <div className="flex items-center space-x-4">
                                 <button
                                     onClick={() => setShowDeleteConfirm(true)}
-                                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/20 text-red-500 text-xs font-bold hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
+                                    className="px-4 py-2.5 rounded-xl bg-red-600/10 border border-red-500/20 text-red-500 text-xs font-bold hover:bg-red-600 hover:text-[#556070] transition-all flex items-center gap-2"
                                 >
                                     <span className="material-symbols-outlined text-sm">delete</span>
                                     Delete Project
                                 </button>
                                 <button
                                     onClick={() => { setShowDetailsModal(false); setProjectTasks([]); }}
-                                    className="px-6 py-2.5 rounded-xl border border-slate-600 text-white text-xs font-bold hover:bg-slate-800 transition-all"
+                                    className="px-6 py-2.5 rounded-xl border border-slate-600 text-[#556070] text-xs font-bold hover:bg-slate-800 transition-all"
                                 >
                                     Close
                                 </button>
@@ -1104,9 +1104,9 @@ export default function SuperUserProjectsPage() {
                 showTeamModal && selectedProject && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowTeamModal(false)}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] overflow-hidden flex flex-col">
+                        <div className="relative bg-white border border-slate-200 shadow-sm w-full max-w-md mx-4 max-h-[80vh] overflow-hidden flex flex-col">
                             <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                     <span className="material-symbols-outlined text-primary">group</span>Team Members
                                 </h2>
                                 <p className="text-text-secondary text-sm mt-1">{selectedProject.name}</p>
@@ -1117,12 +1117,12 @@ export default function SuperUserProjectsPage() {
                                         {users.map((user) => {
                                             const isAssigned = (selectedProject.teamIds || []).includes(user.id);
                                             return (
-                                                <div key={user.id} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${isAssigned ? 'bg-primary/20 border border-primary/50' : 'bg-background-dark/50 border border-border-dark opacity-40'}`}>
+                                                <div key={user.id} className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${isAssigned ? 'bg-primary/20 border border-primary/50' : 'bg-slate-50 border border-slate-200 opacity-40'}`}>
                                                     <div className="size-10 rounded-full bg-gradient-primary flex items-center justify-center">
-                                                        <span className="text-white font-medium">{user.name.charAt(0)}</span>
+                                                        <span className="text-[#556070] font-medium">{user.name.charAt(0)}</span>
                                                     </div>
                                                     <div className="flex-1 text-left">
-                                                        <p className="text-white font-medium">{user.name}</p>
+                                                        <p className="text-[#556070] font-medium">{user.name}</p>
                                                         <p className="text-text-secondary text-xs">{user.role} • {user.department || 'No dept'}</p>
                                                     </div>
                                                     {isAssigned && <span className="material-symbols-outlined text-primary">check_circle</span>}
@@ -1133,7 +1133,7 @@ export default function SuperUserProjectsPage() {
                                 ) : <p className="text-text-secondary text-center py-4">No team members available.</p>}
                             </div>
                             <div className="px-6 py-4 border-t border-border-dark flex justify-end shrink-0">
-                                <button type="button" onClick={() => setShowTeamModal(false)} className="px-4 py-2 rounded-lg bg-gradient-primary text-white font-bold hover:scale-[1.02] transition-all">Done</button>
+                                <button type="button" onClick={() => setShowTeamModal(false)} className="px-4 py-2 rounded-lg bg-gradient-primary text-[#556070] font-bold hover:scale-[1.02] transition-all">Done</button>
                             </div>
                         </div>
                     </div>
@@ -1154,13 +1154,13 @@ export default function SuperUserProjectsPage() {
                                         <span className="material-symbols-outlined">folder_open</span>
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-bold text-white tracking-tight">Attachment Center</h3>
+                                        <h3 className="text-lg font-bold text-[#556070] tracking-tight">Attachment Center</h3>
                                         <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Manage files for {selectedProject.name}</p>
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setShowAttachmentsModal(false)}
-                                    className="p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                                    className="p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-[#556070] transition-colors"
                                 >
                                     <span className="material-symbols-outlined">close</span>
                                 </button>
@@ -1177,7 +1177,7 @@ export default function SuperUserProjectsPage() {
                                             <span className="material-symbols-outlined text-3xl">cloud_upload</span>
                                         </div>
                                         <div>
-                                            <p className="text-sm font-bold text-white">Click or drag to upload files</p>
+                                            <p className="text-sm font-bold text-[#556070]">Click or drag to upload files</p>
                                             <p className="text-[10px] text-slate-500 mt-1 uppercase font-bold tracking-widest">Max file size: 50MB</p>
                                         </div>
                                         <input
@@ -1211,7 +1211,7 @@ export default function SuperUserProjectsPage() {
                                                         <span className="material-symbols-outlined">description</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-sm font-bold text-white truncate">{file.name}</p>
+                                                        <p className="text-sm font-bold text-[#556070] truncate">{file.name}</p>
                                                         <p className="text-[10px] text-slate-500 font-mono mt-0.5">
                                                             {new Date(file.uploadedAt).toLocaleDateString()} • {file.size ? (file.size / 1024).toFixed(1) + ' KB' : 'Size unknown'}
                                                         </p>
@@ -1254,7 +1254,7 @@ export default function SuperUserProjectsPage() {
                             <div className="px-6 py-4 border-t border-white/5 bg-white/[0.02] flex justify-end">
                                 <button
                                     onClick={() => setShowAttachmentsModal(false)}
-                                    className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all"
+                                    className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-[#556070] text-xs font-bold hover:bg-white/10 transition-all"
                                 >
                                     Done
                                 </button>
@@ -1270,9 +1270,9 @@ export default function SuperUserProjectsPage() {
             {showEditModal && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEditModal(false)}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+                    <div className="relative bg-white border border-slate-200 shadow-sm w-full max-w-2xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">edit</span>Edit Project
                             </h2>
                         </div>
@@ -1280,27 +1280,27 @@ export default function SuperUserProjectsPage() {
                             {/* Project Name */}
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Name *</label>
-                                <input type="text" required className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                                <input type="text" required className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none" placeholder="Enter project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                             </div>
 
                             {/* Description */}
                             <div>
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Description</label>
-                                <textarea className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={3} placeholder="Enter project description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}></textarea>
+                                <textarea className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={3} placeholder="Enter project description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}></textarea>
                             </div>
 
                             {/* Manager & Department */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
+                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
                                         <option value="SOFTWARE">Software (IT)</option>
                                         <option value="HARDWARE">Hardware</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Change Manager</label>
-                                    <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.managerId} onChange={(e) => setEditForm({ ...editForm, managerId: e.target.value })}>
+                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.managerId} onChange={(e) => setEditForm({ ...editForm, managerId: e.target.value })}>
                                         <option value="">Select Manager</option>
                                         {managers.filter(m => !editForm.department || m.department === editForm.department || m.department === 'ALL').map(m => (
                                             <option key={m.id} value={m.id}>{m.name} ({m.department})</option>
@@ -1315,7 +1315,7 @@ export default function SuperUserProjectsPage() {
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Budget (₹)</label>
                                 <input
                                     type="text"
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                     placeholder="Enter budget amount"
                                     value={formatBudgetDisplay(editForm.budget)}
                                     onChange={(e) => {
@@ -1336,7 +1336,7 @@ export default function SuperUserProjectsPage() {
                                             <div key={idx} className="flex items-center justify-between bg-background-dark/30 px-3 py-2 rounded-lg border border-border-dark/50">
                                                 <div className="flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-primary text-base">description</span>
-                                                    <span className="text-white text-xs truncate max-w-[200px]">{file.name}</span>
+                                                    <span className="text-[#556070] text-xs truncate max-w-[200px]">{file.name}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-blue-400 hover:text-blue-300">
@@ -1364,7 +1364,7 @@ export default function SuperUserProjectsPage() {
                                             e.target.value = '';
                                         }}
                                     />
-                                    <label htmlFor="edit-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-background-dark border border-border-dark text-white text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
+                                    <label htmlFor="edit-attachments" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-50 border border-slate-200 text-[#556070] text-sm font-medium hover:bg-surface-dark cursor-pointer transition-colors">
                                         <span className="material-symbols-outlined text-base">add_circle</span>
                                         Add Files
                                     </label>
@@ -1376,7 +1376,7 @@ export default function SuperUserProjectsPage() {
                                             <div key={idx} className="flex items-center justify-between bg-primary/10 px-3 py-2 rounded-lg">
                                                 <div className="flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-primary text-base">upload_file</span>
-                                                    <span className="text-white text-sm truncate max-w-[200px]">{file.name}</span>
+                                                    <span className="text-[#556070] text-sm truncate max-w-[200px]">{file.name}</span>
                                                 </div>
                                                 <button type="button" onClick={() => setEditFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-300">
                                                     <span className="material-symbols-outlined text-base">close</span>
@@ -1390,8 +1390,8 @@ export default function SuperUserProjectsPage() {
                             {formError && <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg text-sm">{formError}</div>}
 
                             <div className="flex justify-end gap-3 pt-4">
-                                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
-                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-white font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 rounded-lg border border-border-dark text-[#556070] font-medium hover:bg-background-dark transition-colors" disabled={isSubmitting}>Cancel</button>
+                                <button type="submit" disabled={isSubmitting} className="inline-flex items-center gap-2 px-6 py-2 rounded-lg bg-gradient-primary text-[#556070] font-bold shadow-lg shadow-blue-900/50 hover:shadow-blue-900/70 hover:scale-[1.02] transition-all disabled:opacity-50 disabled:cursor-not-allowed">
                                     {isSubmitting ? <><span className="material-symbols-outlined text-lg animate-spin">progress_activity</span>Updating...</> : <><span className="material-symbols-outlined text-lg">check</span>Save Changes</>}
                                 </button>
                             </div>
@@ -1410,9 +1410,9 @@ export default function SuperUserProjectsPage() {
                                 <span className="material-symbols-outlined text-4xl">warning</span>
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white tracking-tight">Delete Project?</h3>
+                                <h3 className="text-xl font-bold text-[#556070] tracking-tight">Delete Project?</h3>
                                 <p className="text-slate-400 mt-2 text-sm leading-relaxed">
-                                    Are you sure you want to delete <span className="text-white font-bold">"{selectedProject?.name}"</span>?
+                                    Are you sure you want to delete <span className="text-[#556070] font-bold">"{selectedProject?.name}"</span>?
                                     This will permanently remove all tasks and back up all attachments. This action cannot be undone.
                                 </p>
                             </div>
@@ -1426,7 +1426,7 @@ export default function SuperUserProjectsPage() {
                             </button>
                             <button
                                 onClick={handleDeleteProject}
-                                className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
+                                className="px-6 py-2.5 rounded-xl bg-red-600 text-[#556070] font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
                             >
                                 Confirm Delete
                             </button>
@@ -1445,9 +1445,9 @@ export default function SuperUserProjectsPage() {
                                 <span className="material-symbols-outlined text-4xl">delete_forever</span>
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white tracking-tight">Remove Attachment?</h3>
+                                <h3 className="text-xl font-bold text-[#556070] tracking-tight">Remove Attachment?</h3>
                                 <p className="text-slate-400 mt-2 text-sm leading-relaxed">
-                                    Are you sure you want to remove <span className="text-white font-bold">"{fileToDelete?.split('/').pop()}"</span>?
+                                    Are you sure you want to remove <span className="text-[#556070] font-bold">"{fileToDelete?.split('/').pop()}"</span>?
                                     This will permanently delete the file from the project.
                                 </p>
                             </div>
@@ -1461,7 +1461,7 @@ export default function SuperUserProjectsPage() {
                             </button>
                             <button
                                 onClick={confirmRemoveAttachment}
-                                className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
+                                className="px-6 py-2.5 rounded-xl bg-red-600 text-[#556070] font-bold shadow-lg shadow-red-900/40 hover:bg-red-700 hover:scale-[1.02] transition-all text-xs uppercase tracking-widest"
                             >
                                 Confirm Remove
                             </button>

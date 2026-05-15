@@ -16,36 +16,37 @@ export default function PurchasePlanning() {
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
     const [notes, setNotes] = useState('');
+    const [viewMode, setViewMode] = useState('combined'); // 'combined' or 'individual'
+
+    const fetchData = async (mode) => {
+        try {
+            setLoading(true);
+            const [reqRes, venRes] = await Promise.all([
+                inventoryService.getPurchasePlanning(mode),
+                inventoryService.getVendors()
+            ]);
+
+            const initialRows = (reqRes.data || []).map((row) => ({
+                ...row,
+                selected: false,
+                vendorId: '',
+                orderQuantity: String(row.requestedQuantity || 0),
+                rate: '',
+                gstPercent: '18'
+            }));
+
+            setRows(initialRows);
+            setVendors(venRes.data || []);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchData = async () => {
-            try {
-                setLoading(true);
-                const [reqRes, venRes] = await Promise.all([
-                    inventoryService.getPurchasePlanning(),
-                    inventoryService.getVendors()
-                ]);
-
-                const initialRows = (reqRes.data || []).map((row) => ({
-                    ...row,
-                    selected: false,
-                    vendorId: '',
-                    orderQuantity: String(row.requestedQuantity || 0),
-                    rate: '',
-                    gstPercent: '18'
-                }));
-
-                setRows(initialRows);
-                setVendors(venRes.data || []);
-            } catch (err) {
-                console.error(err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
+        fetchData(viewMode);
+    }, [viewMode]);
 
     const selectedCount = rows.filter((row) => row.selected).length;
 
@@ -109,8 +110,22 @@ export default function PurchasePlanning() {
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-3xl font-bold text-white tracking-tight">Purchase Planning</h1>
+                            <h1 className="text-3xl font-bold text-[#556070] tracking-tight">Purchase Planning</h1>
                             <p className="text-text-secondary">Group shortage demand, select vendors, and prepare commercially complete PO drafts.</p>
+                        </div>
+                        <div className="flex bg-background-dark/50 p-1 rounded-xl border border-border-dark">
+                            <button
+                                onClick={() => setViewMode('combined')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === 'combined' ? 'bg-primary text-white shadow-lg' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                Combined Pool
+                            </button>
+                            <button
+                                onClick={() => setViewMode('individual')}
+                                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${viewMode === 'individual' ? 'bg-primary text-white shadow-lg' : 'text-text-secondary hover:text-white'}`}
+                            >
+                                Individual Requests
+                            </button>
                         </div>
                         <button
                             disabled={selectedCount === 0 || generating}
@@ -121,11 +136,17 @@ export default function PurchasePlanning() {
                         </button>
                     </div>
 
-                    <div className="bg-surface-dark border border-border-dark rounded-2xl overflow-hidden shadow-2xl">
-                        <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
+                    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xl">
+                        <div className="px-6 py-4 border-b border-slate-200 bg-[#ECF1FF]/40 flex items-center justify-between">
                             <div>
-                                <h2 className="text-lg font-semibold text-white">Combined Purchase Pool</h2>
-                                <p className="text-xs text-text-secondary mt-1">Demand is grouped by item across open purchase request batches.</p>
+                                <h2 className="text-lg font-semibold text-[#556070]">
+                                    {viewMode === 'combined' ? 'Combined Purchase Pool' : 'Single Request Queue'}
+                                </h2>
+                                <p className="text-xs text-text-secondary mt-1">
+                                    {viewMode === 'combined' 
+                                        ? 'Demand is grouped by item across open purchase request batches.' 
+                                        : 'Showing raw individual requests from Admins/Managers.'}
+                                </p>
                             </div>
                             <span className="text-xs text-text-secondary bg-background-dark px-2 py-1 rounded">
                                 {rows.length} Items Awaiting PO
@@ -145,7 +166,7 @@ export default function PurchasePlanning() {
                             <>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-background-dark/50">
+                                    <thead className="bg-slate-50">
                                             <tr>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Select</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-wider text-text-secondary">Item</th>
@@ -175,18 +196,18 @@ export default function PurchasePlanning() {
                                                             />
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="text-white font-medium">{row.itemCode} - {row.name}</div>
+                                                            <div className="text-[#556070] font-medium">{row.itemCode} - {row.name}</div>
                                                             <div className="text-text-secondary text-xs">Package: {row.package || '-'}</div>
                                                         </td>
                                                         <td className="px-6 py-4 text-text-secondary text-sm">{row.classification || '-'}</td>
                                                         <td className="px-6 py-4 text-center">
-                                                            <div className="text-white font-bold">{row.requestedQuantity}</div>
+                                                            <div className="text-[#556070] font-bold">{row.requestedQuantity}</div>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <select
                                                                 value={row.vendorId}
                                                                 onChange={(e) => updateRow(row.itemId, { vendorId: e.target.value, selected: true })}
-                                                                className="w-full bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-primary"
+                                                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-[#556070] outline-none focus:border-primary"
                                                             >
                                                                 <option value="">Select vendor</option>
                                                                 {vendors.map((vendor) => (
@@ -197,7 +218,7 @@ export default function PurchasePlanning() {
                                                             </select>
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <div className="text-white text-sm font-medium">{selectedVendorMapping?.sku || '-'}</div>
+                                                            <div className="text-[#556070] text-sm font-medium">{selectedVendorMapping?.sku || '-'}</div>
                                                             <div className="text-text-secondary text-[10px] mt-1">
                                                                 {row.skuMappings?.length
                                                                     ? row.skuMappings
@@ -214,7 +235,7 @@ export default function PurchasePlanning() {
                                                                 step="0.001"
                                                                 value={row.orderQuantity}
                                                                 onChange={(e) => updateRow(row.itemId, { orderQuantity: e.target.value, selected: true })}
-                                                                className="w-24 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-white text-center outline-none focus:border-primary"
+                                                                className="w-24 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-[#556070] text-center outline-none focus:border-primary"
                                                             />
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
@@ -224,7 +245,7 @@ export default function PurchasePlanning() {
                                                                 step="0.01"
                                                                 value={row.rate}
                                                                 onChange={(e) => updateRow(row.itemId, { rate: e.target.value, selected: true })}
-                                                                className="w-28 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-white text-right outline-none focus:border-primary"
+                                                                className="w-28 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-[#556070] text-right outline-none focus:border-primary"
                                                             />
                                                         </td>
                                                         <td className="px-6 py-4 text-right">
@@ -234,7 +255,7 @@ export default function PurchasePlanning() {
                                                                 step="0.01"
                                                                 value={row.gstPercent}
                                                                 onChange={(e) => updateRow(row.itemId, { gstPercent: e.target.value, selected: true })}
-                                                                className="w-20 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-sm text-white text-right outline-none focus:border-primary"
+                                                                className="w-20 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-[#556070] text-right outline-none focus:border-primary"
                                                             />
                                                         </td>
                                                     </tr>
@@ -244,7 +265,7 @@ export default function PurchasePlanning() {
                                     </table>
                                 </div>
 
-                                <div className="border-t border-border-dark p-6">
+                                <div className="border-t border-slate-200 p-6">
                                     <label className="block text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">
                                         PO / RFQ Notes
                                     </label>
@@ -252,7 +273,7 @@ export default function PurchasePlanning() {
                                         rows="3"
                                         value={notes}
                                         onChange={(e) => setNotes(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-xl p-3 text-white outline-none focus:border-primary"
+                                        className="w-full bg-white border border-slate-200 rounded-xl p-3 text-[#556070] outline-none focus:border-primary"
                                         placeholder="Quotation, delivery commitments, vendor follow-up, or sourcing notes..."
                                     />
                                 </div>
