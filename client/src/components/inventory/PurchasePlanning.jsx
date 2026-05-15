@@ -199,7 +199,6 @@ export default function PurchasePlanning() {
                         <div className="flex bg-background-dark/50 p-1 rounded-xl border border-border-dark">
                             <button onClick={() => setTab('individual')} className={tabButtonClass(tab === 'individual')}>Individual PRQ</button>
                             <button onClick={() => setTab('combined')} className={tabButtonClass(tab === 'combined')}>Combined Demand</button>
-                            <button onClick={() => setTab('generated')} className={tabButtonClass(tab === 'generated')}>Generated POs</button>
                         </div>
                     </div>
 

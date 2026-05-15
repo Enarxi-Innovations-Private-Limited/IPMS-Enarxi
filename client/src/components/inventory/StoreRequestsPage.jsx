@@ -49,7 +49,7 @@ export default function StoreRequestsPage() {
                 inventoryService.getStoreRequests(),
                 inventoryService.getCurrentStock()
             ]);
-            setBatches(res.data);
+            setBatches([...res.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
 
             // Build stock map
             const stockMap = {};
@@ -247,7 +247,7 @@ export default function StoreRequestsPage() {
                                                             return (
                                                                 <tr key={lineId} className="group hover:bg-white/5 transition-colors">
                                                                     <td className="p-4">
-                                                                        <div className="text-white text-sm font-bold">{line.itemId?.name}</div>
+                                                                        <div className="text-slate-700 text-sm font-bold">{line.itemId?.name}</div>
                                                                         <div className="text-amber-500/70 text-[10px] font-mono">{line.itemId?.itemCode}</div>
                                                                         <div className={`text-[10px] font-black uppercase mt-1 ${line.status === 'CONFIRMED'
                                                                                 ? 'text-emerald-400'
@@ -259,25 +259,25 @@ export default function StoreRequestsPage() {
                                                                         </div>
                                                                     </td>
                                                                     <td className="p-4 text-center">
-                                                                        <div className="text-white font-bold">{line.requestedQuantity}</div>
+                                                                        <div className="text-slate-700 font-bold">{line.requestedQuantity}</div>
                                                                         <div className="text-[10px] text-text-secondary uppercase">{line.itemId?.uom}</div>
                                                                     </td>
                                                                     <td className="p-4 text-center">
-                                                                        <div className="text-white font-bold">{stockLevels[getEntityId(line.itemId)] || 0}</div>
+                                                                        <div className="text-slate-700 font-bold">{stockLevels[getEntityId(line.itemId)] || 0}</div>
                                                                         <div className="text-[10px] text-text-secondary uppercase">{line.itemId?.uom}</div>
                                                                     </td>
                                                                     <td className="p-4 text-center">
                                                                         {isEditable ? (
                                                                             <input
                                                                                 type="number"
-                                                                                className="w-24 bg-surface-dark border border-border-dark rounded p-2 text-white text-center text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all mx-auto block"
+                                                                                className="w-24 bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 text-center text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all mx-auto block"
                                                                                 value={lineQuantities[lineId] ?? ''}
                                                                                 onChange={(e) => setLineQuantities(prev => ({ ...prev, [lineId]: e.target.value }))}
                                                                                 min="0"
                                                                                 max={line.requestedQuantity}
                                                                             />
                                                                         ) : (
-                                                                            <div className="text-white font-bold text-lg">
+                                                                            <div className="text-slate-700 font-bold text-lg">
                                                                                 {['CONFIRMED', 'SHORTAGE_REPORTED', 'SHORTAGE_APPROVED'].includes(line.status)
                                                                                     ? line.confirmedQuantity
                                                                                     : line.requestedQuantity}
@@ -288,7 +288,7 @@ export default function StoreRequestsPage() {
                                                                         {isEditable ? (
                                                                             <input
                                                                                 type="text"
-                                                                                className="w-full min-w-[150px] bg-surface-dark border border-border-dark rounded p-2 text-white text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all"
+                                                                                className="w-full min-w-[150px] bg-slate-50 border border-slate-200 rounded p-2 text-slate-700 text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all"
                                                                                 placeholder="Add remark..."
                                                                                 value={lineRemarks[lineId] ?? ''}
                                                                                 onChange={(e) => setLineRemarks(prev => ({ ...prev, [lineId]: e.target.value }))}

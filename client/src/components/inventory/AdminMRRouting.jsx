@@ -23,7 +23,7 @@ export default function AdminMRRouting() {
         try {
             setLoading(true);
             const res = await inventoryService.getMaterialRequests();
-            setRequests(res.data || []);
+            setRequests((res.data || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
         } catch (err) {
             console.error(err);
             notifyError(err.response?.data?.message || 'Failed to load material requests');
