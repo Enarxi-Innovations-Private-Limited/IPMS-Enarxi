@@ -23,6 +23,35 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeId = (value) => (value ? String(value) : '');
 const ACTIVE_PURCHASE_QUEUE_STATUSES = ['OPEN', 'PARTIALLY_ORDERED', 'PENDING', 'IN_PO'];
 
+const getPurchaseOrderNextAllowedActions = (status) => {
+    switch (status) {
+        case 'DRAFT':
+        case 'REJECTED':
+            return ['SUBMIT_FOR_APPROVAL'];
+        case 'PENDING_ADMIN_APPROVAL':
+            return ['APPROVE', 'REJECT'];
+        case 'APPROVED':
+            return ['MARK_PLACED'];
+        case 'PLACED':
+            return ['RECEIVE_INWARD'];
+        default:
+            return [];
+    }
+};
+
+const getPurchaseOrderInwardProgress = (lines = []) => {
+    const orderedQty = (lines || []).reduce((sum, line) => sum + Number(line.orderQuantity || 0), 0);
+    const receivedQty = (lines || []).reduce((sum, line) => sum + Number(line.receivedQuantity || 0), 0);
+    const percentage = orderedQty > 0 ? Number(((receivedQty / orderedQty) * 100).toFixed(2)) : 0;
+    return { orderedQty, receivedQty, percentage };
+};
+
+const getStoreLineDispatchableQty = (line) => {
+    if (!line) return 0;
+    if (line.status !== 'CONFIRMED') return 0;
+    return Math.max(0, Number(line.pendingQuantity || 0));
+};
+
 async function createPurchaseRequestBatchNumber(session = null) {
     const now = new Date();
     const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -1701,7 +1730,10 @@ router.post('/dispatchConfirmedStoreRequest', async (req, res) => {
         });
 
         await logInvActivity('INV_DISPATCH', `Stock dispatched via ${dispatchResult.dispatchNumber}`, req.user._id, req.user.name, dispatchResult._id, dispatchResult.dispatchNumber);
-        res.json(dispatchResult);
+        res.json({
+            ...dispatchResult.toObject(),
+            nextAllowedActions: ['ACKNOWLEDGE_DISPATCH']
+        });
     } catch (err) {
         console.error('❌ [Dispatch Error]:', err);
         res.status(400).json({ message: err.message });
@@ -2361,6 +2393,7 @@ router.get('/bridge/store-requests', async (req, res) => {
         res.json(batches.map((batch) => ({
             ...batch.toObject(),
             id: batch._id,
+            dispatchableQty: (batch.lines || []).reduce((sum, line) => sum + getStoreLineDispatchableQty(line), 0),
             materialRequestId: batch.materialRequestId ? {
                 ...batch.materialRequestId.toObject(),
                 project: batch.materialRequestId.projectId,
@@ -3482,6 +3515,8 @@ router.get('/purchase/orders', async (req, res) => {
         const mapped = orders.map(o => ({
             ...o.toObject(),
             vendor: o.vendorId,
+            nextAllowedActions: getPurchaseOrderNextAllowedActions(o.status),
+            inwardProgress: getPurchaseOrderInwardProgress(o.lines || []),
             lines: (o.lines || []).map((line) => ({
                 ...line.toObject(),
                 item: line.itemId ? {
@@ -3513,6 +3548,8 @@ router.get('/purchase/orders/:id', async (req, res) => {
         res.json({
             ...order.toObject(),
             vendor: order.vendorId,
+            nextAllowedActions: getPurchaseOrderNextAllowedActions(order.status),
+            inwardProgress: getPurchaseOrderInwardProgress(order.lines || []),
             lines: (order.lines || []).map((line) => ({
                 ...line.toObject(),
                 item: line.itemId ? {
@@ -3551,6 +3588,9 @@ router.post('/reviewPurchaseOrder', async (req, res) => {
         const { purchaseOrderId, decision, adminRemarks } = req.body;
         const po = await PurchaseOrder.findById(purchaseOrderId);
         if (!po) return res.status(404).json({ message: 'PO not found' });
+        if (po.status !== 'PENDING_ADMIN_APPROVAL') {
+            return res.status(400).json({ message: `PO must be in PENDING_ADMIN_APPROVAL state. Current state: ${po.status}` });
+        }
 
         const normalizedDecision = decision === 'APPROVE'
             ? 'APPROVED'
@@ -3600,7 +3640,11 @@ router.post('/reviewPurchaseOrder', async (req, res) => {
         await logAudit('PurchaseOrder', po._id, 'UPDATE', before, po.toObject(), req, { decision: normalizedDecision });
 
         await logInvActivity('INV_PO_REVIEW', `Purchase Order ${po.poNumber} ${normalizedDecision}`, req.user._id, req.user.name, po._id, po.poNumber);
-        res.json(po);
+        res.json({
+            ...po.toObject(),
+            nextAllowedActions: getPurchaseOrderNextAllowedActions(po.status),
+            inwardProgress: getPurchaseOrderInwardProgress(po.lines || [])
+        });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
@@ -3612,6 +3656,9 @@ router.post('/markPurchaseOrderPlaced', async (req, res) => {
         const { purchaseOrderId, expectedDeliveryDate, vendorDocumentNote } = req.body;
         const po = await PurchaseOrder.findById(purchaseOrderId);
         if (!po) return res.status(404).json({ message: 'PO not found' });
+        if (po.status !== 'APPROVED') {
+            return res.status(400).json({ message: `Only APPROVED purchase orders can be marked as PLACED. Current state: ${po.status}` });
+        }
 
         const before = po.toObject();
         po.status = 'PLACED';
@@ -3623,7 +3670,11 @@ router.post('/markPurchaseOrderPlaced', async (req, res) => {
         await logAudit('PurchaseOrder', po._id, 'UPDATE', before, po.toObject(), req, { action: 'MARK_PLACED' });
 
         await logInvActivity('INV_PO_PLACE', `Purchase Order ${po.poNumber} marked as PLACED`, req.user._id, req.user.name, po._id, po.poNumber);
-        res.json(po);
+        res.json({
+            ...po.toObject(),
+            nextAllowedActions: getPurchaseOrderNextAllowedActions(po.status),
+            inwardProgress: getPurchaseOrderInwardProgress(po.lines || [])
+        });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }
@@ -3828,7 +3879,12 @@ router.post('/receivePurchaseOrderLines', async (req, res) => {
 
         await logAudit('PurchaseInwardBatch', inward._id, 'CREATE', null, inward.toObject(), req, { poNumber, inwardNumber });
         await logInvActivity('INV_INWARD', `Goods received and auto-routed for PO ${poNumber}. GRN: ${inwardNumber}`, req.user._id, req.user.name, inward._id, inwardNumber);
-        res.status(201).json(inward);
+        const po = await PurchaseOrder.findById(purchaseOrderId);
+        res.status(201).json({
+            ...inward.toObject(),
+            inwardProgress: getPurchaseOrderInwardProgress(po?.lines || []),
+            nextAllowedActions: getPurchaseOrderNextAllowedActions(po?.status)
+        });
     } catch (err) {
         const status = err.message === 'PO not found' ? 404 : 400;
         res.status(status).json({ message: err.message });

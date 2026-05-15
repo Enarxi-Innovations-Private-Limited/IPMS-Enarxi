@@ -21,6 +21,7 @@ export default function StoreRequestsPage() {
     const [lineQuantities, setLineQuantities] = useState({});
     const [lineRemarks, setLineRemarks] = useState({});
     const [stockLevels, setStockLevels] = useState({});
+    const getDispatchableQty = (line) => (line?.status === 'CONFIRMED' ? Math.max(0, Number(line.pendingQuantity || 0)) : 0);
 
     useEffect(() => {
         if (selectedBatch) {
@@ -77,6 +78,11 @@ export default function StoreRequestsPage() {
 
     const handleDispatch = async () => {
         if (!selectedBatch) return;
+        const hasDispatchableLines = (selectedBatch.lines || []).some((line) => getDispatchableQty(line) > 0);
+        if (!hasDispatchableLines) {
+            notifyError('No confirmed line with pending quantity is available for dispatch.');
+            return;
+        }
         try {
             setProcessing(true);
             await inventoryService.dispatchStoreRequest({
@@ -294,7 +300,12 @@ export default function StoreRequestsPage() {
                                                                                 onChange={(e) => setLineRemarks(prev => ({ ...prev, [lineId]: e.target.value }))}
                                                                             />
                                                                         ) : (
-                                                                            <div className="text-text-secondary text-sm">{line.shortageReason || '-'}</div>
+                                                                            <div className="text-text-secondary text-sm">
+                                                                                {line.shortageReason || '-'}
+                                                                                <div className="text-[10px] uppercase tracking-widest mt-1">
+                                                                                    Source: {line.source === 'PURCHASE_INWARD' ? 'Purchase Inward' : 'Direct Stock'}
+                                                                                </div>
+                                                                            </div>
                                                                         )}
                                                                     </td>
                                                                 </tr>
@@ -356,16 +367,16 @@ export default function StoreRequestsPage() {
                                             <div className="flex gap-4">
                                                 <button
                                                     onClick={handleDispatch}
-                                                    disabled={processing || !['CONFIRMED', 'SHORTAGE_APPROVED'].includes(selectedBatch.status)}
+                                                    disabled={processing || !(selectedBatch.lines || []).some((line) => getDispatchableQty(line) > 0)}
                                                     className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-black uppercase tracking-[0.1em] py-4 rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
                                                 >
                                                     <span className="material-symbols-outlined font-bold">local_shipping</span>
                                                     {processing ? 'Processing...' : 'Confirm Dispatch'}
                                                 </button>
                                             </div>
-                                            {!['CONFIRMED', 'SHORTAGE_APPROVED'].includes(selectedBatch.status) && (
+                                            {!((selectedBatch.lines || []).some((line) => getDispatchableQty(line) > 0)) && (
                                                 <p className="text-center text-amber-500/70 text-[10px] font-bold uppercase tracking-widest">
-                                                    Waiting for availability confirmation or admin shortage approval
+                                                    Waiting for confirmed pending quantity (or inward completion)
                                                 </p>
                                             )}
                                         </div>

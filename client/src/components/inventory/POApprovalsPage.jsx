@@ -185,6 +185,9 @@ export default function POApprovalsPage() {
                                                         Approve & Release
                                                     </button>
                                                 </div>
+                                                <p className="text-[11px] text-text-secondary mt-3">
+                                                    After approval, this PO moves to Purchase Orders for placement by Purchase Manager.
+                                                </p>
                                             </div>
                                         )}
                                     </div>

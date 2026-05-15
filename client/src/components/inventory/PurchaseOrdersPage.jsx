@@ -128,6 +128,7 @@ export default function PurchaseOrdersPage() {
     const filteredOrders = filterStatus === 'ALL'
         ? orders
         : orders.filter(o => o.status === filterStatus);
+    const canMarkPlaced = selectedOrder?.nextAllowedActions?.includes('MARK_PLACED') || selectedOrder?.status === 'APPROVED';
 
     const getStatusColor = (status) => {
         switch (status) {
@@ -220,6 +221,16 @@ export default function PurchaseOrdersPage() {
                                             </span>
                                         </div>
                                         <div className="flex gap-2">
+                                            {canMarkPlaced && (
+                                                <button
+                                                    disabled={processing}
+                                                    onClick={() => handleMarkPlaced(selectedOrder.id || selectedOrder._id)}
+                                                    className="flex items-center gap-2 bg-emerald-500 text-black px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-emerald-400 transition-all disabled:opacity-50"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">local_shipping</span>
+                                                    Place Order
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handleDownloadPDF(selectedOrder.id || selectedOrder._id, selectedOrder.poNumber)}
                                                 className="flex items-center gap-2 bg-[#001f3f] text-white px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-primary transition-all"
@@ -231,6 +242,17 @@ export default function PurchaseOrdersPage() {
                                                 <span className="material-symbols-outlined text-sm">edit</span>
                                                 Edit Order
                                             </button>
+                                        </div>
+                                    </div>
+                                    <div className="bg-surface-dark border border-border-dark p-4 rounded-xl">
+                                        <h4 className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-3">Lifecycle Timeline</h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
+                                            <div className={`${selectedOrder.createdAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Submitted</div>
+                                            <div className={`${selectedOrder.approvedAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Approved</div>
+                                            <div className={`${selectedOrder.placedAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Placed</div>
+                                            <div className={`${selectedOrder.status === 'RECEIVED' ? 'text-emerald-400' : 'text-text-secondary'}`}>
+                                                Inward {selectedOrder.inwardProgress ? `(${selectedOrder.inwardProgress.receivedQty}/${selectedOrder.inwardProgress.orderedQty})` : ''}
+                                            </div>
                                         </div>
                                     </div>
 
