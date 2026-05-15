@@ -23,15 +23,8 @@ from automation.cart import CartAutomation
 
 # --- CONFIGURATION ---
 MAX_PRODUCTS = 10
-HEADLESS = os.getenv("HEADLESS", "True").lower() == "true"
+HEADLESS = False
 SESSION_DIR = Path(__file__).parent.parent / "session"
-STOP_BOM_PROCESS = False
-
-def stop_all_processes():
-    global STOP_BOM_PROCESS
-    STOP_BOM_PROCESS = True
-    print("\n🛑 [STOP] Termination signal received. Halting all automation tasks...")
-    sys.stdout.flush()
 
 # --- UTILITIES ---
 LOG_FILE = os.path.join(os.getcwd(), "auto", "log.txt")
@@ -552,7 +545,8 @@ def _initialize_sessions(active_vendors: list = None):
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                         "AppleWebKit/537.36 (KHTML, like Gecko) "
                         "Chrome/122.0.0.0 Safari/537.36"
-                    )
+                    ),
+                    extra_http_headers={"Accept-Encoding": "gzip, deflate"}
                 )
                 page = context.new_page()
                 Stealth().apply_stealth_sync(page)
@@ -596,7 +590,8 @@ def _add_to_cart_for_vendor(vendor: str, product_url: str, quantity: int, item_n
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/122.0.0.0 Safari/537.36"
-                )
+                ),
+                "extra_http_headers": {"Accept-Encoding": "gzip, deflate"}
             }
             if state_path.exists():
                 ctx_kwargs["storage_state"] = str(state_path)
@@ -647,17 +642,14 @@ def _run_vendor_in_thread(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/122.0.0.0 Safari/537.36"
-                )
+                ),
+                extra_http_headers={"Accept-Encoding": "gzip, deflate"}
             )
             # Anonymous search — no login state loaded here
             context = browser.new_context(**ctx_kwargs)
             page = context.new_page()
             Stealth().apply_stealth_sync(page)
             
-            if STOP_BOM_PROCESS:
-                browser.close()
-                return None
-
             # Dismiss popups (like Ktron's Allow/Cancel) during search phase
             cart = CartAutomation()
             cart._dismiss_popups(page)
@@ -763,12 +755,8 @@ class BOMProcessor:
                 page.wait_for_timeout(3000)
                 page.wait_for_load_state("networkidle", timeout=60000)
                 return True
-            
-            # SKU Fallback: If searching by SKU and dropdown failed, ALWAYS try pressing Enter
-            # because SKUs are precise and likely to lead to the correct page.
-            print(f"[{'SKU' if product.startswith('R') else 'Search'}] Dropdown not detected, pressing Enter...")
             page.keyboard.press("Enter")
-            page.wait_for_timeout(5000) 
+            page.wait_for_timeout(4000) 
             page.wait_for_load_state("networkidle", timeout=60000)
             return True
         except: return False
@@ -958,7 +946,7 @@ class BOMProcessor:
         except: pass
         return None
 
-    def _process_vendor_cart_sequentially(self, vendor: str, items: List[Dict]):
+    def _process_vendor_cart_sequentially(self, vendor: str, items: List[Dict], progress_callback=None):
         """Sequential login, cart clearing, and addition for a single vendor."""
         try:
             print(f"\n[*] === Starting Sequential Cart Flow for {vendor} ({len(items)} items) ===")
@@ -977,7 +965,10 @@ class BOMProcessor:
 
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=HEADLESS, args=["--disable-blink-features=AutomationControlled", "--no-sandbox"])
-                context = browser.new_context(viewport={"width": 1280, "height": 800})
+                context = browser.new_context(
+                    viewport={"width": 1280, "height": 800},
+                    extra_http_headers={"Accept-Encoding": "gzip, deflate"}
+                )
                 page = context.new_page()
                 Stealth().apply_stealth_sync(page)
                 cart = CartAutomation()
@@ -994,8 +985,7 @@ class BOMProcessor:
                 # 2. Add Items Sequentially (Cart clearing removed as per request)
 
                 # 3. Add Items Sequentially
-                for item in items:
-                    if STOP_BOM_PROCESS: break
+                for idx, item in enumerate(items):
                     comp = item["component"]
                     qty = item["qty"]
                     product_url = item["links"].get(vendor) or item.get("best_url")
@@ -1011,6 +1001,8 @@ class BOMProcessor:
                                 break
 
                     print(f"[{vendor}] Adding item: {comp} (Qty: {qty}, Unit Price: ₹{unit_price})")
+                    # Capture original qty here so add_to_cart_robu can compute balance
+                    original_item_qty = qty
                     if vendor == "ROBU":
                         res = cart.add_to_cart_robu(page, product_url, qty, comp, unit_price=unit_price)
                     elif vendor == "EVELTA":
@@ -1055,6 +1047,22 @@ class BOMProcessor:
                             else:
                                 status = "INVALID"
                                 reason = "Cart addition failed"
+                        elif res and res.get("success") and res.get("needs_fallback") and res.get("balance_qty", 0) > 0:
+                            # ── PARTIAL+KEEP: in-stock qty is in Robu cart, balance goes to next vendor ──
+                            added_qty_kept = res.get("added_qty", 0)
+                            balance_qty    = res.get("balance_qty", 0)
+                            real_price     = res.get("actual_unit_price", unit_price)
+                            print(f"[{vendor}] ✅ PARTIAL+KEEP: {added_qty_kept}/{original_item_qty} kept in cart. Balance {balance_qty} → next vendor")
+                            # Record what was actually placed in the Robu cart
+                            for alloc in orig.get("allocations", []):
+                                if alloc["vendor"] == vendor:
+                                    alloc["qty"]   = added_qty_kept
+                                    alloc["total"] = added_qty_kept * real_price
+                                    break
+                            # Deduct what Robu already handled; let remaining_qty = balance
+                            orig["remaining_qty"] = balance_qty
+                            orig["unfulfilled"]   = balance_qty
+                            continue
                         else:
                             actual_total = added_qty * unit_price
                             # ₹10 sanity check: Robu's minimum order value is ₹10.
@@ -1103,7 +1111,7 @@ class BOMProcessor:
                                 if better_vendor:
                                     actual_p = res.get("actual_unit_price", unit_price)
                                     print(f"[{vendor}] ℹ️ PARTIAL {added_qty}/{qty} at actual ₹{actual_p} (vs planned ₹{unit_price}) is sub-optimal vs {better_vendor} → Removing from cart for re-allocation")
-                                    cart.remove_item_from_cart(page, comp, vendor, quantity=added_qty, unit_price=actual_p)
+                                    cart.remove_item_from_cart(page, comp, vendor, quantity=added_qty, unit_price=actual_p, product_url=product_url)
                                     for alloc in orig.get("allocations", []):
                                         if alloc["vendor"] == vendor:
                                             alloc["qty"] = 0
@@ -1123,7 +1131,7 @@ class BOMProcessor:
                             # Trigger removal even if 'success' is False (e.g. verification failed but item might be in cart)
                             if res:
                                 print(f"[{vendor}] 🧹 Attempting cleanup removal...")
-                                cart.remove_item_from_cart(page, comp, vendor, quantity=added_qty, unit_price=unit_price)
+                                cart.remove_item_from_cart(page, comp, vendor, quantity=added_qty, unit_price=unit_price, product_url=product_url)
                             
                             for alloc in orig.get("allocations", []):
                                 if alloc["vendor"] == vendor:
@@ -1154,7 +1162,7 @@ class BOMProcessor:
         except Exception as e:
             print(f"[{vendor}] ❌ Fatal error in sequential cart flow: {e}")
 
-    def process_bom(self, df: pd.DataFrame, mapping: Dict[str, Any]) -> Dict[str, Any]:
+    def process_bom(self, df: pd.DataFrame, mapping: Dict[str, Any], progress_callback=None) -> Dict[str, Any]:
         vendor_urls = {"ROBU": "https://robu.in", "EVELTA": "https://evelta.com", "ELEVTA": "https://evelta.com", "KTRON": "https://www.ktron.in", "SHARVI": "https://sharvielectronics.com", "ELEMENT14": "https://in.element14.com"}
         selected_vendors = mapping.get("vendors", list(vendor_urls.keys()))
         PARALLEL_VENDORS = {"ROBU", "EVELTA", "ELEVTA", "KTRON", "SHARVI", "ELEMENT14"}
@@ -1164,43 +1172,47 @@ class BOMProcessor:
         optimized_total = 0
         # REMOVED: _initialize_sessions(parallel_vendors) - Now part of sequential Phase 2
         
-        print(f"[PROCESS] Received Mapping: {mapping}")
-        global STOP_BOM_PROCESS
-        STOP_BOM_PROCESS = False # Reset
-        
         try:
-            for i, row in df.iterrows():
-                if STOP_BOM_PROCESS:
-                    print("[PROCESS] Halting: Stop requested by user.")
-                    break
+            # Helper for progress smoothing
+            def get_smooth_progress(real_progress, base, weight, phase_start_time, min_phase_time):
+                elapsed = time.time() - phase_start_time
+                max_allowed = base + min((elapsed / min_phase_time) * weight, weight)
+                return min(real_progress, max_allowed)
+
+            base1 = 0
+            weight1 = 50
+            total_items = len(df)
+            completed1 = 0
+            start_time1 = time.time()
+            if progress_callback: progress_callback(0, "Starting item scouting...")
+            
+            for idx, row in df.iterrows():
                 comp = str(row.get(mapping["component"], "")).strip()
-                qty_val = row.get(mapping["quantity"], 1)
-                try:
-                    qty = int(float(str(qty_val))) if qty_val else 1
-                except:
-                    qty = 1
+                qty = int(row.get(mapping["quantity"], 1))
+                if not comp or qty <= 0: continue
                 
-                if not comp or comp.lower() in ["nan", "none", ""]: 
-                    print(f"[PROCESS] Skipping row {i}: Empty component name")
-                    continue
-                if qty <= 0:
-                    print(f"[PROCESS] Skipping row {i} ({comp}): Quantity <= 0")
-                    continue
+                completed1 += 1
+                if progress_callback:
+                    real_p = base1 + (completed1 / total_items) * weight1
+                    p = get_smooth_progress(real_p, base1, weight1, start_time1, 5)
+                    progress_callback(p, f"Fetching prices ({completed1}/{total_items}) - {comp}")
                 item_data = {"component": comp, "qty": qty}
                 
                 def _vendor_query(vendor):
                     col = mapping["vendor_codes"].get(vendor)
                     code = str(row.get(col, "")) if col else ""
-                    if code and code.lower() not in ["nan", "none", ""]: 
-                        return code, True
-                    # Fallback: Use component name for search if no specific vendor SKU is provided
-                    return comp, False
+                    if code and code.lower() not in ["nan", "none", ""]: return code, True
+                    return None, False
 
                 print(f"\n⚡ [{comp}] Launching parallel vendor searches...")
                 with ThreadPoolExecutor(max_workers=max(1, len(parallel_vendors))) as executor:
                     futures = {}
                     for vendor in parallel_vendors:
                         sq, use_sku = _vendor_query(vendor)
+                        if not use_sku:
+                            print(f"[{vendor}] ⏭️ No SKU ID given — skipping search")
+                            item_data[vendor] = "No SKU ID given"
+                            continue
                         print(f"[{vendor}] 🔍 Scouting for: {sq} (Using SKU: {use_sku})")
                         futures[vendor] = executor.submit(_run_vendor_in_thread, vendor, vendor_urls.get(vendor, ""), sq, use_sku, qty, comp)
                 
@@ -1366,98 +1378,136 @@ class BOMProcessor:
 
         # Process each vendor sequentially
         processed_vendors = set()
-        for vendor in ["ROBU", "KTRON", "SHARVI", "EVELTA"]:
+        cart_order = ["ROBU", "KTRON", "SHARVI", "EVELTA"]
+        active_vendors = [v for v in cart_order if v in vendor_cart_plan]
+        
+        base2 = 50
+        weight2 = 25
+        total_vendors = len(active_vendors)
+        done2 = 0
+        start_time2 = time.time()
+
+        for vendor in cart_order:
             if vendor in vendor_cart_plan:
-                self._process_vendor_cart_sequentially(vendor, vendor_cart_plan[vendor])
+                if progress_callback:
+                    real_p = base2 + (done2 / max(1, total_vendors)) * weight2
+                    p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
+                    progress_callback(p, f"Starting cart automation - {vendor}")
+                
+                self._process_vendor_cart_sequentially(vendor, vendor_cart_plan[vendor], progress_callback=progress_callback)
                 processed_vendors.add(vendor)
+                
+                done2 += 1
+                if progress_callback:
+                    real_p = base2 + (done2 / max(1, total_vendors)) * weight2
+                    p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
+                    progress_callback(p, f"Cart automation - {vendor}")
+
+        if progress_callback: progress_callback(95, "Finalizing allocations...")
 
         # 🔥 DYNAMIC RE-ALLOCATION (Phase 3)
-        # If any items have 'remaining_qty', try to add them to other vendors sequentially until fulfilled
-        for item in processed_items:
-            while item.get("remaining_qty", 0) > 0:
-                print(f"\n[RE-ALLOCATE] '{item['component']}' still needs {item['remaining_qty']} units...")
-                current_vendors = [a["vendor"] for a in item.get("allocations", [])]
-                
-                vendor_options = []
-                for v in selected_vendors:
-                    if v in current_vendors: continue # Already tried this vendor
+        fallback_base = 75
+        fallback_weight = 15
+        start_time3 = time.time()
+        
+        fallback_items = [item for item in processed_items if item.get("remaining_qty", 0) > 0]
+        
+        if fallback_items:
+            fallback_total = len(fallback_items)
+            fallback_done = 0
+            
+            for item in fallback_items:
+                while item.get("remaining_qty", 0) > 0:
+                    print(f"\n[RE-ALLOCATE] '{item['component']}' still needs {item['remaining_qty']} units...")
+                    current_vendors = [a["vendor"] for a in item.get("allocations", [])]
                     
-                    price_str = str(item.get(v, ""))
-                    price_match = re.search(r"(?:\u20B9|Rs\.?|₹)\s*([\d,]+\.?\d*)", price_str)
-                    if price_match:
-                        try:
-                            price = float(price_match.group(1).replace(',', ''))
-                            available = item["available_stock"].get(v)
-                            vendor_options.append({"vendor": v, "price": price, "available": available})
-                        except: pass
-                
-                if not vendor_options:
-                    print(f"[RE-ALLOCATE] No more fallback vendors available for '{item['component']}'.")
-                    break # Out of fallback vendors
-                
-                vendor_options.sort(key=lambda x: x["price"])
-                
-                best_opt = vendor_options[0]
-                remaining = item["remaining_qty"]
-                can_take = best_opt["available"] if best_opt["available"] is not None else remaining
-                take_qty = min(can_take, remaining)
-                
-                # Apply Robu minimum ₹10 rule
-                if best_opt["vendor"] == "ROBU" and best_opt["price"] > 0:
-                    available = best_opt["available"] if best_opt["available"] is not None else remaining
-                    
-                    # Step 1: minimum qty to reach ₹10
-                    min_robu_qty = math.ceil(10.0 / best_opt["price"])
-                    
-                    # Step 2: try to increase quantity, but only if stock exists
-                    if take_qty > 0 or (best_opt["available"] is not None and best_opt["available"] > 0):
-                        required_qty = max(take_qty, min_robu_qty)
-                    elif best_opt["available"] is None:
-                        # If available is unknown, attempt the minimum
-                        required_qty = max(take_qty, min_robu_qty)
-                    else:
-                        # No stock available, skip Robu
-                        required_qty = take_qty
-                    
-                    # Step 3: check stock feasibility
-                    if required_qty > 0 and best_opt["available"] is not None and best_opt["available"] < required_qty:
-                        print(f"[RE-ALLOCATE] [ROBU] ❌ Cannot meet ₹10 (need {required_qty}, have {best_opt['available']}) → skipping")
-                        # Add a dummy allocation so current_vendors skips this next time
-                        item["allocations"].append({"vendor": "ROBU", "qty": 0, "unit_price": best_opt["price"], "total": 0})
-                        continue
+                    vendor_options = []
+                    for v in selected_vendors:
+                        if v in current_vendors: continue # Already tried this vendor
                         
-                    # Step 4: valid → assign
-                    take_qty = required_qty
-                
-                if take_qty > 0:
-                    new_alloc = {"vendor": best_opt["vendor"], "qty": take_qty, "unit_price": best_opt["price"], "total": take_qty * best_opt["price"]}
-                    item["allocations"].append(new_alloc)
+                        price_str = str(item.get(v, ""))
+                        price_match = re.search(r"(?:\u20B9|Rs\.?|₹)\s*([\d,]+\.?\d*)", price_str)
+                        if price_match:
+                            try:
+                                price = float(price_match.group(1).replace(',', ''))
+                                available = item["available_stock"].get(v)
+                                vendor_options.append({"vendor": v, "price": price, "available": available})
+                            except: pass
                     
-                    v = best_opt["vendor"]
-                    v_key = "EVELTA" if v == "ELEVTA" else v
-                    # Run a mini sequential flow for this new vendor
-                    mini_items = [{
-                        "component": item["component"],
-                        "qty": take_qty,
-                        "links": item["links"],
-                        "best_url": item["links"].get(v),
-                        "original_item": item
-                    }]
+                    if not vendor_options:
+                        print(f"[RE-ALLOCATE] No more fallback vendors available for '{item['component']}'.")
+                        break # Out of fallback vendors
                     
-                    # Store remaining before the cart attempt
-                    before_qty = item["remaining_qty"]
+                    vendor_options.sort(key=lambda x: x["price"])
                     
-                    self._process_vendor_cart_sequentially(v_key, mini_items)
+                    best_opt = vendor_options[0]
+                    remaining = item["remaining_qty"]
+                    can_take = best_opt["available"] if best_opt["available"] is not None else remaining
+                    take_qty = min(can_take, remaining)
                     
-                    # If remaining_qty didn't decrease (meaning the cart addition failed completely),
-                    # we must break or we'll loop forever if it doesn't zero the allocation.
-                    # Wait, we zero out the allocation on failure now, but current_vendors is built from allocations.
-                    # If we zero it out, it's STILL in allocations, so current_vendors WILL contain it, preventing infinite loops.
-                    if item["remaining_qty"] >= before_qty:
-                        print(f"[RE-ALLOCATE] Cart flow failed to add any units for {v_key}, moving to next fallback.")
-                        # remaining_qty hasn't changed, but v_key is in allocations, so it'll skip it next iteration.
-                else:
-                    break
+                    # Apply Robu minimum ₹10 rule
+                    if best_opt["vendor"] == "ROBU" and best_opt["price"] > 0:
+                        available = best_opt["available"] if best_opt["available"] is not None else remaining
+                        
+                        # Step 1: minimum qty to reach ₹10
+                        min_robu_qty = math.ceil(10.0 / best_opt["price"])
+                        
+                        # Step 2: try to increase quantity, but only if stock exists
+                        if take_qty > 0 or (best_opt["available"] is not None and best_opt["available"] > 0):
+                            required_qty = max(take_qty, min_robu_qty)
+                        elif best_opt["available"] is None:
+                            # If available is unknown, attempt the minimum
+                            required_qty = max(take_qty, min_robu_qty)
+                        else:
+                            # No stock available, skip Robu
+                            required_qty = take_qty
+                        
+                        # Step 3: check stock feasibility
+                        if required_qty > 0 and best_opt["available"] is not None and best_opt["available"] < required_qty:
+                            print(f"[RE-ALLOCATE] [ROBU] ❌ Cannot meet ₹10 (need {required_qty}, have {best_opt['available']}) → skipping")
+                            # Add a dummy allocation so current_vendors skips this next time
+                            item["allocations"].append({"vendor": "ROBU", "qty": 0, "unit_price": best_opt["price"], "total": 0})
+                            continue
+                            
+                        # Step 4: valid → assign
+                        take_qty = required_qty
+                    
+                    if take_qty > 0:
+                        new_alloc = {"vendor": best_opt["vendor"], "qty": take_qty, "unit_price": best_opt["price"], "total": take_qty * best_opt["price"]}
+                        item["allocations"].append(new_alloc)
+                        
+                        v = best_opt["vendor"]
+                        v_key = "EVELTA" if v == "ELEVTA" else v
+                        # Run a mini sequential flow for this new vendor
+                        mini_items = [{
+                            "component": item["component"],
+                            "qty": take_qty,
+                            "links": item["links"],
+                            "best_url": item["links"].get(v),
+                            "original_item": item
+                        }]
+                        
+                        # Store remaining before the cart attempt
+                        before_qty = item["remaining_qty"]
+                        
+                        self._process_vendor_cart_sequentially(v_key, mini_items)
+                        
+                        if item["remaining_qty"] >= before_qty:
+                            print(f"[RE-ALLOCATE] Cart flow failed to add any units for {v_key}, moving to next fallback.")
+                    else:
+                        break
+                        
+                fallback_done += 1
+                if progress_callback:
+                    real_p = fallback_base + (fallback_done / fallback_total) * fallback_weight
+                    p = get_smooth_progress(real_p, fallback_base, fallback_weight, start_time3, 3)
+                    progress_callback(p, f"Fallback processing ({fallback_done}/{fallback_total})")
+        else:
+            if progress_callback:
+                progress_callback(90, "No fallback needed")
+
+        # Phase 4: Finalization
+        if progress_callback: progress_callback(90, "Preparing results...")
 
         # Recalculate final totals based on ACTUAL fulfillment
         optimized_total = 0

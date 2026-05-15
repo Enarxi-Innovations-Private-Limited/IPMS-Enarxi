@@ -13,8 +13,9 @@ const activitySchema = new mongoose.Schema({
             'INV_MR_SUBMIT', 'INV_MR_ROUTE', 'INV_MR_BULK_ROUTE',
             'INV_STOCK_ADJUST', 'INV_STOCK_APPROVE',
             'INV_DISPATCH', 'INV_DISPATCH_ACK',
-            'INV_PO_CREATE', 'INV_PO_REVIEW', 'INV_PO_PLACE',
-            'INV_INWARD', 'INV_STOCK_INWARD', 'INV_STORE_CONFIRM', 'INV_SHORTAGE_APPROVED'],
+            'INV_PO_CREATE', 'INV_PO_REVIEW', 'INV_PO_PLACE', 'INV_PO_SUBMIT',
+            'INV_INWARD', 'INV_STOCK_INWARD', 'INV_STORE_CONFIRM', 'INV_SHORTAGE_APPROVED',
+            'INV_MR_COMPLETE', 'INV_BOM_PUSH'],
     },
     message: {
         type: String,

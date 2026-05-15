@@ -4152,4 +4152,76 @@ router.post('/admin/classifications', (req, res, next) => {
     router.handle(req, res, next);
 });
 
+router.post('/shortages/send-to-bom', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+
+        // 1. Gather all active shortages from the purchase queue
+        const batches = await PurchaseRequestBatch.find({ 
+            status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } 
+        }).populate('lines.itemId');
+
+        const itemsToInject = [];
+        const seenItems = new Map();
+
+        batches.forEach(batch => {
+            batch.lines.forEach(line => {
+                if (line.pendingQuantity > 0 && line.itemId) {
+                    const itemId = String(line.itemId._id);
+                    const qty = Number(line.pendingQuantity);
+                    
+                    if (seenItems.has(itemId)) {
+                        seenItems.get(itemId).qty += qty;
+                    } else {
+                        const entry = {
+                            component: line.itemId.name,
+                            itemCode: line.itemId.itemCode,
+                            qty: qty,
+                            package: line.itemId.package || ''
+                        };
+                        seenItems.set(itemId, entry);
+                        itemsToInject.push(entry);
+                    }
+                }
+            });
+        });
+
+        if (itemsToInject.length === 0) {
+            return res.status(400).json({ message: 'No active shortages found in the queue.' });
+        }
+
+        // 2. Push to BOM Server
+        const BOM_SERVER_URL = 'http://localhost:8000';
+        const response = await fetch(`${BOM_SERVER_URL}/inject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: itemsToInject })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to inject data into BOM engine');
+        }
+
+        const result = await response.json();
+
+        // 3. Log Activity
+        await logInvActivity(
+            'INV_BOM_PUSH', 
+            `Sent ${itemsToInject.length} items to BOM engine for optimization`,
+            req.user._id,
+            req.user.name
+        );
+
+        res.json({
+            message: `Successfully sent ${itemsToInject.length} items to BOM engine.`,
+            bomPreview: result
+        });
+
+    } catch (err) {
+        console.error('❌ [Send to BOM Error]:', err);
+        res.status(500).json({ message: 'Failed to send shortages to BOM engine', error: err.message });
+    }
+});
+
 module.exports = router;

@@ -1,60 +1,33 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import io
 import json
 import asyncio
 from .processor import BOMProcessor
 
-import sys
-
 app = FastAPI()
 
-print("\n🔥 [BOM] API SERVER IS STARTING UP (DEBUG VERSION 2.0) 🔥")
-sys.stdout.flush()
-
-# Enable CORS for frontend connectivity
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# Headless API - No static files served directly from Python
 processor = BOMProcessor()
 
-# Storage for the current session (persists while backend is running)
+# Storage for the current dataframe and detected columns
 current_data = {
     "df": None,
-    "detected_mapping": None,
-    "columns": [],
-    "results": None,
-    "processing": False
+    "detected_mapping": None
 }
 
-@app.get("/session")
-async def get_session():
-    return {
-        "has_data": current_data["df"] is not None,
-        "columns": current_data["columns"],
-        "detected": current_data["detected_mapping"],
-        "results": current_data["results"],
-        "processing": current_data["processing"]
-    }
+# Real-time progress tracking
+progress_state = {
+    "percent": 0,
+    "status": "Ready",
+    "is_running": False
+}
 
-@app.post("/clear")
-async def clear_session():
-    from .processor import stop_all_processes
-    stop_all_processes()
-    current_data["df"] = None
-    current_data["detected_mapping"] = None
-    current_data["columns"] = []
-    current_data["results"] = None
-    current_data["processing"] = False
-    return {"message": "Session cleared and processes stopped"}
+@app.get("/progress")
+async def get_progress():
+    return JSONResponse(progress_state)
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -63,12 +36,15 @@ async def upload_file(file: UploadFile = File(...)):
     
     contents = await file.read()
     try:
+        # Load the entire sheet without headers to find the real column header row
         raw_io = io.BytesIO(contents)
         full_df = pd.read_excel(raw_io, header=None)
         
+        # DYNAMIC HEADER DETECTION
         header_row_idx = 0
         found_header = False
         
+        # Search every row for keywords: RESISTOR (or Component) and QTY
         for i, row in full_df.iterrows():
             row_vals = [str(val).strip().upper() for val in row.values if not pd.isna(val)]
             if (any(hp in row_vals for hp in ["RESISTOR", "COMPONENT", "ITEM", "PART NUMBER"])) and \
@@ -77,21 +53,26 @@ async def upload_file(file: UploadFile = File(...)):
                 found_header = True
                 break
         
+        # Re-read the file starting from the detected header row
         df = pd.read_excel(io.BytesIO(contents), header=header_row_idx)
-        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-        print(f"[UPLOAD] File processed. Header row: {header_row_idx}, Shape: {df.shape}, Columns: {df.columns.tolist()}")
         
+        # Clean unnamed columns
+        df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
+        
+        # AI Fallback/Verification for columns based on current head
         header_info = processor.find_header_and_map(df.head(10)) 
+        
+        # Replace NaN/Infinity
         df = df.replace([float('inf'), float('-inf')], 0).fillna("")
             
         detected = {
             "component": header_info.get("component"),
             "quantity": header_info.get("quantity"),
             "footprint": header_info.get("footprint"),
-            "vendor_codes": header_info.get("vendor_codes", {}),
-            "vendors": ["ROBU", "EVELTA", "KTRON", "SHARVI"] # Default vendors
+            "vendor_codes": header_info.get("vendor_codes", {})
         }
         
+        # Force manual mapping if AI missed standard names
         if not detected["component"]:
             for col in df.columns:
                 if str(col).strip().upper() in ["RESISTOR", "COMPONENT", "PART NUMBER"]:
@@ -104,9 +85,9 @@ async def upload_file(file: UploadFile = File(...)):
                     detected["quantity"] = col
                     break
 
+        # Save to memory
         current_data["df"] = df
         current_data["detected_mapping"] = detected
-        current_data["columns"] = df.columns.tolist()
         
         return {
             "columns": df.columns.tolist(),
@@ -116,51 +97,99 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing file: {str(e)}")
 
+@app.post("/inject")
+async def inject_data(payload: dict):
+    """
+    Inject JSON data directly into the processor.
+    Expected format: { "items": [{ "component": "...", "qty": 10 }, ...] }
+    """
+    try:
+        items = payload.get("items", [])
+        if not items:
+            raise HTTPException(status_code=400, detail="No items provided.")
+        
+        df = pd.DataFrame(items)
+        
+        # Ensure standard column names if they don't exist
+        if "component" not in df.columns and "Component" not in df.columns:
+             # Try to find a column that looks like a component
+             pass 
+
+        # Simple mapping for injected data
+        detected = {
+            "component": "component" if "component" in df.columns else "Component",
+            "quantity": "qty" if "qty" in df.columns else "Quantity",
+            "footprint": "footprint" if "footprint" in df.columns else None,
+            "vendor_codes": {}
+        }
+        
+        # Save to memory
+        current_data["df"] = df
+        current_data["detected_mapping"] = detected
+        
+        return {
+            "columns": df.columns.tolist(),
+            "detected": detected,
+            "preview": df.head(5).to_dict(orient='records')
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error injecting data: {str(e)}")
+
 @app.post("/process")
-async def process_bom(mapping: str = Form(...)):
+async def process_bom(payload: dict):
     if current_data["df"] is None:
         raise HTTPException(status_code=400, detail="No file uploaded.")
     
     try:
-        current_data["processing"] = True
-        current_data["results"] = None # Clear old results
+        # payload expected to have a 'mapping' key which is a dict or a JSON string
+        user_mapping = payload.get("mapping", {})
+        if isinstance(user_mapping, str):
+            user_mapping = json.loads(user_mapping)
         
-        user_mapping = json.loads(mapping)
+        # If no vendors were selected in the UI, use all default vendors
         if not user_mapping.get("vendors") or len(user_mapping.get("vendors", [])) == 0:
             user_mapping["vendors"] = ["ROBU", "EVELTA", "KTRON", "SHARVI"]
         
+        # Ensure vendor_codes or vendor logic is correctly passed to processor
+        # If user selected vendors in UI, update mapping
         if "vendors" in user_mapping:
+            # Re-map vendor selections to codes if needed
             user_mapping["vendor_codes"] = current_data["detected_mapping"].get("vendor_codes", {})
             user_mapping["footprint"] = current_data["detected_mapping"].get("footprint")
 
-        print(f"[PROCESS] Received Mapping: {mapping}")
-        print(f"[PROCESS] Starting ASYNC BOM processing for {len(current_data['df'])} items...")
-        sys.stdout.flush()
+        print("🔥 API triggered processor via thread executor")
         
-        # Define the background task
-        async def run_optimization():
-            try:
-                loop = asyncio.get_event_loop()
-                results = await loop.run_in_executor(
-                    None, 
-                    processor.process_bom, 
-                    current_data["df"], 
-                    user_mapping
-                )
-                current_data["results"] = results
-                current_data["processing"] = False
-                print("[PROCESS] Background optimization complete.")
-            except Exception as e:
-                current_data["processing"] = False
-                print(f"[ERROR] Background optimization failed: {e}")
+        # Reset progress
+        progress_state["percent"] = 0
+        progress_state["status"] = "Initializing..."
+        progress_state["is_running"] = True
 
-        # Start it without awaiting
-        asyncio.create_task(run_optimization())
+        def update_progress(p, s):
+            p = min(100, round(p, 2))
+            progress_state["percent"] = p
+            progress_state["status"] = s
+
+        # Run the blocking Playwright code in a separate thread to prevent FastAPI from freezing
+        loop = asyncio.get_event_loop()
+        results = await loop.run_in_executor(
+            None, 
+            lambda: processor.process_bom(
+                current_data["df"], 
+                user_mapping,
+                progress_callback=update_progress
+            )
+        )
         
-        return {"status": "started", "message": "Optimization running in background"}
+        progress_state["percent"] = 100
+        progress_state["status"] = "Complete"
+        progress_state["is_running"] = False
+        
+        # Store processed results for export
+        current_data["results"] = results
+        
+        return results
     except Exception as e:
-        current_data["processing"] = False
-        print(f"[ERROR] Error starting /process: {e}")
+        print(f"❌ Error in /process: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/export")
@@ -173,19 +202,21 @@ async def export_results():
     
     for item in results["items"]:
         row = {
-            "Component": item.get("component", "-"),
-            "Quantity": item.get("qty", 0)
+            "Component": item["component"],
+            "Quantity": item["qty"]
         }
+        # Add vendor prices
         for vendor in results["vendors"]:
-            price = item.get(vendor, "-")
+            price = item["prices"].get(vendor, "-")
             row[f"{vendor} Price"] = price
         
-        row["Best Vendor"] = item.get("best_vendor", "-")
-        row["Best Price"] = item.get("best_price", "-")
-        row["Total Item Cost"] = item.get("total_amt", "-")
+        row["Best Vendor"] = item["best_vendor"]
+        row["Best Price"] = item["best_price"]
+        row["Total Item Cost"] = item["total_amt"]
         items_data.append(row)
     
     output_df = pd.DataFrame(items_data)
+    
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         output_df.to_excel(writer, index=False, sheet_name='Comparison')
@@ -201,4 +232,4 @@ async def export_results():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

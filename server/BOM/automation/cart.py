@@ -108,7 +108,7 @@ class CartAutomation:
             print(f"[!] Error clearing Robu cart: {e}")
             return False
 
-    def remove_item_from_cart(self, page: Page, item_name: str, vendor: str, quantity: int = 0, unit_price: float = 0.0) -> bool:
+    def remove_item_from_cart(self, page: Page, item_name: str, vendor: str, quantity: int = 0, unit_price: float = 0.0, product_url: str = "") -> bool:
         """Removes a specific item from the cart if it's deemed INVALID"""
         try:
             print(f"[{vendor}] 🗑️ Removing item from cart: {item_name} (Qty: {quantity}, Price: ₹{unit_price})")
@@ -209,27 +209,41 @@ class CartAutomation:
             if vendor.upper() in ("EVELTA", "ELEVTA"):
                 print(f"[{vendor}] Using EVELTA-specific removal logic...")
                 
-                # 1. Try to find the EXACT row by name/price first
-                rows = page.locator("tr.cart-item, tr.cart_item, .cart-item, [data-cart-itemid], tr:has(.product-name)").all()
                 target_row = None
                 
-                for row in rows:
-                    try:
-                        row_text = row.inner_text()
-                        if search_name in row_text.lower():
-                            # Match price if possible for extra safety
-                            if unit_price > 0:
-                                prices = re.findall(r"([\d,]+\.?\d*)", row_text)
-                                clean_prices = [p.replace(",","") for p in prices if p.replace(",","")]
-                                if any(abs(float(p) - unit_price) <= 0.10 for p in clean_prices):
+                # 1. Try slug match FIRST (as requested by user)
+                if product_url:
+                    import urllib.parse
+                    url_path = urllib.parse.urlparse(product_url).path.rstrip('/')
+                    last_segment = url_path.split('/')[-1] if url_path else ""
+                    if last_segment:
+                        print(f"[{vendor}] Attempting to find item by slug: {last_segment}")
+                        slug_locator = page.locator(f"tr.cart-item:has(a[href*='{last_segment}'])").first
+                        if slug_locator.count() > 0:
+                            target_row = slug_locator
+                            print(f"[{vendor}] ✅ Found item via slug match")
+                
+                # 2. Try to find the EXACT row by name/price if slug match failed
+                if not target_row:
+                    rows = page.locator("tr.cart-item, tr.cart_item, .cart-item, [data-cart-itemid], tr:has(.product-name)").all()
+                    
+                    for row in rows:
+                        try:
+                            row_text = row.inner_text()
+                            if search_name in row_text.lower():
+                                # Match price if possible for extra safety
+                                if unit_price > 0:
+                                    prices = re.findall(r"([\d,]+\.?\d*)", row_text)
+                                    clean_prices = [p.replace(",","") for p in prices if p.replace(",","")]
+                                    if any(abs(float(p) - unit_price) <= 0.10 for p in clean_prices):
+                                        target_row = row
+                                        break
+                                else:
                                     target_row = row
                                     break
-                            else:
-                                target_row = row
-                                break
-                    except: continue
+                        except: continue
                 
-                # 2. FALLBACK: "Recent Item" logic as requested by user
+                # 3. FALLBACK: "Recent Item" logic as requested by user
                 # If precise match failed, target the VERY FIRST product row (most recently added)
                 if not target_row:
                     print(f"[{vendor}] ⚠️ Precise match failed for '{search_name}'. Falling back to 'Recent Item' logic...")
@@ -241,8 +255,11 @@ class CartAutomation:
                 if target_row:
                     # Look for X button / delete icon in the row
                     delete_patterns = [
-                        "a[data-cart-itemid]", # BigCommerce specific
+                        "a.cart-remove.icon",
                         "a.cart-remove",
+                        "a[data-cart-itemid]",
+                        "button.cart-remove",
+                        ".cart-item-block-actions a",
                         "button:has-text('×')",
                         "a:has-text('×')",
                         ".remove",
@@ -268,11 +285,13 @@ class CartAutomation:
                         time.sleep(0.5)
                         
                         # IMPORTANT: Register dialog handler BEFORE the click
-                        dialog_message = []
+                        dialog_handled = False
                         def handle_dialog(dialog):
+                            nonlocal dialog_handled
                             print(f"[{vendor}] 💬 Native dialog detected: {dialog.message}")
-                            dialog_message.append(dialog.message)
                             dialog.accept()
+                            dialog_handled = True
+                            print(f"[{vendor}] ✅ Accepted native dialog (clicked OK)")
                         
                         page.on("dialog", handle_dialog)
                         
@@ -291,34 +310,44 @@ class CartAutomation:
                         except Exception as e:
                             print(f"[{vendor}] ⚠️ Click failed: {e}")
                         
-                        # Handle custom modal buttons (if any appeared instead of native dialog)
-                        # We try to find ANY button that looks like a confirmation in the whole page
+                        # Handle custom modal buttons (if no native dialog appeared)
+                        # Only try custom modal handling if native dialog wasn't handled
                         try:
                             time.sleep(1.5)
-                            confirm_selectors = [
-                                "button:has-text('OK')", 
-                                "button:has-text('Confirm')", 
-                                "button:has-text('Yes')",
-                                "button:has-text('Remove')",
-                                ".swal2-confirm", 
-                                ".remodal-confirm",
-                                ".modal-footer button.primary",
-                                "button.confirm"
-                            ]
-                            for sel in confirm_selectors:
-                                try:
-                                    confirm_btn = page.locator(sel).first
-                                    if confirm_btn and confirm_btn.count() > 0 and confirm_btn.is_visible():
-                                        confirm_btn.click(force=True)
-                                        print(f"[{vendor}] ✅ Confirmed deletion in popup via pattern: {sel}")
-                                        time.sleep(2)
-                                        break
-                                except: continue
+                            
+                            if not dialog_handled:
+                                # CRITICAL: Look for OK button FIRST and ONLY click that
+                                # Make sure we're clicking OK, not CANCEL
+                                confirm_selectors = [
+                                    "button:has-text('OK'):not(:has-text('Cancel'))",
+                                    "button:has-text('OK')", 
+                                    "button:has-text('Confirm'):not(:has-text('Cancel'))", 
+                                    "button:has-text('Yes'):not(:has-text('Cancel'))",
+                                    "button:has-text('Remove')",
+                                    ".swal2-confirm", 
+                                    ".remodal-confirm"
+                                ]
+                                for sel in confirm_selectors:
+                                    try:
+                                        confirm_btn = page.locator(sel).first
+                                        if confirm_btn and confirm_btn.count() > 0 and confirm_btn.is_visible():
+                                            confirm_btn.click(force=True)
+                                            print(f"[{vendor}] ✅ Confirmed deletion in popup via pattern: {sel}")
+                                            time.sleep(2)
+                                            break
+                                    except: continue
                         except:
                             pass
                         
                         # Cleanup dialog handler
                         try: page.remove_listener("dialog", handle_dialog)
+                        except: pass
+                        
+                        # Wait for loading overlay to disappear
+                        try:
+                            loading_overlay = page.locator('.loadingOverlay').first
+                            if loading_overlay.count() > 0:
+                                loading_overlay.wait_for(state='hidden', timeout=10000)
                         except: pass
                         
                         # Wait for row to disappear or page to refresh
@@ -995,18 +1024,24 @@ class CartAutomation:
             )
 
             # ── POST-VERIFICATION ₹10 CHECK ───────────────────────────────────────
-            # If cart was silently stock-capped (no toast, but qty < needed for ₹10)
+            # Three cases after cart verification:
+            #  A. Full qty added, line total ≥ ₹10  → SUCCESS (unchanged)
+            #  B. Partial qty added, line total ≥ ₹10 → keep in cart, signal balance fallback
+            #  C. Any qty added, line total < ₹10   → remove from cart, full fallback
             if result and result.get("success"):
                 added_qty   = result.get("added_qty", quantity)
                 # Use the actual price extracted from the cart row, falling back to original unit_price
                 real_price  = result.get("actual_unit_price", unit_price)
-                
+                is_partial  = result.get("insufficient_stock", False) and added_qty < original_qty
+
                 line_total  = added_qty * real_price if real_price > 0 else 999
+
                 if line_total < 9.99:
+                    # ── Case C: total below ₹10 → remove & full fallback ─────────
                     print(f"[ROBU] ❌ Cart total ₹{line_total:.2f} ({added_qty} × ₹{real_price}) < ₹10 minimum")
                     print(f"[ROBU] 🗑️ Removing item — cannot reach ₹10 with available stock")
                     try:
-                        self.remove_item_from_robu_cart(page, item_name, unit_price)
+                        self.remove_item_from_robu_cart(page, item_name, real_price if real_price > 0 else unit_price)
                     except Exception:
                         pass
                     return {
@@ -1018,95 +1053,190 @@ class CartAutomation:
                         "cart_url": "https://robu.in/cart/",
                     }
 
+                if is_partial:
+                    # ── Case B: partial stock, but line total ≥ ₹10 ─────────────
+                    # Keep the in-stock qty in the Robu cart.
+                    # Signal the processor that the balance must go to the next vendor.
+                    balance = original_qty - added_qty
+                    print(f"[ROBU] ✅ PARTIAL+KEEP: {added_qty}/{original_qty} units in cart"
+                          f" (₹{line_total:.2f} ≥ ₹10). Balance {balance} → next vendor.")
+                    return {
+                        "success": True,
+                        "needs_fallback": True,         # caller must route balance
+                        "insufficient_stock": True,
+                        "added_qty": added_qty,
+                        "balance_qty": balance,
+                        "actual_unit_price": real_price,
+                        "message": f"Partial stock: {added_qty} kept in Robu cart, balance {balance} needs fallback",
+                        "cart_url": "https://robu.in/cart/",
+                    }
+
             return result
 
         except Exception as e:
             return {"success": False, "message": f"Error adding to cart: {str(e)}", "cart_url": product_url}
 
     def remove_item_from_robu_cart(self, page: Page, item_name: str, unit_price: float = 0.0) -> bool:
-        """Remove a specific item from Robu's WooCommerce cart by name or price match."""
+        """
+        Remove a specific item from Robu's cart.
+
+        Removal flow (matches video):
+          1. Navigate to cart page
+          2. Find the target row by name fragments (fuzzy) AND verify it is the
+             most recently added row (last row in the table) to avoid wrong-item removal
+          3. Tick the row's checkbox
+          4. Click the "Delete Items (n)" button that appears
+          5. Accept the browser confirm() dialog automatically
+
+        Fallbacks (in order):
+          - Direct click on trash-icon button (button containing an img) inside the row
+          - Standard WooCommerce a.remove link
+          - Navigate directly to the ?remove_item=… URL extracted from row HTML
+        """
         try:
             print(f"[ROBU] 🗑️ Removing item from cart: {item_name}")
             page.goto("https://robu.in/cart/", wait_until="domcontentloaded", timeout=30000)
             time.sleep(2)
 
-            # Find all cart rows
-            rows = page.locator(
-                "tr.woocommerce-cart-form__cart-item, tr.cart_item, "
-                "tbody tr:has(td.product-name), tbody tr:has(a[href*='/product/'])"
-            ).all()
+            # ── Register dialog handler BEFORE any click (avoids race condition) ──
+            def _handle_dialog(dialog):
+                print(f"[ROBU] 💬 Confirm dialog: '{dialog.message}' → accepting")
+                dialog.accept()
 
-            if not rows:
-                rows = page.locator("form.woocommerce-cart-form tr, .shop_table tr").all()
+            page.on("dialog", _handle_dialog)
 
-            for row in rows:
+            try:
+                removed = self._robu_remove_by_row(page, item_name, unit_price)
+            finally:
                 try:
-                    row_text = row.inner_text().lower()
-                    row_html = row.inner_html()
-                    
-                    # Match by item name fragment OR price
-                    name_hit  = item_name and any(w in row_text for w in item_name.lower().split())
-                    price_hit = unit_price > 0 and str(round(unit_price, 2)) in row_text
-                    if not (name_hit or price_hit):
-                        continue
+                    page.remove_listener("dialog", _handle_dialog)
+                except Exception:
+                    pass
 
-                    print(f"[ROBU] [*] Found matching row for removal.")
-                    
-                    # Click the × / remove link inside this row
-                    remove_selectors = [
-                        "a.remove", 
-                        "td.product-remove a", 
-                        ".remove-item",
-                        "a[aria-label*='Remove']",
-                        "a[href*='remove_item']"
-                    ]
-                    
-                    # Setup an event listener to automatically accept the "Are you sure?" browser dialog
-                    def handle_dialog(dialog):
-                        print(f"[ROBU] ⚠️ Intercepted popup: {dialog.message} -> Clicking OK")
-                        dialog.accept()
-                    
-                    page.on("dialog", handle_dialog)
-                    
-                    btn_clicked = False
-                    for sel in remove_selectors:
-                        remove_btn = row.locator(sel).first
-                        if remove_btn.count() > 0:
-                            remove_btn.scroll_into_view_if_needed()
-                            time.sleep(0.5)
-                            remove_btn.click(force=True)
-                            btn_clicked = True
-                            break
-                            
-                    # Fallback: if we can't click the button but we see the remove URL, just navigate to it
-                    if not btn_clicked:
-                        import re
-                        m = re.search(r'href="(.*?remove_item.*?)"', row_html)
-                        if m:
-                            remove_url = m.group(1).replace("&amp;", "&")
-                            print(f"[ROBU] [*] Fallback: Navigating directly to remove URL: {remove_url}")
-                            page.goto(remove_url)
-                            btn_clicked = True
-                            
-                    if btn_clicked:
-                        time.sleep(3) # Wait for AJAX/reload
-                        print(f"[ROBU] ✅ Item removed from cart")
-                        # Clean up dialog listener
-                        page.remove_listener("dialog", handle_dialog)
-                        return True
-                        
-                    # Clean up dialog listener if button click failed
-                    page.remove_listener("dialog", handle_dialog)
-                        
-                except Exception as e:
-                    print(f"[ROBU] [-] Error parsing row during removal: {e}")
-                    continue
+            return removed
 
-            print(f"[ROBU] ⚠️ Could not find cart row for: {item_name} — may already be absent")
-            return False
         except Exception as e:
             print(f"[ROBU] ❌ remove_item_from_robu_cart error: {e}")
             return False
+
+    def _robu_remove_by_row(self, page: Page, item_name: str, unit_price: float) -> bool:
+        """Inner logic for Robu cart row removal (called from remove_item_from_robu_cart)."""
+        import re as _re
+
+        # Build name fragments for fuzzy matching — split on spaces and brackets
+        name_fragments = [f.strip().lower() for f in _re.split(r'[\s()\[\]/]+', item_name) if f.strip()]
+
+        # ── Collect all product rows ───────────────────────────────────────────
+        row_selector = (
+            "tr.woocommerce-cart-form__cart-item, "
+            "tr.cart_item, "
+            "tbody tr:has(td.product-name), "
+            "tbody tr:has(a[href*='/product/'])"
+        )
+        rows = page.locator(row_selector).all()
+        if not rows:
+            rows = page.locator("form.woocommerce-cart-form tr, .shop_table tr").all()
+
+        if not rows:
+            print(f"[ROBU] ⚠️ No cart rows found — cart may already be empty")
+            return False
+
+        # ── Find target row (name match, prefer last/most-recently-added) ──────
+        # Robu appends new items at the bottom, so we scan from the bottom up.
+        target_row = None
+        for row in reversed(rows):
+            try:
+                row_text = row.inner_text().lower()
+                # Require at least one name fragment to match
+                if not any(frag in row_text for frag in name_fragments):
+                    continue
+                # Optional price check for extra safety (tolerance ₹0.05)
+                if unit_price > 0:
+                    price_strs = _re.findall(r"([\d,]+\.?\d*)", row_text)
+                    price_ok = any(
+                        abs(float(p.replace(',', '')) - unit_price) <= 0.05
+                        for p in price_strs
+                        if p.replace(',', '')
+                    )
+                    if not price_ok:
+                        continue  # name matched but price didn't — skip to avoid wrong removal
+                target_row = row
+                print(f"[ROBU] ✅ Found matching row for '{item_name}' (name+price match)")
+                break
+            except Exception:
+                continue
+
+        if not target_row:
+            print(f"[ROBU] ⚠️ Could not find matching cart row for: {item_name}")
+            return False
+
+        row_html = target_row.inner_html()
+
+        # ── STRATEGY 1: Checkbox → "Delete Items" button ─────────────────────
+        # This is the exact flow shown in the reference video.
+        try:
+            checkbox = target_row.locator("input[type='checkbox']").first
+            if checkbox.count() > 0:
+                checkbox.scroll_into_view_if_needed()
+                checkbox.click(force=True)
+                time.sleep(1)
+                print(f"[ROBU] ☑️ Checkbox ticked")
+
+                # "Delete Items (n)" button appears after checking
+                delete_btn = page.locator(
+                    "button:has-text('Delete Items'), "
+                    "button:has-text('Delete Item'), "
+                    "input[value*='Delete'], "
+                    ".button-delete-items"
+                ).first
+                if delete_btn.count() > 0 and delete_btn.is_visible(timeout=3000):
+                    delete_btn.scroll_into_view_if_needed()
+                    delete_btn.click(force=True)
+                    time.sleep(3)
+                    print(f"[ROBU] ✅ Clicked 'Delete Items' — item removed")
+                    return True
+        except Exception as e:
+            print(f"[ROBU] ⚠️ Checkbox/Delete-Items strategy failed: {e}")
+
+        # ── STRATEGY 2: Trash-icon button inside row ──────────────────────────
+        # Robu places a trash-bin img inside a button at the left of each row.
+        try:
+            trash_selectors = [
+                "button:has(img)",       # Robu custom trash icon (button wrapping an img)
+                "button.remove",
+                "a.remove",
+                "td.product-remove a",
+                "a[aria-label*='Remove']",
+                "a[href*='remove_item']",
+            ]
+            for sel in trash_selectors:
+                btn = target_row.locator(sel).first
+                if btn.count() > 0:
+                    btn.scroll_into_view_if_needed()
+                    time.sleep(0.4)
+                    btn.click(force=True)
+                    time.sleep(3)
+                    print(f"[ROBU] ✅ Removed via selector '{sel}'")
+                    return True
+        except Exception as e:
+            print(f"[ROBU] ⚠️ Trash-icon strategy failed: {e}")
+
+        # ── STRATEGY 3: Navigate directly to ?remove_item= URL ────────────────
+        try:
+            import re as _re2
+            m = _re2.search(r'href=["\']([^"\']*remove_item[^"\']*)["\']', row_html, _re2.IGNORECASE)
+            if m:
+                remove_url = m.group(1).replace("&amp;", "&")
+                print(f"[ROBU] 🔗 Fallback: navigating to remove URL")
+                page.goto(remove_url, wait_until="domcontentloaded", timeout=20000)
+                time.sleep(2)
+                print(f"[ROBU] ✅ Removed via remove_item URL navigation")
+                return True
+        except Exception as e:
+            print(f"[ROBU] ⚠️ Remove URL fallback failed: {e}")
+
+        print(f"[ROBU] ❌ All removal strategies exhausted for: {item_name}")
+        return False
 
     # -------------------------------------------------------------------------
     # Popup dismissal helper (OneSignal, cookie banners, notification prompts)
@@ -1326,9 +1456,10 @@ class CartAutomation:
         """Login to a WooCommerce site and save session cookies to a JSON file."""
         try:
             print(f"[{vendor_name}] Navigating to login page...")
-            page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(3)
-            
+            if "robu.in" not in login_url:
+                page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(3)
+
             # Dismiss any popups (Allow/Cancel notifications) twice to be sure
             self._dismiss_popups(page)
             time.sleep(2)
@@ -1344,141 +1475,241 @@ class CartAutomation:
                 page.context.storage_state(path=str(state_path))
                 return True
 
-            # Find email/username field (WooCommerce + BigCommerce selectors)
-            user_field = None
-            for sel in [
+            # ── Find login field (Robu-specific click-nav + generic retry) ────────────
+            # Robu.in (Next.js) crashes when navigating DIRECTLY to /my-account/.
+            # Fix: go to homepage, click the Login link in the nav so Next.js
+            # handles the route internally — this avoids the hydration crash.
+            LOGIN_FIELD_SELECTORS = [
                 "input[name='login_email']",   # BigCommerce
                 "input#email",                  # BigCommerce fallback
                 "input[name='username']",       # WooCommerce
                 "input[name='email']",
                 "input[id='username']",
                 "input[type='email']",
-            ]:
-                loc = page.locator(sel).first
-                if loc.count() > 0 and loc.is_visible():
-                    user_field = loc
-                    break
+            ]
+
+            def _find_login_field():
+                for sel in LOGIN_FIELD_SELECTORS:
+                    try:
+                        loc = page.locator(sel).first
+                        if loc.count() > 0 and loc.is_visible(timeout=2000):
+                            return loc
+                    except Exception:
+                        continue
+                return None
+
+            user_field = _find_login_field()  # check if already loaded fine
+
+            if not user_field and "robu.in" in login_url:
+                # ── Robu: navigate via homepage Login link (avoids Next.js crash) ──
+                print(f"[{vendor_name}] Using stable nav-click approach for Next.js site...")
+                page.goto("https://robu.in/", wait_until="domcontentloaded", timeout=30000)
+                time.sleep(3)
+                self._dismiss_popups(page)
+                # Look for the Login link in the top navigation
+                login_nav_selectors = [
+                    "a:has-text('Login')",
+                    "a:has-text('Log In')",
+                    "a:has-text('Sign In')",
+                    "a[href*='my-account']",
+                    "a[href*='login']",
+                    ".account-link",
+                    ".user-account a",
+                ]
+                clicked = False
+                for nav_sel in login_nav_selectors:
+                    try:
+                        nav_btn = page.locator(nav_sel).first
+                        if nav_btn.count() > 0 and nav_btn.is_visible(timeout=2000):
+                            nav_btn.click()
+                            time.sleep(3)
+                            print(f"[{vendor_name}] Clicked nav login link via: {nav_sel}")
+                            clicked = True
+                            break
+                    except Exception:
+                        continue
+
+                if not clicked:
+                    # Nav click failed — try direct URL one more time with longer wait
+                    print(f"[{vendor_name}] ⚠️ Nav login link not found — retrying direct URL with longer wait...")
+                    page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+                    time.sleep(6)
+
+                self._dismiss_popups(page)
+                user_field = _find_login_field()
+
+            if not user_field and "robu.in" not in login_url:
+                # ── Other vendors: simple reload as fallback ──
+                print(f"[{vendor_name}] ⚠️ Login form not found — reloading page...")
+                page.reload(wait_until="domcontentloaded")
+                time.sleep(4)
+                self._dismiss_popups(page)
+                user_field = _find_login_field()
 
             if not user_field:
-                print(f"[{vendor_name}] ❌ Could not find login field")
-                return False
+                # Attempt 3: homepage warmup then retry (Next.js hydration fix)
+                print(f"[{vendor_name}] ⚠️ Still no login form — trying homepage warmup (attempt 3)...")
+                from urllib.parse import urlparse
+                parsed   = urlparse(login_url)
+                homepage = f"{parsed.scheme}://{parsed.netloc}/"
+                page.goto(homepage, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(4)
+                page.goto(login_url, wait_until="domcontentloaded", timeout=30000)
+                time.sleep(4)
+                self._dismiss_popups(page)
+                user_field = _find_login_field()
 
-            print(f"[{vendor_name}] Logging in as {email}...")
-            user_field.fill(email)
-
-            # Find password field (WooCommerce + BigCommerce selectors)
-            pass_field = None
-            for sel in [
-                "input[name='login_pass']",    # BigCommerce
-                "input#pass",                   # BigCommerce fallback
-                "input[name='password']",       # WooCommerce
-                "input[type='password']",
-            ]:
-                loc = page.locator(sel).first
-                if loc.count() > 0 and loc.is_visible():
-                    pass_field = loc
-                    break
-
-            if not pass_field:
-                print(f"[{vendor_name}] ❌ Could not find password field")
-                return False
-
-            pass_field.fill(password)
-
-            # Dismiss any popups that appeared while typing (OneSignal etc.)
-            self._dismiss_popups(page)
-
-            # Click the login submit — scoped to login form to avoid Search button
-            login_clicked = False
-            for sel in [
-                "button[name='login']",
-                "button:has-text('Login')",
-                "button:has-text('Log in')",
-                "button:has-text('Sign In')",
-                "button:has-text('Sign in')",
-                ".woocommerce-form-login button[type='submit']",
-                "form.woocommerce-form-login input[type='submit']",
-                "form[class*='login'] button[type='submit']",
-                "input[name='login'][type='submit']",
-                "button.woocommerce-button[type='submit']",
-                # BigCommerce
-                "input[type='submit'][value*='Sign In']",
-                "button[type='submit'][id*='login']",
-                "button.button--primary[type='submit']",
-            ]:
+            if not user_field:
+                print(f"[{vendor_name}] ❌ Could not find login field after 3 attempts")
                 try:
-                    btn = page.locator(sel).first
-                    if btn.count() > 0 and btn.is_visible(timeout=1500):
-                        btn.click(force=True)
-                        login_clicked = True
-                        print(f"[{vendor_name}] Clicked login via: {sel}")
-                        break
+                    import os as _os
+                    _os.makedirs("auto", exist_ok=True)
+                    page.screenshot(path=f"auto/{vendor_name.lower()}_login_debug.png")
+                    print(f"[{vendor_name}] 📸 Debug screenshot → auto/{vendor_name.lower()}_login_debug.png")
                 except Exception:
-                    continue
-
-            if not login_clicked:
-                print(f"[{vendor_name}] ⚠️ Could not find login button — trying keyboard Enter")
-                pass_field.press("Enter")
-
-            page.wait_for_load_state("domcontentloaded")
-            time.sleep(4)
-
-            # --- VERIFY LOGIN SUCCESS ---
-            # Give AJAX-driven WooCommerce logins an extra moment to settle
-            time.sleep(2)
-
-            def _check_logged_in():
-                # 1. URL redirected to /my-account/ (post-login redirect) or BigCommerce order_status/cart
-                if ("/my-account/" in page.url and "login" not in page.url) or "action=order_status" in page.url or "/cart.php" in page.url:
-                    return True, "URL is /my-account/ dashboard, order_status, or cart.php"
-
-                # 2. WooCommerce account navigation is visible (only shown when logged in)
-                if page.locator(".woocommerce-MyAccount-navigation, .woocommerce-account .entry-content").count() > 0:
-                    return True, "WooCommerce account nav visible"
-
-                # 3. Classic logout link variants
-                if page.locator(
-                    "a:has-text('Logout'), a:has-text('Log out'), a:has-text('Log Out'), "
-                    ".woocommerce-MyAccount-navigation-link--customer-logout, "
-                    ".nav-logout, "
-                    "a[href*='customer-logout'], a[href*='?logout=']"
-                ).count() > 0:
-                    return True, "Logout link found"
-
-                # 4. My Account dashboard content block
-                if page.locator(
-                    ".woocommerce-MyAccount-content, .woocommerce-account, "
-                    ".myaccount-content, .nav-dashboard-link"
-                ).count() > 0:
-                    return True, "My Account dashboard content found"
-
-                # 5. Body-text scan for WooCommerce "Hello, <name>" greeting
-                try:
-                    body_text = page.evaluate("() => document.body.innerText")
-                    import re as _re
-                    if _re.search(r"hello[\s,]+\w+|log\s*out|my account|dashboard", body_text, _re.IGNORECASE):
-                        return True, "Body text contains logged-in greeting"
-                except:
                     pass
-
-                return False, ""
-
-            is_success, reason = _check_logged_in()
-
-            if is_success:
-                print(f"[{vendor_name}] ✅ Login verified — {reason}")
-            else:
-                # Check for explicit error messages before giving up
-                error_box = page.locator(".woocommerce-error, .alertBox--error, .alert-danger").first
-                err_msg = ""
-                if error_box.count() > 0 and error_box.is_visible():
-                    err_msg = f": {error_box.inner_text().strip()}"
-
-                print(f"[{vendor_name}] ❌ Login verification failed{err_msg} (URL: {page.url})")
-                os.makedirs("auto", exist_ok=True)
-                page.screenshot(path=f"auto/{vendor_name.lower()}_login_failed.png")
-                print(f"[{vendor_name}] 📸 Saved debug screenshot to auto/{vendor_name.lower()}_login_failed.png")
                 return False
+
+            for login_attempt in range(2):
+                print(f"[{vendor_name}] Logging in as {email} (Attempt {login_attempt + 1}/2)...")
+                user_field.fill(email)
+
+                # Find password field (WooCommerce + BigCommerce selectors)
+                pass_field = None
+                for sel in [
+                    "input[name='login_pass']",    # BigCommerce
+                    "input#pass",                   # BigCommerce fallback
+                    "input[name='password']",       # WooCommerce
+                    "input[type='password']",
+                ]:
+                    loc = page.locator(sel).first
+                    if loc.count() > 0 and loc.is_visible():
+                        pass_field = loc
+                        break
+
+                if not pass_field:
+                    print(f"[{vendor_name}] ❌ Could not find password field")
+                    return False
+
+                pass_field.fill(password)
+
+                # Dismiss any popups that appeared while typing (OneSignal etc.)
+                self._dismiss_popups(page)
+
+                # Click the login submit — scoped to login form to avoid Search button
+                login_clicked = False
+                for sel in [
+                    "button[name='login']",
+                    "button:has-text('Login')",
+                    "button:has-text('Log in')",
+                    "button:has-text('Sign In')",
+                    "button:has-text('Sign in')",
+                    ".woocommerce-form-login button[type='submit']",
+                    "form.woocommerce-form-login input[type='submit']",
+                    "form[class*='login'] button[type='submit']",
+                    "input[name='login'][type='submit']",
+                    "button.woocommerce-button[type='submit']",
+                    # BigCommerce
+                    "input[type='submit'][value*='Sign In']",
+                    "button[type='submit'][id*='login']",
+                    "button.button--primary[type='submit']",
+                ]:
+                    try:
+                        btn = page.locator(sel).first
+                        if btn.count() > 0 and btn.is_visible(timeout=1500):
+                            btn.click(force=True)
+                            login_clicked = True
+                            print(f"[{vendor_name}] Clicked login via: {sel}")
+                            break
+                    except Exception:
+                        continue
+
+                if not login_clicked:
+                    print(f"[{vendor_name}] ⚠️ Could not find login button — trying keyboard Enter")
+                    pass_field.press("Enter")
+
+                page.wait_for_load_state("domcontentloaded")
+                time.sleep(4)
+
+                # --- VERIFY LOGIN SUCCESS ---
+                # Give AJAX-driven WooCommerce logins an extra moment to settle
+                time.sleep(2)
+
+                def _check_logged_in():
+                    # 1. URL redirected to /my-account/ (post-login redirect) or BigCommerce order_status/cart
+                    if ("/my-account/" in page.url and "login" not in page.url) or "action=order_status" in page.url or "/cart.php" in page.url:
+                        return True, "URL is /my-account/ dashboard, order_status, or cart.php"
+
+                    # 2. WooCommerce account navigation is visible (only shown when logged in)
+                    if page.locator(".woocommerce-MyAccount-navigation, .woocommerce-account .entry-content").count() > 0:
+                        return True, "WooCommerce account nav visible"
+
+                    # 3. Classic logout link variants
+                    if page.locator(
+                        "a:has-text('Logout'), a:has-text('Log out'), a:has-text('Log Out'), "
+                        ".woocommerce-MyAccount-navigation-link--customer-logout, "
+                        ".nav-logout, "
+                        "a[href*='customer-logout'], a[href*='?logout=']"
+                    ).count() > 0:
+                        return True, "Logout link found"
+
+                    # 4. My Account dashboard content block
+                    if page.locator(
+                        ".woocommerce-MyAccount-content, .woocommerce-account, "
+                        ".myaccount-content, .nav-dashboard-link"
+                    ).count() > 0:
+                        return True, "My Account dashboard content found"
+
+                    # 5. Body-text scan for WooCommerce "Hello, <name>" greeting
+                    try:
+                        body_text = page.evaluate("() => document.body.innerText")
+                        import re as _re
+                        if _re.search(r"hello[\s,]+\w+|log\s*out|my account|dashboard", body_text, _re.IGNORECASE):
+                            return True, "Body text contains logged-in greeting"
+                    except:
+                        pass
+
+                    return False, ""
+
+                is_success, reason = _check_logged_in()
+
+                if is_success:
+                    print(f"[{vendor_name}] ✅ Login verified — {reason}")
+                    break
+                else:
+                    # Check for explicit error messages before giving up
+                    error_box = page.locator(".woocommerce-error, .alertBox--error, .alert-danger, .error-message").first
+                    err_msg = ""
+                    if error_box.count() > 0 and error_box.is_visible():
+                        err_msg = f": {error_box.inner_text().strip()}"
+                    
+                    if login_attempt == 0:
+                        print(f"[{vendor_name}] ⚠️ Login failed on attempt 1{err_msg}. Retrying...")
+                        page.reload(wait_until="domcontentloaded")
+                        time.sleep(3)
+                        
+                        # Find login field again
+                        user_field = None
+                        for sel in LOGIN_FIELD_SELECTORS:
+                            try:
+                                loc = page.locator(sel).first
+                                if loc.count() > 0 and loc.is_visible(timeout=2000):
+                                    user_field = loc
+                                    break
+                            except Exception:
+                                continue
+                        
+                        if not user_field:
+                            print(f"[{vendor_name}] ❌ Could not find login field after reload")
+                            return False
+                        continue
+                    else:
+                        print(f"[{vendor_name}] ❌ Login verification failed{err_msg} (URL: {page.url})")
+                        import os as _os
+                        _os.makedirs("auto", exist_ok=True)
+                        page.screenshot(path=f"auto/{vendor_name.lower()}_login_failed.png")
+                        print(f"[{vendor_name}] 📸 Saved debug screenshot to auto/{vendor_name.lower()}_login_failed.png")
+                        return False
 
             # Verify & save
             print(f"[{vendor_name}] ✅ Login successful — saving session state")
@@ -1783,11 +2014,12 @@ class CartAutomation:
             # when a product is out of stock. Detect this immediately and bail out.
             try:
                 oos_detected = False
+                scope = ".productView-details "
 
-                # Check 1: "Sold Out" text visible on page
+                # Check 1: "Sold Out" text visible in the product box
                 sold_out = page.locator(
-                    "text='Sold Out', span:has-text('Sold Out'), "
-                    "div:has-text('Sold Out'), p:has-text('Sold Out')"
+                    f"{scope}text='Sold Out', {scope}span:has-text('Sold Out'), "
+                    f"{scope}div:has-text('Sold Out'), {scope}p:has-text('Sold Out')"
                 ).first
                 if sold_out.count() > 0 and sold_out.is_visible(timeout=1500):
                     oos_detected = True
@@ -1819,13 +2051,34 @@ class CartAutomation:
                         oos_detected = True
 
                 if oos_detected:
-                    print(f"[{vendor_name}] 🚫 OOS: 'Sold Out' detected on product page → Fallback to next vendor")
-                    return {
-                        "success": False,
-                        "status": "OOS",
-                        "reason": "Product is Sold Out on Evelta",
-                        "cart_url": product_url,
-                    }
+                    # Double check: if an Add to Cart button is visible, it's NOT entirely out of stock (false positive)
+                    add_to_cart_visible = False
+                    for sel in [
+                        "#form-action-addToCart", 
+                        "button[data-button-type='add-cart']",
+                        "input[type='submit'][value*='Add to Cart']",
+                        "button:has-text('Add to Cart')",
+                        "button:has-text('Add to cart')"
+                    ]:
+                        try:
+                            btn = page.locator(sel).first
+                            if btn.count() > 0 and btn.is_visible(timeout=500):
+                                add_to_cart_visible = True
+                                break
+                        except Exception:
+                            continue
+
+                    if add_to_cart_visible:
+                        print(f"[{vendor_name}] ⚠️ Ignored OOS detection because 'Add to Cart' button is visible. Proceeding to cart addition.")
+                        oos_detected = False
+                    else:
+                        print(f"[{vendor_name}] 🚫 OOS: 'Sold Out' detected on product page → Fallback to next vendor")
+                        return {
+                            "success": False,
+                            "status": "OOS",
+                            "reason": "Product is Sold Out on Evelta",
+                            "cart_url": product_url,
+                        }
             except Exception as oos_err:
                 pass  # If detection fails, proceed normally — don't block valid items
 
@@ -1893,8 +2146,13 @@ class CartAutomation:
                     continue
 
             if not cart_clicked:
-                print(f"[{vendor_name}] ❌ Could not find Add to Cart button")
-                return False
+                print(f"[{vendor_name}] 🚫 OOS: Could not find Add to Cart button (Item likely Sold Out)")
+                return {
+                    "success": False,
+                    "status": "OOS",
+                    "reason": "Add to Cart button missing (Sold Out)",
+                    "cart_url": product_url,
+                }
 
             # 🔥 NEW: Handle stock error popup (Evelta blocks cart if qty > stock)
             try:

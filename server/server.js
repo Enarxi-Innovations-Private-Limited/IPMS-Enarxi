@@ -369,13 +369,20 @@ app.use((req, res, next) => {
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
+    let token;
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+    } else if (req.query.token) {
+        token = req.query.token;
+    }
+
+    if (!token) {
         console.warn(`🚫 [Auth] No token — ${req.method} ${req.path}`);
         return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
-        const token = authHeader.split(' ')[1];
         const decoded = jwt.verify(token, JWT_SECRET);
         const user = await User.findById(decoded.id);
         if (!user) {
@@ -2948,6 +2955,91 @@ const startBOMAutomation = () => {
         console.log(`🛑 [BOM] Automation Server exited with code ${code}`);
     });
 };
+
+// ============ BOM PROXY ROUTES ============
+// This proxies requests from the main API to the Python BOM server on port 8000
+const BOM_SERVER_URL = 'http://localhost:8000';
+
+app.use('/api/bom', authMiddleware, async (req, res, next) => {
+    const targetPath = req.path || '/';
+    if (targetPath === '/upload') {
+        return next();
+    }
+    const queryString = req.originalUrl.includes('?') ? req.originalUrl.substring(req.originalUrl.indexOf('?')) : '';
+    const url = `${BOM_SERVER_URL}${targetPath}${queryString}`;
+    
+    try {
+        console.log(`📡 [BOM Proxy] ${req.method} ${url}`);
+        
+        const fetchOptions = {
+            method: req.method,
+            headers: {
+                // Pass through relevant headers
+                'Accept': req.headers['accept'],
+                'Authorization': req.headers['authorization'],
+            }
+        };
+
+        // Handle Body
+        if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+            if (req.headers['content-type']?.includes('multipart/form-data')) {
+                // For file uploads, we need to handle the buffer and boundary
+                // Multer has already parsed the file if it was hitting an upload endpoint
+                // But here we are catching all /api/bom*
+                // If it's an upload, let's let multer handle it first if needed, 
+                // but since we are proxying, we might need a more direct pipe.
+                // For simplicity, let's handle the specific /upload route with multer
+                return res.status(400).json({ message: 'Use specific upload handler' });
+            } else {
+                fetchOptions.headers['Content-Type'] = 'application/json';
+                fetchOptions.body = JSON.stringify(req.body);
+            }
+        }
+
+        const response = await fetch(url, fetchOptions);
+        
+        // Handle Streaming Response (for Export)
+        if (targetPath === '/export') {
+            const contentType = response.headers.get('content-type');
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', response.headers.get('content-disposition'));
+            const buffer = await response.arrayBuffer();
+            return res.send(Buffer.from(buffer));
+        }
+
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (err) {
+        console.error(`❌ [BOM Proxy Error]:`, err.message);
+        res.status(502).json({ message: 'BOM Automation Server unreachable', error: err.message });
+    }
+});
+
+// Specific handler for BOM Upload to handle Multipart via proxy
+app.post('/api/bom/upload', authMiddleware, upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+    
+    try {
+        const formData = new FormData();
+        const blob = new Blob([fs.readFileSync(req.file.path)], { type: req.file.mimetype });
+        formData.append('file', blob, req.file.originalname);
+
+        const response = await fetch(`${BOM_SERVER_URL}/upload`, {
+            method: 'POST',
+            body: formData
+        });
+
+        // Clean up temp file
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+        const data = await response.json();
+        res.status(response.status).json(data);
+    } catch (err) {
+        console.error(`❌ [BOM Upload Proxy Error]:`, err);
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        res.status(502).json({ message: 'BOM Automation Server unreachable' });
+    }
+});
 
 // ============ START SERVER ============
 const PORT = process.env.PORT || 5000;

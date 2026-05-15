@@ -126,22 +126,9 @@ class RobuScraper:
                     log_action(f"✅ Selected first visible dropdown item: {target_product.inner_text().strip()[:50]}")
                     
                 if not target_product:
-                    log_action("⚠️ No dropdown items found — attempting direct 'Enter' key fallback...")
-                    page.keyboard.press("Enter")
-                    # Give it more time for navigation
-                    time.sleep(5)
-                    try:
-                        page.wait_for_load_state("domcontentloaded", timeout=30000)
-                    except:
-                        pass
-                    
-                    # If we landed on a product page, it's a success!
-                    if "/product/" in page.url and "?s=" not in page.url:
-                        log_action(f"✅ Direct 'Enter' successful! Navigated to: {page.url[:80]}")
-                        return {"sku": sku, "product_url": page.url, "found": True}
-                    else:
-                        log_action(f"❌ Direct 'Enter' failed to find product. Current URL: {page.url}")
-                        return {"sku": sku, "found": False}
+                    log_action("❌ No dropdown items found - blocking fallback search")
+                    log_action("⚠️ Dropdown failed, not proceeding to prevent search fallback")
+                    return {"sku": sku, "found": False}
                 
                 product_text = target_product.inner_text().strip()
                 log_action(f"🔗 Clicking dropdown product: {product_text[:50]}")
