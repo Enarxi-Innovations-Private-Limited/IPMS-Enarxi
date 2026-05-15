@@ -21,6 +21,16 @@ const logInvActivity = async (type, message, userId, userName, targetId, targetN
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeId = (value) => (value ? String(value) : '');
+const ACTIVE_PURCHASE_QUEUE_STATUSES = ['OPEN', 'PARTIALLY_ORDERED', 'PENDING', 'IN_PO'];
+
+async function createPurchaseRequestBatchNumber(session = null) {
+    const now = new Date();
+    const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    const todayCount = await PurchaseRequestBatch.countDocuments({ createdAt: { $gte: start, $lte: end } }).session(session);
+    return `PRQ-${dateCode}-${String(todayCount + 1).padStart(4, '0')}`;
+}
 
 const findLocationByReference = async (reference) => {
     const normalized = (reference || '').toString().trim();
@@ -536,7 +546,7 @@ async function checkMRCompletion(mrId, session = null) {
 }
 
 async function buildPurchasePlanningRows() {
-    const requests = await PurchaseRequestBatch.find({ status: 'PENDING' })
+    const requests = await PurchaseRequestBatch.find({ status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } })
         .populate('materialRequestId', 'requestNumber projectId')
         .populate({
             path: 'lines.itemId',
@@ -567,6 +577,9 @@ async function buildPurchasePlanningRows() {
                 purchaseRequestLineId: normalizeId(line._id),
                 requestedQuantity: quantity,
                 batchId: normalizeId(batch._id),
+                batchNumber: batch.batchNumber,
+                batchStatus: batch.status,
+                batchPriority: batch.priority || 'MEDIUM',
                 materialRequestId: normalizeId(batch.materialRequestId?._id || batch.materialRequestId),
                 requestNumber: batch.materialRequestId?.requestNumber || '',
                 projectId: normalizeId(batch.materialRequestId?.projectId),
@@ -598,7 +611,7 @@ async function buildPurchasePlanningRows() {
 }
 
 async function buildIndividualPurchaseRequestRows() {
-    const requests = await PurchaseRequestBatch.find({ status: 'PENDING' })
+    const requests = await PurchaseRequestBatch.find({ status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } })
         .populate({
             path: 'materialRequestId',
             select: 'requestNumber projectId engineerId',
@@ -632,6 +645,10 @@ async function buildIndividualPurchaseRequestRows() {
 
             rows.push({
                 id: normalizeId(line._id),
+                purchaseRequestBatchId: normalizeId(batch._id),
+                purchaseRequestBatchNumber: batch.batchNumber,
+                purchaseRequestBatchStatus: batch.status,
+                purchaseRequestBatchPriority: batch.priority || 'MEDIUM',
                 itemId: normalizeId(item._id),
                 itemCode: item.itemCode,
                 name: item.name,
@@ -643,6 +660,9 @@ async function buildIndividualPurchaseRequestRows() {
                     purchaseRequestLineId: normalizeId(line._id),
                     requestedQuantity: quantity,
                     batchId: normalizeId(batch._id),
+                    batchNumber: batch.batchNumber,
+                    batchStatus: batch.status,
+                    batchPriority: batch.priority || 'MEDIUM',
                     materialRequestId: normalizeId(batch.materialRequestId?._id || batch.materialRequestId),
                     requestNumber: batch.materialRequestId?.requestNumber || '',
                     projectId: normalizeId(batch.materialRequestId?.projectId?._id || batch.materialRequestId?.projectId),
@@ -657,6 +677,106 @@ async function buildIndividualPurchaseRequestRows() {
     });
 
     return rows.sort((a, b) => b.id.localeCompare(a.id));
+}
+
+function formatPurchaseBatchStatus(status) {
+    if (status === 'PENDING') return 'OPEN';
+    if (status === 'IN_PO') return 'PARTIALLY_ORDERED';
+    if (status === 'RECEIVED') return 'CLOSED';
+    return status || 'OPEN';
+}
+
+function resolvePurchaseBatchStatusFromLines(lines = []) {
+    const totalPending = lines.reduce((sum, line) => sum + Number(line.pendingQuantity || 0), 0);
+    const totalAllocated = lines.reduce((sum, line) => sum + Number(line.allocatedQuantity || 0), 0);
+    if (totalPending <= 0.0001 && totalAllocated > 0) return 'ORDERED';
+    if (totalAllocated > 0) return 'PARTIALLY_ORDERED';
+    return 'OPEN';
+}
+
+async function listPurchaseRequestQueue() {
+    const batches = await PurchaseRequestBatch.find({ status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES.concat(['ORDERED']) } })
+        .populate({
+            path: 'materialRequestId',
+            select: 'requestNumber projectId engineerId',
+            populate: [{ path: 'projectId', select: 'name projectCode' }, { path: 'engineerId', select: 'name' }]
+        })
+        .populate('lines.itemId', 'name itemCode uom package');
+
+    return batches
+        .map((batch) => {
+            const openLines = (batch.lines || []).filter((line) => Number(line.pendingQuantity || 0) > 0);
+            const requestedQuantity = openLines.reduce((sum, line) => sum + Number(line.requiredQuantity || 0), 0);
+            const remainingQuantity = openLines.reduce((sum, line) => sum + Number(line.pendingQuantity || 0), 0);
+            return {
+                id: normalizeId(batch._id),
+                batchNumber: batch.batchNumber,
+                status: formatPurchaseBatchStatus(batch.status),
+                priority: batch.priority || 'MEDIUM',
+                materialRequestId: normalizeId(batch.materialRequestId?._id || batch.materialRequestId),
+                materialRequestNumber: batch.materialRequestId?.requestNumber || 'N/A',
+                projectId: normalizeId(batch.materialRequestId?.projectId?._id || batch.materialRequestId?.projectId),
+                projectName: batch.materialRequestId?.projectId?.name || 'Unknown Project',
+                requestedBy: batch.materialRequestId?.engineerId?.name || 'System',
+                sourceRequestIds: batch.sourceRequestIds || [],
+                lineCount: openLines.length,
+                requestedQuantity,
+                remainingQuantity,
+                createdAt: batch.createdAt,
+                updatedAt: batch.updatedAt,
+                lines: openLines.map((line) => ({
+                    purchaseRequestLineId: normalizeId(line._id),
+                    materialRequestLineId: line.materialRequestLineId,
+                    itemId: normalizeId(line.itemId?._id || line.itemId),
+                    itemCode: line.itemId?.itemCode || '',
+                    itemName: line.itemId?.name || '',
+                    uom: line.itemId?.uom || 'Nos',
+                    package: line.itemId?.package || '',
+                    requiredQuantity: Number(line.requiredQuantity || 0),
+                    pendingQuantity: Number(line.pendingQuantity || 0),
+                    allocatedQuantity: Number(line.allocatedQuantity || 0),
+                    purchaseRemarks: line.purchaseRemarks || ''
+                }))
+            };
+        })
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+async function buildCombinedDemandProjection() {
+    const queue = await listPurchaseRequestQueue();
+    const grouped = new Map();
+    queue.forEach((batch) => {
+        (batch.lines || []).forEach((line) => {
+            if (line.pendingQuantity <= 0) return;
+            const key = line.itemId;
+            const existing = grouped.get(key);
+            const entry = {
+                purchaseRequestBatchId: batch.id,
+                purchaseRequestBatchNumber: batch.batchNumber,
+                purchaseRequestLineId: line.purchaseRequestLineId,
+                materialRequestId: batch.materialRequestId,
+                materialRequestNumber: batch.materialRequestNumber,
+                projectName: batch.projectName,
+                requestedBy: batch.requestedBy,
+                quantity: line.pendingQuantity
+            };
+            if (existing) {
+                existing.totalRequiredQuantity += line.pendingQuantity;
+                existing.requestLines.push(entry);
+            } else {
+                grouped.set(key, {
+                    itemId: line.itemId,
+                    itemCode: line.itemCode,
+                    itemName: line.itemName,
+                    uom: line.uom,
+                    package: line.package,
+                    totalRequiredQuantity: line.pendingQuantity,
+                    requestLines: [entry]
+                });
+            }
+        });
+    });
+    return Array.from(grouped.values()).sort((a, b) => (a.itemCode || '').localeCompare(b.itemCode || ''));
 }
 
 // --- Master Data Routes ---
@@ -1889,7 +2009,7 @@ async function handleRouteMaterialRequestLine(req, res) {
         await request.save();
 
         let storeBatch = await StoreRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
-        let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
+        let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
 
         if (storeQty > 0) {
             // Calculate how much we actually managed to reserve
@@ -1935,11 +2055,12 @@ async function handleRouteMaterialRequestLine(req, res) {
 
         if (purchaseQty > 0) {
             if (!purchaseBatch) {
-                const batchCount = await PurchaseRequestBatch.countDocuments();
                 purchaseBatch = new PurchaseRequestBatch({
-                    batchNumber: `PRB-${new Date().getTime()}-${batchCount + 1}`,
+                    batchNumber: await createPurchaseRequestBatchNumber(session),
                     materialRequestId: request._id,
+                    status: 'OPEN',
                     routedById: req.user._id,
+                    sourceRequestIds: [request.requestNumber],
                     lines: []
                 });
             }
@@ -2059,13 +2180,14 @@ async function handleRouteMaterialRequestBulk(req, res) {
                 line.status = 'ROUTED_TO_PURCHASE';
                 line.adminRemarks = 'Bulk routed to Purchase via IPMS';
 
-                let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
+        let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
                 if (!purchaseBatch) {
-                    const batchCount = await PurchaseRequestBatch.countDocuments();
                     purchaseBatch = new PurchaseRequestBatch({
-                        batchNumber: `PRB-${new Date().getTime()}-${batchCount + 1}`,
+                        batchNumber: await createPurchaseRequestBatchNumber(session),
                         materialRequestId: request._id,
+                        status: 'OPEN',
                         routedById: req.user._id,
+                        sourceRequestIds: [request.requestNumber],
                         lines: []
                     });
                 }
@@ -2120,6 +2242,35 @@ router.get('/inventory/purchase-planning', async (req, res) => {
         const rows = mode === 'individual' 
             ? await buildIndividualPurchaseRequestRows() 
             : await buildPurchasePlanningRows();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/purchase/prq', async (req, res) => {
+    try {
+        const rows = await listPurchaseRequestQueue();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/purchase/prq/:id', async (req, res) => {
+    try {
+        const rows = await listPurchaseRequestQueue();
+        const row = rows.find((entry) => entry.id === String(req.params.id));
+        if (!row) return res.status(404).json({ message: 'Purchase request queue not found' });
+        res.json(row);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+router.get('/purchase/combined-demand', async (req, res) => {
+    try {
+        const rows = await buildCombinedDemandProjection();
         res.json(rows);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -3017,13 +3168,14 @@ router.post('/routeMaterialRequestBulk', async (req, res) => {
                 line.plannedPurchaseQuantity = qty;
                 line.status = 'ROUTED_TO_PURCHASE';
 
-                let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
+                let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
                 if (!purchaseBatch) {
-                    const batchCount = await PurchaseRequestBatch.countDocuments();
                     purchaseBatch = new PurchaseRequestBatch({
-                        batchNumber: `PRB-${new Date().getTime()}-${batchCount + 1}`,
+                        batchNumber: await createPurchaseRequestBatchNumber(),
                         materialRequestId: request._id,
+                        status: 'OPEN',
                         routedById: req.user._id,
+                        sourceRequestIds: [request.requestNumber],
                         lines: []
                     });
                 }
@@ -3135,7 +3287,7 @@ router.get('/bridge/material-requests/:id', async (req, res) => {
 
 router.get('/purchase/requests', async (req, res) => {
     try {
-        const rows = await buildPurchasePlanningRows();
+        const rows = await listPurchaseRequestQueue();
         res.json(rows);
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -3147,7 +3299,7 @@ router.post('/generatePurchaseOrders', async (req, res) => {
     try {
         if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
         const { payload, notes } = req.body;
-        const items = JSON.parse(payload);
+        const items = Array.isArray(payload) ? payload : JSON.parse(payload);
 
         if (!Array.isArray(items) || items.length === 0) {
             return res.status(400).json({ message: 'Purchase planning payload is required.' });
@@ -3206,9 +3358,20 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                         const quantity = Math.min(allocateHere, remainingAllocation);
                         if (quantity <= 0) continue;
 
+                        const sourceBatch = await PurchaseRequestBatch.findOne({ 'lines._id': sourceEntry.purchaseRequestLineId }).session(session);
+                        const sourceBatchLine = sourceBatch?.lines.id(sourceEntry.purchaseRequestLineId);
+                        const sourceMr = sourceBatch?.materialRequestId
+                            ? await MaterialRequest.findById(sourceBatch.materialRequestId).select('requestNumber').session(session)
+                            : null;
+
                         allocations.push({
                             purchaseRequestLineId: sourceEntry.purchaseRequestLineId,
-                            quantity
+                            quantity,
+                            purchaseRequestBatchId: sourceBatch?._id || null,
+                            purchaseRequestBatchNumber: sourceBatch?.batchNumber || '',
+                            materialRequestId: sourceBatch?.materialRequestId || null,
+                            materialRequestNumber: sourceMr?.requestNumber || '',
+                            materialRequestLineId: sourceBatchLine?.materialRequestLineId || ''
                         });
                         remainingAllocation -= quantity;
                     }
@@ -3274,7 +3437,12 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                     for (const sourceLine of line.sourceLines) {
                         await PurchaseRequestBatch.updateOne(
                             { "lines._id": sourceLine.purchaseRequestLineId },
-                            { $inc: { "lines.$.pendingQuantity": -sourceLine.quantity } }
+                            {
+                                $inc: {
+                                    "lines.$.pendingQuantity": -sourceLine.quantity,
+                                    "lines.$.allocatedQuantity": sourceLine.quantity
+                                }
+                            }
                         ).session(session);
                     }
                 }
@@ -3286,8 +3454,7 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                 for (const sourceLineId of affectedBatches) {
                     const batch = await PurchaseRequestBatch.findOne({ 'lines._id': sourceLineId }).session(session);
                     if (!batch) continue;
-                    const hasPending = batch.lines.some((entry) => Number(entry.pendingQuantity || 0) > 0);
-                    batch.status = hasPending ? 'IN_PO' : 'ORDERED';
+                    batch.status = resolvePurchaseBatchStatusFromLines(batch.lines || []);
                     await batch.save({ session });
                 }
 
@@ -3410,12 +3577,22 @@ router.post('/reviewPurchaseOrder', async (req, res) => {
                         await PurchaseRequestBatch.updateOne(
                             { "lines._id": src.purchaseRequestLineId },
                             { 
-                                $inc: { "lines.$.pendingQuantity": src.quantity },
-                                $set: { status: 'PENDING' } // Move batch back to pending if needed
+                                $inc: {
+                                    "lines.$.pendingQuantity": src.quantity,
+                                    "lines.$.allocatedQuantity": -src.quantity
+                                }
                             }
                         );
                     }
                 }
+            }
+
+            const touchedLineIds = po.lines.flatMap((line) => (line.sourceLines || []).map((src) => normalizeId(src.purchaseRequestLineId)));
+            for (const sourceLineId of touchedLineIds) {
+                const batch = await PurchaseRequestBatch.findOne({ 'lines._id': sourceLineId });
+                if (!batch) continue;
+                batch.status = resolvePurchaseBatchStatusFromLines(batch.lines || []);
+                await batch.save();
             }
         }
 
@@ -3561,12 +3738,12 @@ router.post('/receivePurchaseOrderLines', async (req, res) => {
                     // CRITICAL: Decrement pending quantity on the purchase request line
                     prLine.pendingQuantity = Math.max(0, Number(prLine.pendingQuantity || 0) - quantityForRequest);
                     
-                    // Check if entire PR batch is received
-                    const prBatchFullyReceived = prBatch.lines.every(l => Number(l.pendingQuantity || 0) <= 0.0001);
-                    if (prBatchFullyReceived) {
-                        prBatch.status = 'RECEIVED';
-                    } else if (prBatch.status === 'PENDING' || prBatch.status === 'ORDERED') {
-                         // Optional: could set to 'PARTIAL' if you add that status, but keeping it simple for now
+                    // Keep purchase queue status coherent with line quantities
+                    const hasOpenPending = prBatch.lines.some((l) => Number(l.pendingQuantity || 0) > 0.0001);
+                    if (hasOpenPending) {
+                        prBatch.status = resolvePurchaseBatchStatusFromLines(prBatch.lines || []);
+                    } else {
+                        prBatch.status = 'CLOSED';
                     }
 
                     await prBatch.save({ session });
@@ -3894,21 +4071,22 @@ router.post('/store/approve-shortage-request', async (req, res) => {
             return res.status(400).json({ message: `Batch is in ${batch.status} status. Approval is only for SHORTAGE_REPORTED.` });
         }
 
-        // Find or create a PENDING Purchase Request Batch for this MR
+        // Find or create an active Purchase Request Batch for this MR
         let purchaseBatch = await PurchaseRequestBatch.findOne({ 
             materialRequestId: batch.materialRequestId, 
-            status: 'PENDING' 
+            status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES }
         });
 
         let prLinesAdded = 0;
         for (const line of batch.lines) {
             if (line.shortageQuantity > 0) {
                 if (!purchaseBatch) {
-                    const batchCount = await PurchaseRequestBatch.countDocuments({});
                     purchaseBatch = new PurchaseRequestBatch({
-                        batchNumber: `PRB-${Date.now()}-${batchCount + 1}`,
+                        batchNumber: await createPurchaseRequestBatchNumber(),
                         materialRequestId: batch.materialRequestId,
+                        status: 'OPEN',
                         routedById: req.user._id,
+                        sourceRequestIds: [],
                         lines: []
                     });
                 }

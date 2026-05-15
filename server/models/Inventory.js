@@ -200,14 +200,18 @@ DispatchBatchSchema.index({ status: 1 });
 const PurchaseRequestBatchSchema = new mongoose.Schema({
     batchNumber: { type: String, required: true, unique: true },
     materialRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialRequest', required: true },
-    status: { type: String, enum: ['PENDING', 'IN_PO', 'ORDERED', 'RECEIVED', 'CANCELLED'], default: 'PENDING' },
+    status: { type: String, enum: ['OPEN', 'PARTIALLY_ORDERED', 'ORDERED', 'CLOSED', 'CANCELLED', 'PENDING', 'IN_PO', 'RECEIVED'], default: 'OPEN' },
     routedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     routedAt: { type: Date, default: Date.now },
+    priority: { type: String, enum: ['LOW', 'MEDIUM', 'HIGH', 'URGENT'], default: 'MEDIUM' },
+    sourceRequestIds: [{ type: String }],
+    generatedContext: { type: String, default: 'ADMIN_ROUTING' },
     lines: [{
         materialRequestLineId: String,
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
         requiredQuantity: { type: Number, required: true },
         pendingQuantity: { type: Number, required: true },
+        allocatedQuantity: { type: Number, default: 0 },
         purchaseRemarks: String
     }]
 }, { timestamps: true });
@@ -263,7 +267,12 @@ const PurchaseOrderSchema = new mongoose.Schema({
         lineTotal: { type: Number, required: true },
         sourceLines: [{
             purchaseRequestLineId: String,
-            quantity: Number
+            quantity: Number,
+            purchaseRequestBatchId: { type: mongoose.Schema.Types.ObjectId, ref: 'PurchaseRequestBatch' },
+            purchaseRequestBatchNumber: String,
+            materialRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialRequest' },
+            materialRequestNumber: String,
+            materialRequestLineId: String
         }]
     }]
 }, { timestamps: true });
