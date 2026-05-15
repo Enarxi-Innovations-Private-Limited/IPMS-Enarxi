@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
+import { getCurrentUser } from '../../services/authService';
 
 export default function POApprovalsPage() {
     const Layout = usePortalLayout();
+    const user = getCurrentUser();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPER_USER'].includes(user?.role);
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -100,8 +103,8 @@ export default function POApprovalsPage() {
                                         </div>
                                         <div className="text-white font-bold truncate">{order.vendor?.name}</div>
                                         <div className="flex justify-between items-center mt-3 text-[10px]">
-                                            <span className="text-text-secondary">{order._count?.lines || 0} Items</span>
-                                            <span className="text-white font-bold">₹{Number(order.totalAmount || 0).toLocaleString()}</span>
+                                            <span className="text-text-secondary">{order.lines?.length || 0} Items</span>
+                                            <span className="text-white font-bold">₹{Number(order.lines?.reduce((sum, l) => sum + Number(l.lineTotal || 0), 0) || 0).toLocaleString()}</span>
                                         </div>
                                     </button>
                                 ))
@@ -120,7 +123,7 @@ export default function POApprovalsPage() {
                                             </div>
                                             <div className="text-right">
                                                 <div className="text-text-secondary text-xs font-black uppercase mb-1">Total Value</div>
-                                                <div className="text-2xl font-black text-primary">₹{Number(selectedOrder.totalAmount || 0).toLocaleString()}</div>
+                                                <div className="text-2xl font-black text-primary">₹{Number(selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal || 0), 0) || 0).toLocaleString()}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -140,14 +143,14 @@ export default function POApprovalsPage() {
                                                 </thead>
                                                 <tbody className="divide-y divide-border-dark">
                                                     {selectedOrder.lines?.map(line => (
-                                                        <tr key={line.id}>
+                                                        <tr key={line.id || line._id}>
                                                             <td className="py-3">
                                                                 <div className="text-white font-bold">{line.item?.name}</div>
                                                                 <div className="text-[10px] text-text-secondary">{line.item?.itemCode}</div>
                                                             </td>
-                                                            <td className="py-3 text-right text-white font-mono">{line.quantity}</td>
-                                                            <td className="py-3 text-right text-text-secondary">₹{Number(line.unitPrice).toLocaleString()}</td>
-                                                            <td className="py-3 text-right text-white font-bold">₹{Number(line.totalPrice).toLocaleString()}</td>
+                                                            <td className="py-3 text-right text-white font-mono">{line.orderQuantity}</td>
+                                                            <td className="py-3 text-right text-text-secondary">₹{Number(line.rate || 0).toLocaleString()}</td>
+                                                            <td className="py-3 text-right text-white font-bold">₹{Number(line.lineTotal || 0).toLocaleString()}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -155,33 +158,35 @@ export default function POApprovalsPage() {
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="bg-background-dark/50 rounded-2xl p-6 border border-border-dark space-y-4">
-                                            <h4 className="text-xs font-black uppercase tracking-widest text-text-secondary">Review Decision</h4>
-                                            <textarea 
-                                                className="w-full bg-surface-dark border border-border-dark rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary h-24 transition-all"
-                                                placeholder="Add approval/rejection remarks here..."
-                                                value={remarks}
-                                                onChange={(e) => setRemarks(e.target.value)}
-                                            />
-                                            <div className="flex gap-4">
-                                                <button 
-                                                    onClick={() => handleReview('REJECT')}
-                                                    disabled={processing}
-                                                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
-                                                >
-                                                    <span className="material-symbols-outlined">close</span>
-                                                    Reject PO
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleReview('APPROVE')}
-                                                    disabled={processing}
-                                                    className="flex-[2] bg-primary hover:bg-primary/90 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20"
-                                                >
-                                                    <span className="material-symbols-outlined">check_circle</span>
-                                                    Approve & Release
-                                                </button>
+                                        {isAdmin && (
+                                            <div className="bg-background-dark/50 rounded-2xl p-6 border border-border-dark space-y-4">
+                                                <h4 className="text-xs font-black uppercase tracking-widest text-text-secondary">Review Decision</h4>
+                                                <textarea
+                                                    className="w-full bg-surface-dark border border-border-dark rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-primary h-24 transition-all"
+                                                    placeholder="Add approval/rejection remarks here..."
+                                                    value={remarks}
+                                                    onChange={(e) => setRemarks(e.target.value)}
+                                                />
+                                                <div className="flex gap-4">
+                                                    <button
+                                                        onClick={() => handleReview('REJECT')}
+                                                        disabled={processing}
+                                                        className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"
+                                                    >
+                                                        <span className="material-symbols-outlined">close</span>
+                                                        Reject PO
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleReview('APPROVE')}
+                                                        disabled={processing}
+                                                        className="flex-[2] bg-primary hover:bg-primary/90 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20"
+                                                    >
+                                                        <span className="material-symbols-outlined">check_circle</span>
+                                                        Approve & Release
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
                             ) : (

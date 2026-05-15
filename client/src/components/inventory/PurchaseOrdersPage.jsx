@@ -2,9 +2,12 @@ import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
+import { getCurrentUser } from '../../services/authService';
 
 export default function PurchaseOrdersPage() {
     const Layout = usePortalLayout();
+    const user = getCurrentUser();
+    const isAdmin = ['ADMIN', 'SUPER_ADMIN', 'SUPER_USER'].includes(user?.role);
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const [orders, setOrders] = useState([]);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -112,7 +115,7 @@ export default function PurchaseOrdersPage() {
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
-            
+
             notifySuccess(`PDF Generated: PO_${poNumber}.pdf`);
         } catch (err) {
             console.error('PDF Download Error:', err);
@@ -122,8 +125,8 @@ export default function PurchaseOrdersPage() {
         }
     };
 
-    const filteredOrders = filterStatus === 'ALL' 
-        ? orders 
+    const filteredOrders = filterStatus === 'ALL'
+        ? orders
         : orders.filter(o => o.status === filterStatus);
 
     const getStatusColor = (status) => {
@@ -152,11 +155,10 @@ export default function PurchaseOrdersPage() {
                                 <button
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
-                                        filterStatus === status 
-                                        ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${filterStatus === status
+                                        ? 'bg-primary text-white shadow-lg shadow-primary/20'
                                         : 'text-text-secondary hover:text-white'
-                                    }`}
+                                        }`}
                                 >
                                     {status.replace(/_/g, ' ')}
                                 </button>
@@ -177,14 +179,13 @@ export default function PurchaseOrdersPage() {
                                 </div>
                             ) : (
                                 filteredOrders.map(order => (
-                                    <button 
+                                    <button
                                         key={order._id || order.id}
                                         onClick={() => setSelectedOrder(order)}
-                                        className={`w-full text-left p-4 rounded-xl border transition-all group ${
-                                            selectedOrder?.id === order.id 
-                                            ? 'bg-primary border-primary shadow-lg shadow-primary/10' 
+                                        className={`w-full text-left p-4 rounded-xl border transition-all group ${selectedOrder?.id === order.id
+                                            ? 'bg-primary border-primary shadow-lg shadow-primary/10'
                                             : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex justify-between items-start mb-1">
                                             <span className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-white' : 'text-primary'}`}>{order.poNumber}</span>
@@ -192,7 +193,7 @@ export default function PurchaseOrdersPage() {
                                                 {order.status}
                                             </span>
                                         </div>
-                                        <div className={`font-bold truncate text-sm ${selectedOrder?.id === order.id ? 'text-white' : 'text-white/90'}`}>{order.vendor?.name}</div>
+                                        <div className={`font-bold truncate text-sm ${selectedOrder?.id === order.id ? 'text-white' : 'text-slate-700'}`}>{order.vendor?.name}</div>
                                         <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
                                             <div className={`text-[9px] uppercase font-black ${selectedOrder?.id === order.id ? 'text-white/60' : 'text-text-secondary'}`}>
                                                 {order.lines?.length || 0} Items
@@ -219,7 +220,7 @@ export default function PurchaseOrdersPage() {
                                             </span>
                                         </div>
                                         <div className="flex gap-2">
-                                            <button 
+                                            <button
                                                 onClick={() => handleDownloadPDF(selectedOrder.id || selectedOrder._id, selectedOrder.poNumber)}
                                                 className="flex items-center gap-2 bg-[#001f3f] text-white px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-primary transition-all"
                                             >
@@ -237,7 +238,7 @@ export default function PurchaseOrdersPage() {
                                     <div className="bg-white rounded-sm shadow-[0_10px_40px_rgba(0,0,0,0.3)] mx-auto p-12 max-w-[850px] text-slate-800 font-sans min-h-[1000px] relative overflow-hidden">
                                         {/* Watermark/Accent */}
                                         <div className="absolute top-0 left-0 w-full h-1 bg-[#2b45a2]"></div>
-                                        
+
                                         <div className="flex justify-between items-start mb-12">
                                             <div className="flex gap-4">
                                                 <div className="size-16 bg-[#001f3f] flex items-center justify-center rounded-sm">
@@ -246,8 +247,8 @@ export default function PurchaseOrdersPage() {
                                                 <div>
                                                     <h2 className="text-xl font-bold tracking-tight text-slate-900 leading-none mb-1">ENARXI INNOVATIONS PVT LTD</h2>
                                                     <p className="text-[10px] text-slate-500 leading-relaxed max-w-[200px]">
-                                                        No. 23, Sripuram Colony, Vairalur,<br/>
-                                                        St. Thomas Mount, Chennai - 600016<br/>
+                                                        No. 23, Sripuram Colony, Vairalur,<br />
+                                                        St. Thomas Mount, Chennai - 600016<br />
                                                         Ph: +91-9600676639 | info@enarxi.com
                                                     </p>
                                                 </div>
@@ -275,7 +276,7 @@ export default function PurchaseOrdersPage() {
                                                 <div className="text-[10px] font-black text-[#2b45a2] uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">Ship To</div>
                                                 <div className="text-sm font-bold text-slate-900 mb-1">Enarxi Operations Hub</div>
                                                 <div className="text-[11px] text-slate-500 leading-relaxed mb-3">
-                                                    Warehouse Wing B, Sector 5, Logistics Park<br/>
+                                                    Warehouse Wing B, Sector 5, Logistics Park<br />
                                                     Chennai - 600096
                                                 </div>
                                                 <div className="text-[10px] font-bold text-slate-400">Contact: <span className="text-slate-700 ml-1">Logistics Dept</span></div>
@@ -318,10 +319,10 @@ export default function PurchaseOrdersPage() {
                                                     <span className="text-slate-400 uppercase tracking-widest">Total Tax (GST):</span>
                                                     <span className="text-slate-900">INR {(selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0) - selectedOrder.lines?.reduce((sum, l) => sum + (Number(l.rate) * Number(l.orderQuantity)), 0)).toFixed(2)}</span>
                                                 </div>
-                                                <div className="bg-[#001f3f] text-white p-4 rounded flex justify-between items-center shadow-lg">
+                                                <div className="bg-white border-2 border-[#001f3f] text-[#001f3f] p-4 rounded flex justify-between items-center shadow-lg">
                                                     <span className="text-lg font-serif italic">Grand Total:</span>
                                                     <div className="text-right">
-                                                        <div className="text-[8px] uppercase font-black opacity-60">INR</div>
+                                                        <div className="text-[8px] uppercase font-black text-[#001f3f]/60">INR</div>
                                                         <div className="text-xl font-bold">₹{selectedOrder.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0).toLocaleString()}</div>
                                                     </div>
                                                 </div>
@@ -336,27 +337,27 @@ export default function PurchaseOrdersPage() {
 
                                     {/* Action Footers (Review/Approve) */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
-                                        {selectedOrder.status === 'PENDING_ADMIN_APPROVAL' && (
+                                        {selectedOrder.status === 'PENDING_ADMIN_APPROVAL' && isAdmin && (
                                             <div className="bg-[#10b981]/10 border border-[#10b981]/20 rounded-xl p-6 col-span-2">
                                                 <h4 className="text-white font-bold mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-emerald-400">rate_review</span>
                                                     Administrative Review
                                                 </h4>
-                                                <textarea 
+                                                <textarea
                                                     className="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white text-sm outline-none focus:border-emerald-400 mb-4 h-24"
                                                     placeholder="Enter approval/rejection remarks..."
                                                     value={reviewRemarks}
                                                     onChange={(e) => setReviewRemarks(e.target.value)}
                                                 ></textarea>
                                                 <div className="flex gap-3">
-                                                    <button 
+                                                    <button
                                                         disabled={processing}
                                                         onClick={() => handleReview(selectedOrder.id || selectedOrder._id, 'APPROVED')}
                                                         className="flex-1 bg-emerald-500 text-black font-black py-3 rounded-xl uppercase tracking-widest hover:bg-emerald-400 transition-all disabled:opacity-50"
                                                     >
                                                         Approve PO
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         disabled={processing}
                                                         onClick={() => handleReview(selectedOrder.id || selectedOrder._id, 'REJECTED')}
                                                         className="flex-1 bg-red-500 text-white font-black py-3 rounded-xl uppercase tracking-widest hover:bg-red-400 transition-all disabled:opacity-50"
