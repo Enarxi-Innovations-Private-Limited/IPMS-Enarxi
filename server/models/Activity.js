@@ -14,7 +14,7 @@ const activitySchema = new mongoose.Schema({
             'INV_STOCK_ADJUST', 'INV_STOCK_APPROVE',
             'INV_DISPATCH', 'INV_DISPATCH_ACK',
             'INV_PO_CREATE', 'INV_PO_REVIEW', 'INV_PO_PLACE',
-            'INV_INWARD', 'INV_STOCK_INWARD', 'INV_STORE_CONFIRM'],
+            'INV_INWARD', 'INV_STOCK_INWARD', 'INV_STORE_CONFIRM', 'INV_SHORTAGE_APPROVED'],
     },
     message: {
         type: String,

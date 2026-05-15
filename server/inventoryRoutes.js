@@ -1479,27 +1479,25 @@ router.post('/confirmStoreAvailability', async (req, res) => {
                 }
 
                 // RESERVATION ADJUSTMENT LOGIC:
-                // When a Store Request is routed, the full quantity is reserved.
-                // If the Store Manager reports a shortage, we must release the reserved quantity for that shortage amount.
+                // Use the tracked reservedQuantity instead of assuming requestedQuantity
                 const previousReservedTarget = line.status === 'PENDING'
-                    ? requestedQuantity
+                    ? (line.reservedQuantity || 0)
                     : previousConfirmedQuantity;
                 const confirmationIncrease = actualQuantity - previousReservedTarget;
                 
                 if (confirmationIncrease < 0) {
                     // Manager reduced confirmed quantity (increased shortage) -> Release reservation
-                    await releaseItemReservation(line.itemId, Math.abs(confirmationIncrease), session);
+                    const toRelease = Math.abs(confirmationIncrease);
+                    await releaseItemReservation(line.itemId, toRelease, session);
+                    line.reservedQuantity = (line.reservedQuantity || 0) - toRelease;
                 } else if (confirmationIncrease > 0) {
                     // Manager increased confirmed quantity (reduced shortage) -> Reserve more if available
-                    // If stock is already sitting in reserved due to an earlier mismatch, reuse it.
                     const available = await getCurrentAvailableStock(line.itemId, session);
-                    const reserved = await getCurrentReservedStock(line.itemId, session);
-                    if (available < confirmationIncrease && reserved < actualQuantity) {
-                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousConfirmedQuantity} NOS available/reserved total.`);
+                    if (available < confirmationIncrease) {
+                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousReservedTarget} NOS available total.`);
                     }
-                    if (available >= confirmationIncrease) {
-                        await reserveItemQuantity(line.itemId, confirmationIncrease, session);
-                    }
+                    await reserveItemQuantity(line.itemId, confirmationIncrease, session);
+                    line.reservedQuantity = (line.reservedQuantity || 0) + confirmationIncrease;
                 }
 
                 line.confirmedQuantity = actualQuantity;
@@ -1851,9 +1849,10 @@ async function handleRouteMaterialRequestLine(req, res) {
         if (totalPlanned <= 0) {
             return res.status(400).json({ message: 'At least one routing quantity is required' });
         }
-        if (storeQty > maxStoreQuantity) {
-            return res.status(400).json({ message: `Store quantity cannot exceed available stock. Available now: ${maxStoreQuantity}.` });
-        }
+        
+        // Removed strict validation: Store quantity can now exceed available stock.
+        // Admin wants store manager to handle shortages formally.
+        
         if (purchaseQty > maxPurchaseQuantity) {
             return res.status(400).json({ message: `Purchase quantity cannot exceed shortage after available stock. Maximum purchase quantity now: ${maxPurchaseQuantity}.` });
         }
@@ -1861,7 +1860,12 @@ async function handleRouteMaterialRequestLine(req, res) {
         const before = request.toObject();
         const reservationChange = storeQty - previousStoreQty;
         if (reservationChange > 0) {
-            await reserveItemQuantity(line.itemId, reservationChange, session);
+            // Only reserve what is actually available now
+            const actualAvailable = await getCurrentAvailableStock(line.itemId, session);
+            const toReserve = Math.min(reservationChange, actualAvailable);
+            if (toReserve > 0) {
+                await reserveItemQuantity(line.itemId, toReserve, session);
+            }
         } else if (reservationChange < 0) {
             await releaseItemReservation(line.itemId, Math.abs(reservationChange), session);
         }
@@ -1888,6 +1892,10 @@ async function handleRouteMaterialRequestLine(req, res) {
         let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
 
         if (storeQty > 0) {
+            // Calculate how much we actually managed to reserve
+            const actualAvailableForReserve = (await getCurrentAvailableStock(line.itemId, session)) + previousStoreQty;
+            const finalReserved = Math.min(storeQty, actualAvailableForReserve);
+
             if (!storeBatch) {
                 const batchCount = await StoreRequestBatch.countDocuments();
                 storeBatch = new StoreRequestBatch({
@@ -1901,12 +1909,14 @@ async function handleRouteMaterialRequestLine(req, res) {
             if (existingStoreLine) {
                 existingStoreLine.itemId = line.itemId;
                 existingStoreLine.requestedQuantity = storeQty;
+                existingStoreLine.reservedQuantity = finalReserved;
                 existingStoreLine.pendingQuantity = storeQty;
             } else {
                 storeBatch.lines.push({
                     materialRequestLineId: lineId,
                     itemId: line.itemId,
                     requestedQuantity: storeQty,
+                    reservedQuantity: finalReserved,
                     pendingQuantity: storeQty
                 });
             }
@@ -2000,11 +2010,14 @@ async function handleRouteMaterialRequestBulk(req, res) {
             const maxPurchaseQuantity = Math.max(0, qty - maxStoreQuantity);
 
             if (routeTarget === 'store') {
-                if (qty > maxStoreQuantity) {
-                    return res.status(400).json({ message: `Store quantity cannot exceed available stock. Available now: ${maxStoreQuantity}.` });
-                }
+                // Removed strict validation: Store quantity can now exceed available stock.
+                // Admin wants store manager to handle shortages formally.
 
-                await reserveItemQuantity(line.itemId, qty, session);
+                const actualAvailable = await getCurrentAvailableStock(line.itemId, session);
+                const toReserve = Math.min(qty, actualAvailable);
+                if (toReserve > 0) {
+                    await reserveItemQuantity(line.itemId, toReserve, session);
+                }
                 line.plannedStoreQuantity = qty;
                 line.plannedPurchaseQuantity = 0;
                 line.status = 'ROUTED_TO_STORE';
@@ -2024,12 +2037,14 @@ async function handleRouteMaterialRequestBulk(req, res) {
                 if (existingStoreLine) {
                     existingStoreLine.itemId = line.itemId;
                     existingStoreLine.requestedQuantity = qty;
+                    existingStoreLine.reservedQuantity = toReserve;
                     existingStoreLine.pendingQuantity = qty;
                 } else {
                     storeBatch.lines.push({
                         materialRequestLineId: id,
                         itemId: line.itemId,
                         requestedQuantity: qty,
+                        reservedQuantity: toReserve,
                         pendingQuantity: qty
                     });
                 }
@@ -3854,6 +3869,94 @@ router.post('/admin/locations', (req, res, next) => {
 router.post('/store/confirm', (req, res, next) => {
     req.url = '/confirmStoreAvailability';
     router.handle(req, res, next);
+});
+
+router.post('/store/approve-shortage-request', async (req, res) => {
+    try {
+        console.log('[DEBUG] Shortage Approval Request Body:', req.body);
+        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) {
+            console.log('[DEBUG] Role check failed for user:', req.user?.role);
+            return;
+        }
+        
+        const { batchId, adminRemarks } = req.body;
+        if (!batchId) return res.status(400).json({ message: "Batch ID is required." });
+
+        const batch = await StoreRequestBatch.findById(batchId);
+        if (!batch) {
+            console.log('[DEBUG] Batch not found:', batchId);
+            return res.status(404).json({ message: "Store request batch not found." });
+        }
+
+        console.log('[DEBUG] Processing Batch:', batch.batchNumber, 'Current Status:', batch.status);
+
+        if (batch.status !== 'SHORTAGE_REPORTED') {
+            return res.status(400).json({ message: `Batch is in ${batch.status} status. Approval is only for SHORTAGE_REPORTED.` });
+        }
+
+        // Find or create a PENDING Purchase Request Batch for this MR
+        let purchaseBatch = await PurchaseRequestBatch.findOne({ 
+            materialRequestId: batch.materialRequestId, 
+            status: 'PENDING' 
+        });
+
+        let prLinesAdded = 0;
+        for (const line of batch.lines) {
+            if (line.shortageQuantity > 0) {
+                if (!purchaseBatch) {
+                    const batchCount = await PurchaseRequestBatch.countDocuments({});
+                    purchaseBatch = new PurchaseRequestBatch({
+                        batchNumber: `PRB-${Date.now()}-${batchCount + 1}`,
+                        materialRequestId: batch.materialRequestId,
+                        routedById: req.user._id,
+                        lines: []
+                    });
+                }
+                
+                const existingLineIndex = purchaseBatch.lines.findIndex(l => 
+                    String(l.materialRequestLineId) === String(line.materialRequestLineId)
+                );
+                
+                if (existingLineIndex !== -1) {
+                    purchaseBatch.lines[existingLineIndex].requiredQuantity += line.shortageQuantity;
+                    purchaseBatch.lines[existingLineIndex].pendingQuantity += line.shortageQuantity;
+                } else {
+                    purchaseBatch.lines.push({
+                        materialRequestLineId: line.materialRequestLineId,
+                        itemId: line.itemId,
+                        requiredQuantity: line.shortageQuantity,
+                        pendingQuantity: line.shortageQuantity
+                    });
+                }
+                line.status = 'SHORTAGE_APPROVED';
+                prLinesAdded++;
+            }
+        }
+
+        if (purchaseBatch) {
+            console.log('[DEBUG] Saving Purchase Request Batch with', prLinesAdded, 'lines');
+            await purchaseBatch.save();
+        }
+
+        // Update store request batch status to APPROVED
+        batch.status = 'SHORTAGE_APPROVED';
+        if (adminRemarks) {
+            batch.notes = (batch.notes ? batch.notes + '\n' : '') + `Admin Remarks: ${adminRemarks}`;
+        }
+        await batch.save();
+        
+        console.log('[DEBUG] Shortage approved successfully for batch:', batch.batchNumber);
+        
+        await logInvActivity('INV_SHORTAGE_APPROVED', `Shortage for batch ${batch.batchNumber} approved.`, req.user._id, req.user.name, batch._id, batch.batchNumber);
+
+        res.json({ success: true, message: "Shortage approved and routed to Purchase Manager." });
+    } catch (err) {
+        console.error('❌ [Approve Shortage Error]:', err);
+        res.status(400).json({ 
+            message: err.message || "Failed to approve shortage.",
+            stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+        });
+    }
 });
 
 router.post('/store/dispatch', (req, res, next) => {

@@ -2,23 +2,63 @@ import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
+import { getCurrentUser } from '../../services/authService';
 
 const getEntityId = (value) => value?.id || value?._id || '';
 
 export default function StoreRequestsPage() {
     const Layout = usePortalLayout();
+    const user = getCurrentUser();
+    const role = (user?.role || '').toUpperCase().replace(/\s+/g, '_');
+    const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'ADMIN'].includes(role);
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const [batches, setBatches] = useState([]);
     const [selectedBatch, setSelectedBatch] = useState(null);
     const [loading, setLoading] = useState(true);
     const [processing, setProcessing] = useState(false);
     const [remarks, setRemarks] = useState('');
+    const [adminRemarks, setAdminRemarks] = useState('');
+    const [lineQuantities, setLineQuantities] = useState({});
+    const [lineRemarks, setLineRemarks] = useState({});
+    const [stockLevels, setStockLevels] = useState({});
+
+    useEffect(() => {
+        if (selectedBatch) {
+            const initialQty = {};
+            const initialRem = {};
+            selectedBatch.lines.forEach(line => {
+                const id = getEntityId(line);
+                // For reported shortages or confirmed lines, use the confirmedQuantity
+                initialQty[id] = ['CONFIRMED', 'SHORTAGE_REPORTED', 'SHORTAGE_APPROVED'].includes(line.status)
+                    ? line.confirmedQuantity
+                    : (line.pendingQuantity || line.requestedQuantity || 0);
+                initialRem[id] = line.shortageReason || '';
+            });
+            setLineQuantities(initialQty);
+            setLineRemarks(initialRem);
+        } else {
+            setLineQuantities({});
+            setLineRemarks({});
+        }
+    }, [selectedBatch]);
 
     const fetchRequests = async () => {
         try {
             setLoading(true);
-            const res = await inventoryService.getStoreRequests();
+            const [res, stockRes] = await Promise.all([
+                inventoryService.getStoreRequests(),
+                inventoryService.getCurrentStock()
+            ]);
             setBatches(res.data);
+
+            // Build stock map
+            const stockMap = {};
+            stockRes.data.forEach(item => {
+                const id = getEntityId(item.itemId) || item.itemId;
+                stockMap[id] = (stockMap[id] || 0) + (item.availableQuantity || 0);
+            });
+            setStockLevels(stockMap);
+
             if (selectedBatch) {
                 const updated = res.data.find(b => getEntityId(b) === getEntityId(selectedBatch));
                 if (updated) setSelectedBatch(updated);
@@ -62,12 +102,32 @@ export default function StoreRequestsPage() {
             await inventoryService.confirmStoreRequest({
                 batchId: getEntityId(selectedBatch),
                 lineIds,
-                confirmedIdsArray: lineIds
+                confirmedIdsArray: [], // Sending empty to fall back to actualQuantities for manual control
+                actualQuantities: lineQuantities,
+                reasons: lineRemarks
             });
             notifySuccess('Stock availability confirmed.');
             fetchRequests();
         } catch (err) {
             notifyError(err.response?.data?.message || 'Confirmation failed');
+        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const handleApproveShortage = async () => {
+        if (!selectedBatch) return;
+        try {
+            setProcessing(true);
+            await inventoryService.approveStoreShortage({
+                batchId: getEntityId(selectedBatch),
+                adminRemarks
+            });
+            notifySuccess('Shortage approved and routed to Purchase Manager.');
+            setAdminRemarks('');
+            fetchRequests();
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Shortage approval failed');
         } finally {
             setProcessing(false);
         }
@@ -104,15 +164,14 @@ export default function StoreRequestsPage() {
                                     <button
                                         key={getEntityId(batch)}
                                         onClick={() => setSelectedBatch(batch)}
-                                        className={`w-full text-left p-4 rounded-xl border transition-all ${getEntityId(selectedBatch) === getEntityId(batch) 
-                                            ? 'bg-amber-500/5 border-amber-500 ring-1 ring-amber-500/30' 
+                                        className={`w-full text-left p-4 rounded-xl border transition-all ${getEntityId(selectedBatch) === getEntityId(batch)
+                                            ? 'bg-amber-500/5 border-amber-500 ring-1 ring-amber-500/30'
                                             : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'}`}
                                     >
                                         <div className="flex justify-between items-start mb-2">
                                             <span className="text-amber-400 font-bold text-sm tracking-tight">{batch.batchNumber}</span>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-widest uppercase ${
-                                                batch.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'
-                                            }`}>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-widest uppercase ${batch.status === 'CONFIRMED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'
+                                                }`}>
                                                 {batch.status}
                                             </span>
                                         </div>
@@ -170,43 +229,84 @@ export default function StoreRequestsPage() {
 
                                         <div className="space-y-4 mb-8">
                                             <h4 className="text-[10px] font-black text-text-secondary uppercase tracking-[0.2em] mb-4">Requested Items</h4>
-                                            <div className="divide-y divide-slate-200 shadow-sm bg-slate-50 rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                                                {selectedBatch.lines.map((line) => (
-                                                    <div key={getEntityId(line)} className="p-4 flex justify-between items-center group hover:bg-slate-100 transition-colors">
-                                                        <div className="flex gap-4">
-                                                            <div className="size-10 rounded-lg bg-white flex items-center justify-center border border-slate-200">
-                                                                <span className="material-symbols-outlined text-text-secondary text-sm">inventory_2</span>
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-[#556070] text-sm font-bold">{line.itemId?.name}</div>
-                                                                <div className="text-amber-500/70 text-[10px] font-mono">{line.itemId?.itemCode}</div>
-                                                                <div className="text-text-secondary text-[10px] uppercase mt-1">
-                                                                    Source: {line.source === 'PURCHASE_INWARD' ? 'Purchase inward' : 'Store stock'}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <div className="text-lg text-[#556070] font-black">
-                                                                {(line.status === 'CONFIRMED' ? line.confirmedQuantity : line.pendingQuantity || line.requestedQuantity || 0)} <span className="text-[10px] text-text-secondary font-medium uppercase">{line.itemId?.uom}</span>
-                                                            </div>
-                                                            <div className="text-[10px] text-text-secondary uppercase">Requested: {line.requestedQuantity}</div>
-                                                            <div className={`text-[10px] font-black uppercase mt-1 ${
-                                                                line.status === 'CONFIRMED'
-                                                                    ? 'text-emerald-400'
-                                                                    : line.status === 'SHORTAGE_REPORTED'
-                                                                        ? 'text-red-400'
-                                                                        : 'text-amber-400'
-                                                            }`}>
-                                                                {line.status.replace(/_/g, ' ')}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                            <div className="bg-background-dark/50 rounded-xl border border-border-dark overflow-hidden overflow-x-auto">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className="border-b border-border-dark text-[10px] font-black text-text-secondary uppercase tracking-widest bg-surface-dark/50">
+                                                            <th className="p-4 font-bold">Component Name</th>
+                                                            <th className="p-4 text-center font-bold">Actual Req Qty</th>
+                                                            <th className="p-4 text-center font-bold">Current Stock</th>
+                                                            <th className="p-4 text-center font-bold">Availability</th>
+                                                            <th className="p-4 font-bold">Remark</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-border-dark">
+                                                        {selectedBatch.lines.map((line) => {
+                                                            const lineId = getEntityId(line);
+                                                            const isEditable = !isAdmin && ['PENDING', 'SHORTAGE_REPORTED'].includes(selectedBatch.status);
+                                                            return (
+                                                                <tr key={lineId} className="group hover:bg-white/5 transition-colors">
+                                                                    <td className="p-4">
+                                                                        <div className="text-white text-sm font-bold">{line.itemId?.name}</div>
+                                                                        <div className="text-amber-500/70 text-[10px] font-mono">{line.itemId?.itemCode}</div>
+                                                                        <div className={`text-[10px] font-black uppercase mt-1 ${line.status === 'CONFIRMED'
+                                                                                ? 'text-emerald-400'
+                                                                                : line.status === 'SHORTAGE_REPORTED'
+                                                                                    ? 'text-red-400'
+                                                                                    : 'text-amber-400'
+                                                                            }`}>
+                                                                            {line.status.replace(/_/g, ' ')}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="p-4 text-center">
+                                                                        <div className="text-white font-bold">{line.requestedQuantity}</div>
+                                                                        <div className="text-[10px] text-text-secondary uppercase">{line.itemId?.uom}</div>
+                                                                    </td>
+                                                                    <td className="p-4 text-center">
+                                                                        <div className="text-white font-bold">{stockLevels[getEntityId(line.itemId)] || 0}</div>
+                                                                        <div className="text-[10px] text-text-secondary uppercase">{line.itemId?.uom}</div>
+                                                                    </td>
+                                                                    <td className="p-4 text-center">
+                                                                        {isEditable ? (
+                                                                            <input
+                                                                                type="number"
+                                                                                className="w-24 bg-surface-dark border border-border-dark rounded p-2 text-white text-center text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all mx-auto block"
+                                                                                value={lineQuantities[lineId] ?? ''}
+                                                                                onChange={(e) => setLineQuantities(prev => ({ ...prev, [lineId]: e.target.value }))}
+                                                                                min="0"
+                                                                                max={line.requestedQuantity}
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="text-white font-bold text-lg">
+                                                                                {['CONFIRMED', 'SHORTAGE_REPORTED', 'SHORTAGE_APPROVED'].includes(line.status)
+                                                                                    ? line.confirmedQuantity
+                                                                                    : line.requestedQuantity}
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td className="p-4">
+                                                                        {isEditable ? (
+                                                                            <input
+                                                                                type="text"
+                                                                                className="w-full min-w-[150px] bg-surface-dark border border-border-dark rounded p-2 text-white text-sm focus:ring-1 focus:ring-amber-500 outline-none transition-all"
+                                                                                placeholder="Add remark..."
+                                                                                value={lineRemarks[lineId] ?? ''}
+                                                                                onChange={(e) => setLineRemarks(prev => ({ ...prev, [lineId]: e.target.value }))}
+                                                                            />
+                                                                        ) : (
+                                                                            <div className="text-text-secondary text-sm">{line.shortageReason || '-'}</div>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
                                             </div>
                                         </div>
 
-                                        <div className="space-y-4 pt-6 border-t border-slate-200">
-                                            {['PENDING', 'SHORTAGE_REPORTED'].includes(selectedBatch.status) && (
+                                        <div className="space-y-4 pt-6 border-t border-border-dark">
+                                            {!isAdmin && ['PENDING', 'SHORTAGE_REPORTED'].includes(selectedBatch.status) && (
                                                 <button
                                                     onClick={handleConfirmAllAvailable}
                                                     disabled={processing}
@@ -216,6 +316,33 @@ export default function StoreRequestsPage() {
                                                     {processing ? 'Confirming...' : selectedBatch.status === 'SHORTAGE_REPORTED' ? 'Reconfirm Available Stock' : 'Confirm Available Stock'}
                                                 </button>
                                             )}
+
+                                            {isAdmin && selectedBatch.status === 'SHORTAGE_REPORTED' && (
+                                                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 mt-6">
+                                                    <div className="flex items-center gap-2 mb-4">
+                                                        <span className="material-symbols-outlined text-red-400">warning</span>
+                                                        <h3 className="text-red-400 font-bold uppercase tracking-widest text-sm">Admin Shortage Approval</h3>
+                                                    </div>
+                                                    <p className="text-text-secondary text-xs mb-4">
+                                                        This batch has a reported shortage. Review the remarks and approve to route the shortage to the Purchase Manager.
+                                                    </p>
+                                                    <textarea
+                                                        className="w-full bg-surface-dark border border-border-dark rounded-xl p-3 text-white text-sm outline-none focus:ring-1 focus:ring-red-500 h-20 transition-all mb-4"
+                                                        placeholder="Add admin remarks..."
+                                                        value={adminRemarks}
+                                                        onChange={(e) => setAdminRemarks(e.target.value)}
+                                                    ></textarea>
+                                                    <button
+                                                        onClick={handleApproveShortage}
+                                                        disabled={processing}
+                                                        className="w-full bg-red-500 hover:bg-red-400 disabled:opacity-50 text-black font-black uppercase tracking-[0.1em] py-3 rounded-xl transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
+                                                    >
+                                                        <span className="material-symbols-outlined font-bold">verified</span>
+                                                        {processing ? 'Processing...' : 'Approve Shortage & Route to Purchase'}
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             <div>
                                                 <label className="block text-[10px] font-black text-text-secondary uppercase tracking-widest mb-2">Dispatch Remarks</label>
                                                 <textarea
@@ -229,16 +356,16 @@ export default function StoreRequestsPage() {
                                             <div className="flex gap-4">
                                                 <button
                                                     onClick={handleDispatch}
-                                                    disabled={processing || selectedBatch.status !== 'CONFIRMED'}
+                                                    disabled={processing || !['CONFIRMED', 'SHORTAGE_APPROVED'].includes(selectedBatch.status)}
                                                     className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-black uppercase tracking-[0.1em] py-4 rounded-xl transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2"
                                                 >
                                                     <span className="material-symbols-outlined font-bold">local_shipping</span>
                                                     {processing ? 'Processing...' : 'Confirm Dispatch'}
                                                 </button>
                                             </div>
-                                            {selectedBatch.status !== 'CONFIRMED' && (
+                                            {!['CONFIRMED', 'SHORTAGE_APPROVED'].includes(selectedBatch.status) && (
                                                 <p className="text-center text-amber-500/70 text-[10px] font-bold uppercase tracking-widest">
-                                                    Waiting for availability confirmation or inward completion
+                                                    Waiting for availability confirmation or admin shortage approval
                                                 </p>
                                             )}
                                         </div>
