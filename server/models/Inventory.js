@@ -146,7 +146,7 @@ const StoreRequestBatchSchema = new mongoose.Schema({
     materialRequestId: { type: mongoose.Schema.Types.ObjectId, ref: 'MaterialRequest', required: true },
     status: { 
         type: String, 
-        enum: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED', 'IN_DISPATCH', 'DISPATCHED', 'CANCELLED'],
+        enum: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED', 'SHORTAGE_APPROVED', 'IN_DISPATCH', 'DISPATCHED', 'CANCELLED'],
         default: 'PENDING'
     },
     routedById: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -161,7 +161,7 @@ const StoreRequestBatchSchema = new mongoose.Schema({
         shortageQuantity: { type: Number, default: 0 },
         status: { 
             type: String, 
-            enum: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED'],
+            enum: ['PENDING', 'CONFIRMED', 'SHORTAGE_REPORTED', 'SHORTAGE_APPROVED'],
             default: 'PENDING'
         },
         source: { type: String, enum: ['STOCK', 'PURCHASE_INWARD'], default: 'STOCK' },

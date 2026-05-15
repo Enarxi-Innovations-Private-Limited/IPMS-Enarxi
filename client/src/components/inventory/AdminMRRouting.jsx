@@ -188,13 +188,14 @@ export default function AdminMRRouting() {
                                                     >
                                                         Route to Store
                                                     </button>
-                                                    <button
+                                                    {/* Hide Route to Purchase button as per user request */}
+                                                    {/* <button
                                                         onClick={() => handleBulkRoute('purchase')}
                                                         disabled={processing}
                                                         className="px-3 py-1.5 bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded text-[10px] font-black uppercase tracking-widest hover:bg-amber-500/30 transition-all disabled:opacity-50"
                                                     >
                                                         Route to Purchase
-                                                    </button>
+                                                    </button> */}
                                                 </div>
                                             )}
                                         </div>
@@ -221,7 +222,9 @@ export default function AdminMRRouting() {
                                                     <th className="pb-4">Component</th>
                                                     <th className="pb-4 text-center">Required</th>
                                                     <th className="pb-4 text-center">Available</th>
-                                                    <th className="pb-4 px-4">Routing Plan</th>
+                                                    <th className="pb-4 text-center">Store</th>
+                                                    <th className="pb-4 text-center">Purchase</th>
+                                                    <th className="pb-4"></th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border-dark">
@@ -255,49 +258,55 @@ export default function AdminMRRouting() {
                                                                     {line.availableAtUpload || 0}
                                                                 </span>
                                                             </td>
-                                                            <td className="py-4 px-4">
+                                                            <td className="py-4 text-center">
                                                                 {line.status === 'SUBMITTED' ? (
-                                                                    <div className="flex items-center gap-2">
-                                                                        <div className="flex-1 flex gap-1">
-                                                                            <input
-                                                                                type="number"
-                                                                                placeholder="Store"
-                                                                                className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-emerald-400 font-bold outline-none focus:border-emerald-500"
-                                                                                defaultValue={Math.min(line.requiredQuantity, line.availableAtUpload || 0)}
-                                                                                id={`store-${lineId}`}
-                                                                            />
-                                                                            <input
-                                                                                type="number"
-                                                                                placeholder="Purchase"
-                                                                                className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-amber-400 font-bold outline-none focus:border-amber-500"
-                                                                                defaultValue={Math.max(0, line.requiredQuantity - (line.availableAtUpload || 0))}
-                                                                                id={`pur-${lineId}`}
-                                                                            />
-                                                                        </div>
-                                                                        <button
-                                                                            disabled={processing}
-                                                                            onClick={() => {
-                                                                                const storeInput = document.getElementById(`store-${lineId}`);
-                                                                                const purchaseInput = document.getElementById(`pur-${lineId}`);
-                                                                                const storeQty = parseFloat(storeInput?.value || '0');
-                                                                                const purchaseQty = parseFloat(purchaseInput?.value || '0');
-                                                                                handleRouteLine(lineId, storeQty, purchaseQty);
-                                                                            }}
-                                                                            className="p-1.5 rounded bg-primary text-white hover:bg-primary/80 transition-colors"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-sm">check</span>
-                                                                        </button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <div className="flex gap-2 text-[10px] font-bold">
-                                                                            {line.plannedStoreQuantity > 0 && <span className="text-emerald-400">Store: {line.plannedStoreQuantity}</span>}
-                                                                            {line.plannedPurchaseQuantity > 0 && <span className="text-amber-400">Purchase: {line.plannedPurchaseQuantity}</span>}
-                                                                        </div>
-                                                                        <span className="text-[9px] uppercase tracking-tighter text-text-secondary">{line.status?.replace(/_/g, ' ')}</span>
-                                                                    </div>
-                                                                )}
-                                                            </td>
+                                                                     <input
+                                                                         type="number"
+                                                                         placeholder="Store"
+                                                                         className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-emerald-400 font-bold outline-none focus:border-emerald-500 mx-auto block"
+                                                                         defaultValue={Math.min(line.requiredQuantity, line.availableAtUpload || 0)}
+                                                                         id={`store-${lineId}`}
+                                                                     />
+                                                                 ) : (
+                                                                     <div className="text-[10px] font-bold text-emerald-400">
+                                                                         {line.plannedStoreQuantity > 0 ? line.plannedStoreQuantity : '-'}
+                                                                     </div>
+                                                                 )}
+                                                             </td>
+                                                             <td className="py-4 text-center">
+                                                                 {line.status === 'SUBMITTED' ? (
+                                                                     <input
+                                                                         type="number"
+                                                                         placeholder="Purchase"
+                                                                         className="w-16 bg-background-dark border border-border-dark rounded p-1 text-xs text-amber-400 font-bold outline-none focus:border-amber-500 mx-auto block"
+                                                                         defaultValue={Math.max(0, line.requiredQuantity - (line.availableAtUpload || 0))}
+                                                                         id={`pur-${lineId}`}
+                                                                     />
+                                                                 ) : (
+                                                                     <div className="text-[10px] font-bold text-amber-400">
+                                                                         {line.plannedPurchaseQuantity > 0 ? line.plannedPurchaseQuantity : '-'}
+                                                                     </div>
+                                                                 )}
+                                                             </td>
+                                                             <td className="py-4 px-2">
+                                                                 {line.status === 'SUBMITTED' ? (
+                                                                     <button
+                                                                         disabled={processing}
+                                                                         onClick={() => {
+                                                                             const storeInput = document.getElementById(`store-${lineId}`);
+                                                                             const purchaseInput = document.getElementById(`pur-${lineId}`);
+                                                                             const storeQty = parseFloat(storeInput?.value || '0');
+                                                                             const purchaseQty = parseFloat(purchaseInput?.value || '0');
+                                                                             handleRouteLine(lineId, storeQty, purchaseQty);
+                                                                         }}
+                                                                         className="p-1.5 rounded bg-primary text-white hover:bg-primary/80 transition-colors"
+                                                                     >
+                                                                         <span className="material-symbols-outlined text-sm font-bold">check</span>
+                                                                     </button>
+                                                                 ) : (
+                                                                     <span className="text-[9px] uppercase tracking-tighter text-text-secondary font-black">{line.status?.replace(/_/g, ' ')}</span>
+                                                                 )}
+                                                             </td>
                                                         </tr>
                                                     );
                                                 })}

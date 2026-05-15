@@ -98,6 +98,7 @@ const inventoryService = {
   confirmDispatch: (dispatchId, engineerRemarks, receiptAction = 'accept') =>
     inventoryApi.post('acknowledgeDispatch', { dispatchId, engineerRemarks, receiptAction }),
   confirmStoreRequest: (data) => inventoryApi.post('store/confirm', data),
+  approveStoreShortage: (data) => inventoryApi.post('store/approve-shortage-request', data),
   transferStock: (data) => inventoryApi.post('stock/transfer', data),
   
   // Audit Logs
