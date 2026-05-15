@@ -156,6 +156,7 @@ const StoreRequestBatchSchema = new mongoose.Schema({
         materialRequestLineId: String,
         itemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Item', required: true },
         requestedQuantity: { type: Number, required: true },
+        reservedQuantity: { type: Number, default: 0 },
         pendingQuantity: { type: Number, required: true },
         confirmedQuantity: { type: Number, default: 0 },
         shortageQuantity: { type: Number, default: 0 },

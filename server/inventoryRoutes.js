@@ -1416,27 +1416,25 @@ router.post('/confirmStoreAvailability', async (req, res) => {
                 }
 
                 // RESERVATION ADJUSTMENT LOGIC:
-                // When a Store Request is routed, the full quantity is reserved.
-                // If the Store Manager reports a shortage, we must release the reserved quantity for that shortage amount.
+                // Use the tracked reservedQuantity instead of assuming requestedQuantity
                 const previousReservedTarget = line.status === 'PENDING'
-                    ? requestedQuantity
+                    ? (line.reservedQuantity || 0)
                     : previousConfirmedQuantity;
                 const confirmationIncrease = actualQuantity - previousReservedTarget;
                 
                 if (confirmationIncrease < 0) {
                     // Manager reduced confirmed quantity (increased shortage) -> Release reservation
-                    await releaseItemReservation(line.itemId, Math.abs(confirmationIncrease), session);
+                    const toRelease = Math.abs(confirmationIncrease);
+                    await releaseItemReservation(line.itemId, toRelease, session);
+                    line.reservedQuantity = (line.reservedQuantity || 0) - toRelease;
                 } else if (confirmationIncrease > 0) {
                     // Manager increased confirmed quantity (reduced shortage) -> Reserve more if available
-                    // If stock is already sitting in reserved due to an earlier mismatch, reuse it.
                     const available = await getCurrentAvailableStock(line.itemId, session);
-                    const reserved = await getCurrentReservedStock(line.itemId, session);
-                    if (available < confirmationIncrease && reserved < actualQuantity) {
-                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousConfirmedQuantity} NOS available/reserved total.`);
+                    if (available < confirmationIncrease) {
+                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousReservedTarget} NOS available total.`);
                     }
-                    if (available >= confirmationIncrease) {
-                        await reserveItemQuantity(line.itemId, confirmationIncrease, session);
-                    }
+                    await reserveItemQuantity(line.itemId, confirmationIncrease, session);
+                    line.reservedQuantity = (line.reservedQuantity || 0) + confirmationIncrease;
                 }
 
                 line.confirmedQuantity = actualQuantity;
@@ -1831,6 +1829,10 @@ async function handleRouteMaterialRequestLine(req, res) {
         let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: 'PENDING' });
 
         if (storeQty > 0) {
+            // Calculate how much we actually managed to reserve
+            const actualAvailableForReserve = (await getCurrentAvailableStock(line.itemId, session)) + previousStoreQty;
+            const finalReserved = Math.min(storeQty, actualAvailableForReserve);
+
             if (!storeBatch) {
                 const batchCount = await StoreRequestBatch.countDocuments();
                 storeBatch = new StoreRequestBatch({
@@ -1844,12 +1846,14 @@ async function handleRouteMaterialRequestLine(req, res) {
             if (existingStoreLine) {
                 existingStoreLine.itemId = line.itemId;
                 existingStoreLine.requestedQuantity = storeQty;
+                existingStoreLine.reservedQuantity = finalReserved;
                 existingStoreLine.pendingQuantity = storeQty;
             } else {
                 storeBatch.lines.push({
                     materialRequestLineId: lineId,
                     itemId: line.itemId,
                     requestedQuantity: storeQty,
+                    reservedQuantity: finalReserved,
                     pendingQuantity: storeQty
                 });
             }
@@ -1970,12 +1974,14 @@ async function handleRouteMaterialRequestBulk(req, res) {
                 if (existingStoreLine) {
                     existingStoreLine.itemId = line.itemId;
                     existingStoreLine.requestedQuantity = qty;
+                    existingStoreLine.reservedQuantity = toReserve;
                     existingStoreLine.pendingQuantity = qty;
                 } else {
                     storeBatch.lines.push({
                         materialRequestLineId: id,
                         itemId: line.itemId,
                         requestedQuantity: qty,
+                        reservedQuantity: toReserve,
                         pendingQuantity: qty
                     });
                 }
