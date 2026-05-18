@@ -12,11 +12,23 @@ function tabButtonClass(active) {
     return `px-4 py-2 rounded-lg text-xs font-bold transition-all ${active ? 'bg-primary text-white shadow-lg' : 'text-text-secondary hover:text-white'}`;
 }
 
+const reasonLabel = {
+    no_sku: 'Needs SKU mapping',
+    no_quote: 'No quote returned',
+    vendor_unmapped: 'Vendor not mapped'
+};
+
+function formatMappedSkus(mappings = []) {
+    const values = (mappings || [])
+        .filter((mapping) => mapping?.sku)
+        .map((mapping) => `${mapping.vendorName || mapping.vendorCode || 'Vendor'}: ${mapping.sku}`);
+    return values;
+}
+
 export default function PurchasePlanning() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const [tab, setTab] = useState('individual');
-    const [vendors, setVendors] = useState([]);
     const [queueRows, setQueueRows] = useState([]);
     const [combinedRows, setCombinedRows] = useState([]);
     const [orders, setOrders] = useState([]);
@@ -26,14 +38,15 @@ export default function PurchasePlanning() {
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
+    const [analyzing, setAnalyzing] = useState(false);
+    const [analysisSummary, setAnalysisSummary] = useState(null);
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [queueRes, combinedRes, vendorRes, orderRes] = await Promise.all([
+            const [queueRes, combinedRes, orderRes] = await Promise.all([
                 inventoryService.getPurchaseRequestQueue(),
                 inventoryService.getCombinedPurchaseDemand(),
-                inventoryService.getVendors(),
                 inventoryService.getPurchaseOrders()
             ]);
             const queue = queueRes.data || [];
@@ -43,7 +56,6 @@ export default function PurchasePlanning() {
 
             setQueueRows(queue);
             setCombinedRows(combinedRes.data || []);
-            setVendors(vendorRes.data || []);
             setOrders(orderRes.data || []);
             setSelectedBatchId(selectedFallbackId);
         } catch (err) {
@@ -70,12 +82,18 @@ export default function PurchasePlanning() {
             next[line.purchaseRequestLineId] = {
                 selected: false,
                 vendorId: '',
+                vendorName: '',
                 orderQuantity: String(line.pendingQuantity || 0),
                 rate: '',
-                gstPercent: '18'
+                gstPercent: '18',
+                resolved: false,
+                reason: '',
+                matchedSku: '',
+                quoteMeta: null
             };
         });
         setLineStates(next);
+        setAnalysisSummary(null);
     }, [selectedBatch?.id]);
 
     useEffect(() => {
@@ -84,12 +102,18 @@ export default function PurchasePlanning() {
             next[row.itemId] = {
                 selected: false,
                 vendorId: '',
+                vendorName: '',
                 orderQuantity: String(row.totalRequiredQuantity || 0),
                 rate: '',
-                gstPercent: '18'
+                gstPercent: '18',
+                resolved: false,
+                reason: '',
+                matchedSku: '',
+                quoteMeta: null
             };
         });
         setCombinedStates(next);
+        setAnalysisSummary(null);
     }, [combinedRows]);
 
     const individualPayload = useMemo(() => {
@@ -107,7 +131,10 @@ export default function PurchasePlanning() {
                 sourceLines: [{
                     purchaseRequestLineId: line.purchaseRequestLineId,
                     requestedQuantity: toNumber(line.pendingQuantity)
-                }]
+                }],
+                resolved: Boolean(lineStates[line.purchaseRequestLineId]?.resolved),
+                matchedSku: lineStates[line.purchaseRequestLineId]?.matchedSku || '',
+                quoteMeta: lineStates[line.purchaseRequestLineId]?.quoteMeta || null
             }));
     }, [selectedBatch, lineStates]);
 
@@ -126,12 +153,32 @@ export default function PurchasePlanning() {
                     sourceLines: (row.requestLines || []).map((entry) => ({
                         purchaseRequestLineId: entry.purchaseRequestLineId,
                         requestedQuantity: toNumber(entry.quantity)
-                    }))
+                    })),
+                    resolved: Boolean(combinedStates[row.itemId]?.resolved),
+                    matchedSku: combinedStates[row.itemId]?.matchedSku || '',
+                    quoteMeta: combinedStates[row.itemId]?.quoteMeta || null
                 })),
         [combinedRows, combinedStates]
     );
 
     const activePayload = tab === 'combined' ? combinedPayload : individualPayload;
+
+    const selectedIndividualLines = useMemo(
+        () => (selectedBatch?.lines || []).filter((line) => lineStates[line.purchaseRequestLineId]?.selected),
+        [selectedBatch, lineStates]
+    );
+
+    const selectedCombinedRows = useMemo(
+        () => (combinedRows || []).filter((row) => combinedStates[row.itemId]?.selected),
+        [combinedRows, combinedStates]
+    );
+
+    const unresolvedBlocking = useMemo(
+        () => activePayload.filter((line) => !line.resolved || !line.vendorId || line.rate <= 0 || !line.matchedSku),
+        [activePayload]
+    );
+
+    const canGenerate = activePayload.length > 0 && unresolvedBlocking.length === 0 && !generating;
 
     const updateIndividualState = (lineId, patch) => {
         setLineStates((prev) => ({
@@ -147,21 +194,140 @@ export default function PurchasePlanning() {
         }));
     };
 
-    const validatePayload = (payload) => {
-        if (!payload.length) {
-            notifyError('Select at least one line to generate purchase orders.');
-            return false;
+    const handleAnalyzeWithBom = async () => {
+        const lineIds = tab === 'individual'
+            ? selectedIndividualLines.map((line) => line.purchaseRequestLineId)
+            : selectedCombinedRows.flatMap((row) => (row.requestLines || []).map((entry) => entry.purchaseRequestLineId));
+
+        if (!lineIds.length) {
+            notifyError('Select at least one line before BOM analysis.');
+            return;
         }
-        const invalid = payload.find((line) => !line.vendorId || line.orderQuantity <= 0 || line.rate <= 0);
-        if (invalid) {
-            notifyError(`Vendor, quantity, and rate are required for ${invalid.itemCode || invalid.itemId}.`);
-            return false;
+
+        try {
+            setAnalyzing(true);
+            const response = await inventoryService.autoQuotePurchasePlanning({
+                batchId: tab === 'individual' ? selectedBatchId : null,
+                lineIds
+            });
+            const resultRows = response.data?.results || [];
+            setAnalysisSummary(response.data?.summary || null);
+
+            if (tab === 'individual') {
+                const byLine = new Map(resultRows.map((entry) => [entry.lineId, entry]));
+                setLineStates((prev) => {
+                    const next = { ...prev };
+                    selectedIndividualLines.forEach((line) => {
+                        const lineId = line.purchaseRequestLineId;
+                        const quoted = byLine.get(lineId);
+                        if (!quoted) {
+                            next[lineId] = {
+                                ...next[lineId],
+                                selected: true,
+                                resolved: false,
+                                reason: 'no_quote',
+                                vendorId: '',
+                                vendorName: '',
+                                rate: '',
+                                matchedSku: '',
+                                quoteMeta: null
+                            };
+                            return;
+                        }
+                        next[lineId] = {
+                            ...next[lineId],
+                            selected: true,
+                            resolved: Boolean(quoted.resolved),
+                            reason: quoted.reason || '',
+                            vendorId: quoted.vendorId || '',
+                            vendorName: quoted.vendorName || '',
+                            rate: quoted.rate ? String(quoted.rate) : '',
+                            matchedSku: quoted.matchedSku || '',
+                            quoteMeta: quoted.quoteMeta || null
+                        };
+                    });
+                    return next;
+                });
+            } else {
+                const byLine = new Map(resultRows.map((entry) => [entry.lineId, entry]));
+                setCombinedStates((prev) => {
+                    const next = { ...prev };
+                    selectedCombinedRows.forEach((row) => {
+                        const rowResults = (row.requestLines || [])
+                            .map((entry) => byLine.get(entry.purchaseRequestLineId))
+                            .filter(Boolean);
+                        if (!rowResults.length) {
+                            next[row.itemId] = {
+                                ...next[row.itemId],
+                                resolved: false,
+                                reason: 'no_quote',
+                                vendorId: '',
+                                vendorName: '',
+                                rate: '',
+                                matchedSku: '',
+                                quoteMeta: null,
+                                selected: true
+                            };
+                            return;
+                        }
+                        const unresolved = rowResults.find((entry) => !entry.resolved);
+                        const resolved = rowResults.find((entry) => entry.resolved);
+                        if (unresolved || !resolved) {
+                            next[row.itemId] = {
+                                ...next[row.itemId],
+                                resolved: false,
+                                reason: unresolved?.reason || 'no_quote',
+                                vendorId: '',
+                                vendorName: '',
+                                rate: '',
+                                matchedSku: '',
+                                quoteMeta: null,
+                                selected: true
+                            };
+                            return;
+                        }
+
+                        next[row.itemId] = {
+                            ...next[row.itemId],
+                            resolved: true,
+                            reason: '',
+                            vendorId: resolved.vendorId || '',
+                            vendorName: resolved.vendorName || '',
+                            rate: resolved.rate ? String(resolved.rate) : '',
+                            matchedSku: resolved.matchedSku || '',
+                            quoteMeta: resolved.quoteMeta || null,
+                            selected: true
+                        };
+                    });
+                    return next;
+                });
+            }
+
+            const unresolvedCount = (response.data?.summary?.unresolved || 0);
+            if (unresolvedCount > 0) {
+                notifyError(`BOM analysis completed with ${unresolvedCount} unresolved line(s). Fix SKU/vendor mapping and retry.`);
+            } else {
+                notifySuccess('BOM analysis completed. Vendor and rate auto-filled.');
+            }
+        } catch (err) {
+            const detail = err.response?.data?.detail;
+            const message = err.response?.data?.message || 'Failed to analyze selected lines with BOM.';
+            notifyError(detail ? `${message} ${detail}` : message);
+        } finally {
+            setAnalyzing(false);
         }
-        return true;
     };
 
     const handleGenerate = async () => {
-        if (!validatePayload(activePayload)) return;
+        if (!activePayload.length) {
+            notifyError('Select at least one line to generate purchase orders.');
+            return;
+        }
+        if (unresolvedBlocking.length > 0) {
+            notifyError('All selected lines must be BOM-resolved before PO generation.');
+            return;
+        }
+
         try {
             setGenerating(true);
             await inventoryService.generatePurchaseOrders({ payload: activePayload, notes });
@@ -209,14 +375,28 @@ export default function PurchasePlanning() {
                     ) : (
                         <>
                             {(tab === 'individual' || tab === 'combined') && (
-                                <div className="mb-4">
+                                <div className="mb-4 flex flex-wrap gap-3">
+                                    <button
+                                        onClick={handleAnalyzeWithBom}
+                                        disabled={analyzing}
+                                        className="bg-primary/90 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 disabled:opacity-50 transition-all active:scale-95"
+                                    >
+                                        {analyzing ? 'Analyzing BOM...' : 'Analyze with BOM'}
+                                    </button>
                                     <button
                                         onClick={handleGenerate}
-                                        disabled={generating}
-                                        className="bg-primary text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 disabled:opacity-50 transition-all active:scale-95"
+                                        disabled={!canGenerate}
+                                        className="bg-emerald-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/20 disabled:opacity-50 transition-all active:scale-95"
                                     >
                                         {generating ? 'Generating...' : 'Generate Vendor POs'}
                                     </button>
+                                </div>
+                            )}
+
+                            {analysisSummary && (
+                                <div className="mb-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-[#556070]">
+                                    BOM Summary: {analysisSummary.resolved}/{analysisSummary.total} resolved
+                                    {analysisSummary.unresolved > 0 ? `, ${analysisSummary.unresolved} unresolved` : ''}
                                 </div>
                             )}
 
@@ -257,63 +437,69 @@ export default function PurchasePlanning() {
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Sel</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Item</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Pending</th>
-                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor</th>
-                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Order Qty</th>
-                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor (Auto)</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate (Auto)</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">SKU</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-border-dark">
-                                                    {(selectedBatch?.lines || []).map((line) => (
-                                                        <tr key={line.purchaseRequestLineId} className="hover:bg-slate-50">
-                                                            <td className="px-4 py-3">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={lineStates[line.purchaseRequestLineId]?.selected || false}
-                                                                    onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { selected: e.target.checked })}
-                                                                    className="accent-primary"
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-3 text-[#556070]">
-                                                                <p className="font-semibold">{line.itemCode}</p>
-                                                                <p className="text-xs text-text-secondary">{line.itemName}</p>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center font-semibold text-[#556070]">{line.pendingQuantity}</td>
-                                                            <td className="px-4 py-3">
-                                                                <select
-                                                                    value={lineStates[line.purchaseRequestLineId]?.vendorId || ''}
-                                                                    onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { vendorId: e.target.value, selected: true })}
-                                                                    className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] outline-none focus:border-primary"
-                                                                >
-                                                                    <option value="">Select vendor</option>
-                                                                    {vendors.map((vendor) => (
-                                                                        <option key={vendor.id || vendor._id} value={vendor.id || vendor._id}>
-                                                                            {(vendor.vendorCode || '').trim()} - {vendor.name}
-                                                                        </option>
-                                                                    ))}
-                                                                </select>
-                                                            </td>
-                                                            <td className="px-4 py-3 text-center">
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="0.001"
-                                                                    value={lineStates[line.purchaseRequestLineId]?.orderQuantity || ''}
-                                                                    onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { orderQuantity: e.target.value, selected: true })}
-                                                                    className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] text-center outline-none focus:border-primary"
-                                                                />
-                                                            </td>
-                                                            <td className="px-4 py-3 text-right">
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step="0.01"
-                                                                    value={lineStates[line.purchaseRequestLineId]?.rate || ''}
-                                                                    onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { rate: e.target.value, selected: true })}
-                                                                    className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] text-right outline-none focus:border-primary"
-                                                                />
-                                                            </td>
-                                                        </tr>
-                                                    ))}
+                                                    {(selectedBatch?.lines || []).map((line) => {
+                                                        const state = lineStates[line.purchaseRequestLineId] || {};
+                                                        return (
+                                                            <tr key={line.purchaseRequestLineId} className="hover:bg-slate-50">
+                                                                <td className="px-4 py-3">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={state.selected || false}
+                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { selected: e.target.checked })}
+                                                                        className="accent-primary"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-3 text-[#556070]">
+                                                                    <p className="font-semibold">{line.itemCode}</p>
+                                                                    <p className="text-xs text-text-secondary">{line.itemName}</p>
+                                                                    {!state.matchedSku && formatMappedSkus(line.skuMappings).length > 0 && (
+                                                                        <div className="mt-1 space-y-1">
+                                                                            {formatMappedSkus(line.skuMappings).slice(0, 3).map((text) => (
+                                                                                <p key={text} className="text-[11px] text-slate-500">{text}</p>
+                                                                            ))}
+                                                                            {formatMappedSkus(line.skuMappings).length > 3 && (
+                                                                                <p className="text-[11px] text-slate-400">+{formatMappedSkus(line.skuMappings).length - 3} more</p>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-center">
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        value={state.orderQuantity || ''}
+                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { orderQuantity: e.target.value })}
+                                                                        className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-3 text-[#556070] text-sm">
+                                                                    {state.vendorName || '-'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-right text-[#556070] font-semibold">
+                                                                    {state.rate ? Number(state.rate).toFixed(2) : '-'}
+                                                                </td>
+                                                                <td className="px-4 py-3 text-xs text-text-secondary">
+                                                                    {state.matchedSku || formatMappedSkus(line.skuMappings).join(' | ') || '-'}
+                                                                </td>
+                                                                <td className="px-4 py-3">
+                                                                    {state.resolved ? (
+                                                                        <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
+                                                                    ) : state.reason ? (
+                                                                        <span className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
+                                                                    ) : (
+                                                                        <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -333,73 +519,87 @@ export default function PurchasePlanning() {
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Sel</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Item</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Total Required</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Order Qty</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor (Auto)</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate (Auto)</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">SKU</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Breakdown</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border-dark">
-                                                {combinedRows.map((row) => (
-                                                    <tr key={row.itemId} className="hover:bg-slate-50">
-                                                        <td className="px-4 py-3">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={combinedStates[row.itemId]?.selected || false}
-                                                                onChange={(e) => updateCombinedState(row.itemId, { selected: e.target.checked })}
-                                                                className="accent-primary"
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-3 text-[#556070]">
-                                                            <p className="font-semibold">{row.itemCode}</p>
-                                                            <p className="text-xs text-text-secondary">{row.itemName}</p>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center font-semibold text-[#556070]">{row.totalRequiredQuantity}</td>
-                                                        <td className="px-4 py-3">
-                                                            <select
-                                                                value={combinedStates[row.itemId]?.vendorId || ''}
-                                                                onChange={(e) => updateCombinedState(row.itemId, { vendorId: e.target.value, selected: true })}
-                                                                className="w-full bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] outline-none focus:border-primary"
-                                                            >
-                                                                <option value="">Select vendor</option>
-                                                                {vendors.map((vendor) => (
-                                                                    <option key={vendor.id || vendor._id} value={vendor.id || vendor._id}>
-                                                                        {(vendor.vendorCode || '').trim()} - {vendor.name}
-                                                                    </option>
+                                                {combinedRows.map((row) => {
+                                                    const state = combinedStates[row.itemId] || {};
+                                                    return (
+                                                        <tr key={row.itemId} className="hover:bg-slate-50">
+                                                            <td className="px-4 py-3">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={state.selected || false}
+                                                                    onChange={(e) => updateCombinedState(row.itemId, { selected: e.target.checked })}
+                                                                    className="accent-primary"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-[#556070]">
+                                                                <p className="font-semibold">{row.itemCode}</p>
+                                                                <p className="text-xs text-text-secondary">{row.itemName}</p>
+                                                                {!state.matchedSku && formatMappedSkus(row.skuMappings).length > 0 && (
+                                                                    <div className="mt-1 space-y-1">
+                                                                        {formatMappedSkus(row.skuMappings).slice(0, 3).map((text) => (
+                                                                            <p key={text} className="text-[11px] text-slate-500">{text}</p>
+                                                                        ))}
+                                                                        {formatMappedSkus(row.skuMappings).length > 3 && (
+                                                                            <p className="text-[11px] text-slate-400">+{formatMappedSkus(row.skuMappings).length - 3} more</p>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    value={state.orderQuantity || ''}
+                                                                    onChange={(e) => updateCombinedState(row.itemId, { orderQuantity: e.target.value })}
+                                                                    className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-[#556070] text-sm">{state.vendorName || '-'}</td>
+                                                            <td className="px-4 py-3 text-right text-[#556070] font-semibold">{state.rate ? Number(state.rate).toFixed(2) : '-'}</td>
+                                                            <td className="px-4 py-3 text-xs text-text-secondary">{state.matchedSku || formatMappedSkus(row.skuMappings).join(' | ') || '-'}</td>
+                                                            <td className="px-4 py-3">
+                                                                {state.resolved ? (
+                                                                    <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
+                                                                ) : state.reason ? (
+                                                                    <span className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
+                                                                ) : (
+                                                                    <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-text-secondary">
+                                                                {(row.requestLines || []).slice(0, 3).map((entry) => (
+                                                                    <p key={entry.purchaseRequestLineId}>{entry.materialRequestNumber} • {entry.quantity}</p>
                                                                 ))}
-                                                            </select>
-                                                        </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.001"
-                                                                value={combinedStates[row.itemId]?.orderQuantity || ''}
-                                                                onChange={(e) => updateCombinedState(row.itemId, { orderQuantity: e.target.value, selected: true })}
-                                                                className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] text-center outline-none focus:border-primary"
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <input
-                                                                type="number"
-                                                                min="0"
-                                                                step="0.01"
-                                                                value={combinedStates[row.itemId]?.rate || ''}
-                                                                onChange={(e) => updateCombinedState(row.itemId, { rate: e.target.value, selected: true })}
-                                                                className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-2 text-sm text-[#556070] text-right outline-none focus:border-primary"
-                                                            />
-                                                        </td>
-                                                        <td className="px-4 py-3 text-xs text-text-secondary">
-                                                            {(row.requestLines || []).slice(0, 3).map((entry) => (
-                                                                <p key={entry.purchaseRequestLineId}>{entry.materialRequestNumber} • {entry.quantity}</p>
-                                                            ))}
-                                                            {(row.requestLines || []).length > 3 && <p>+{row.requestLines.length - 3} more</p>}
-                                                        </td>
-                                                    </tr>
-                                                ))}
+                                                                {(row.requestLines || []).length > 3 && <p>+{row.requestLines.length - 3} more</p>}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
                                             </tbody>
                                         </table>
                                     </div>
+                                </div>
+                            )}
+
+                            {(tab === 'individual' || tab === 'combined') && unresolvedBlocking.length > 0 && (
+                                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                                    <p className="text-sm font-semibold text-amber-800 mb-1">PO generation blocked</p>
+                                    <p className="text-xs text-amber-700">Resolve these lines via BOM/SKU mapping before generating POs:</p>
+                                    <ul className="mt-2 text-xs text-amber-800 list-disc list-inside">
+                                        {unresolvedBlocking.slice(0, 8).map((line, idx) => (
+                                            <li key={`${line.itemCode}-${idx}`}>
+                                                {line.itemCode || line.itemId} — {!line.resolved ? 'Not resolved' : !line.matchedSku ? 'Missing matched SKU' : 'Missing vendor/rate'}
+                                            </li>
+                                        ))}
+                                    </ul>
                                 </div>
                             )}
 

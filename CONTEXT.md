@@ -9,21 +9,23 @@
 ## Unified Design System (Financial Suite)
 *   **Background**: `#ECF1FF` (Light Blue/Indigo)
 *   **Panels/Cards**: `#FFFFFF` (White)
-*   **Typography**: `#556070` (Slate Charcoal) - Used for primary text and headings.
+*   **Typography**: `#002045` (Deep Navy) - Updated from slate charcoal for better contrast and premium feel.
 *   **Status Indicators**: Consistent color coding (e.g., Emerald for Approved, Amber for Pending, Rose for Shortage).
 
 ## Critical Procurement Workflow
-1.  **Shortage Detection**: `StoreRequestsPage.jsx` allows reporting shortages during fulfillment.
-2.  **Approval**: Admins approve shortages, routing them to the `PurchaseRequestBatch` queue.
-3.  **Optimization**: `PurchasingHub.jsx` pulls these shortages into the Python BOM Engine via the `/api/inventory/shortages/send-to-bom` bridge.
-4.  **Vendor Allocation**: The BOM engine scrapes Robu, Evelta, Ktron, and Sharvi to find the best prices.
-5.  **Execution**: Results are exported to Excel or used to automatically fill vendor carts (Robu ₹10 rule enforced).
+1.  **Routing**: Admin routes Material Request lines. Stock is NOT reserved at this stage to prevent premature locking.
+2.  **Confirmation**: Store Manager verifies physical stock. This action triggers the actual inventory reservation.
+3.  **Shortage Detection**: If physical stock < system stock, `SHORTAGE_REPORTED` is flagged for admin review.
+4.  **Approval**: Admins approve shortages, routing them to the `PurchaseRequestBatch` queue.
+5.  **Optimization**: `PurchasingHub.jsx` pulls these shortages into the Python BOM Engine for vendor allocation.
+6.  **Dispatch**: Confirmed items are dispatched, releasing reservations and deducting from physical on-hand.
 
 ## Key Files & Modules
 *   **BOM Logic**: `server/BOM/app/processor.py` (Optimization) and `server/BOM/automation/cart.py` (Scrapers).
 *   **API Gateway**: `server.js` (Proxying and Auth).
 *   **Inventory Logic**: `server/inventoryRoutes.js` (Shortage management).
 *   **Purchasing UI**: `client/src/components/inventory/PurchasingHub.jsx`.
+*   **Authentication**: `client/src/components/auth/LoginPage.jsx` (Now using Navy branding).
 
 ## Security & Auth
 *   All routes are protected by `authMiddleware` (JWT).

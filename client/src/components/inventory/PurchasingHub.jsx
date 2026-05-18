@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import api from '../../services/api';
+import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
 export default function PurchasingHub() {
     const Layout = usePortalLayout();
+    const { error: notifyError, success: notifySuccess, info: notifyInfo } = useNotifier();
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [processing, setProcessing] = useState(false);
@@ -73,7 +75,10 @@ export default function PurchasingHub() {
     };
 
     const uploadFile = async () => {
-        if (!file) return alert("Please select a file first!");
+        if (!file) {
+            notifyError('Please select a file first.');
+            return;
+        }
         
         const formData = new FormData();
         formData.append('file', file);
@@ -95,7 +100,7 @@ export default function PurchasingHub() {
             setProgress(0);
         } catch (err) {
             console.error(err);
-            alert("Error connecting to BOM server via proxy. Ensure the service is running.");
+            notifyError(err.response?.data?.message || "Error connecting to BOM server via proxy. Ensure the service is running.");
         } finally {
             setUploading(false);
         }
@@ -105,7 +110,16 @@ export default function PurchasingHub() {
         try {
             setUploading(true);
             const response = await api.post('/inventory/shortages/send-to-bom');
-            const data = response.data.bomPreview;
+            const payload = response.data;
+            const data = payload.bomPreview;
+
+            if (!data) {
+                setColumns([]);
+                setResults(null);
+                setProgress(0);
+                notifyInfo(payload.message || 'No active purchase demand found in the queue.');
+                return;
+            }
             
             setColumns(data.columns || []);
             setMapping(prev => ({
@@ -115,10 +129,10 @@ export default function PurchasingHub() {
             }));
             setResults(null);
             setProgress(0);
-            alert(`Successfully pulled ${data.preview?.length || 0} items from Shortage Queue.`);
+            notifySuccess(`Successfully pulled ${data.preview?.length || 0} items from purchase demand.`);
         } catch (err) {
             console.error(err);
-            alert(err.response?.data?.message || "Failed to pull shortages.");
+            notifyError(err.response?.data?.message || "Failed to pull purchase demand.");
         } finally {
             setUploading(false);
         }
@@ -136,7 +150,7 @@ export default function PurchasingHub() {
 
         } catch (err) {
             console.error(err);
-            alert("Could not start processing. Ensure BOM server is connected.");
+            notifyError(err.response?.data?.message || "Could not start processing. Ensure BOM server is connected.");
             setProcessing(false);
         }
     };
@@ -202,7 +216,7 @@ export default function PurchasingHub() {
                                         className="w-full bg-[#ECF1FF] hover:bg-[#D9E4FF] text-violet-700 font-bold py-4 rounded-2xl transition-all flex flex-col items-center justify-center gap-1 border border-violet-200 group"
                                     >
                                         <span className="material-symbols-outlined text-3xl group-hover:scale-110 transition-transform">inventory_2</span>
-                                        <span className="text-sm">Pull from Shortage Queue</span>
+                                        <span className="text-sm">Pull from Purchase Queue</span>
                                     </button>
 
                                     <div className="relative py-2 flex items-center">
@@ -388,7 +402,7 @@ export default function PurchasingHub() {
                                     </div>
                                     <h3 className="text-xl font-bold text-[#556070] mb-2">Engine Idle</h3>
                                     <p className="text-[#556070]/60 max-w-sm font-medium leading-relaxed">
-                                        Import data from the inventory shortage queue or upload a manual BOM to trigger the AI price evaluator.
+                                        Import data from the purchase demand queue or upload a manual BOM to trigger the AI price evaluator.
                                     </p>
                                     
                                     <div className="mt-8 grid grid-cols-3 gap-4 w-full max-w-lg">

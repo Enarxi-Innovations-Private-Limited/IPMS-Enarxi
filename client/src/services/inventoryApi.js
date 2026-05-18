@@ -1,8 +1,8 @@
 import axios from 'axios';
 import { getToken, isTokenExpired, clearAuth } from './authService.js';
 
-// Use relative path to leverage Vite's proxy (resolves CORS issues)
-const API_URL = '/api/inventory/';
+// Use reverse-proxied API path in production; allow override if needed.
+const API_URL = import.meta.env.VITE_INVENTORY_API_URL || '/api/inventory/';
 
 const inventoryApi = axios.create({
   baseURL: API_URL,

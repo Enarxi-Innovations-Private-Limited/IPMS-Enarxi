@@ -1525,7 +1525,7 @@ export default function ManagerProjectsPage() {
                                         })()}
                                         max={selectedProject?.deadline ? new Date(selectedProject.deadline).toISOString().split('T')[0] : undefined}
                                         onChange={(e) => setAssignDeadline(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none [color-scheme:dark]"
+                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                     />
                                     {selectedProject?.deadline && (
                                         <p className="text-text-secondary text-xs mt-1">

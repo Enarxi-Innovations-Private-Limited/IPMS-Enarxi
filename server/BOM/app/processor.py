@@ -14,7 +14,21 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BOM_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(BOM_ROOT / ".env", override=True)
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Import the new automation logic
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), ".")))
@@ -1165,6 +1179,7 @@ class BOMProcessor:
     def process_bom(self, df: pd.DataFrame, mapping: Dict[str, Any], progress_callback=None) -> Dict[str, Any]:
         vendor_urls = {"ROBU": "https://robu.in", "EVELTA": "https://evelta.com", "ELEVTA": "https://evelta.com", "KTRON": "https://www.ktron.in", "SHARVI": "https://sharvielectronics.com", "ELEMENT14": "https://in.element14.com"}
         selected_vendors = mapping.get("vendors", list(vendor_urls.keys()))
+        skip_cart_phase = bool(mapping.get("skip_cart_phase", False))
         PARALLEL_VENDORS = {"ROBU", "EVELTA", "ELEVTA", "KTRON", "SHARVI", "ELEMENT14"}
         parallel_vendors = [v for v in selected_vendors if v in PARALLEL_VENDORS]
         processed_items = []
@@ -1352,6 +1367,23 @@ class BOMProcessor:
                 processed_items.append(item_data)
         finally:
             pass # ThreadPoolExecutor handles cleanup
+
+        if skip_cart_phase:
+            if progress_callback:
+                progress_callback(95, "Finalizing price-only results...")
+            for item in processed_items:
+                keys_to_remove = [k for k in item.keys() if "_tiers" in k]
+                for k in keys_to_remove:
+                    del item[k]
+            formatted_vendor_totals = {v: f"\u20B9{t:.2f}" for v, t in vendor_totals.items()}
+            return {
+                "items": processed_items,
+                "vendor_totals": formatted_vendor_totals,
+                "optimized_total": f"\u20B9{optimized_total:.2f}",
+                "vendors": selected_vendors,
+                "vendor_cart_urls": VENDOR_CART_URLS,
+                "price_only_mode": True
+            }
 
         # --- PHASE 2: SEQUENTIAL CART ADDITION PER VENDOR ---
         print("\n🚀 Phase 1 complete. Starting Phase 2: Sequential Cart Addition...")

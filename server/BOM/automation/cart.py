@@ -12,7 +12,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from playwright.sync_api import Page
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+BOM_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
+load_dotenv(BOM_ROOT / ".env", override=True)
 
 SESSION_DIR = Path(__file__).parent.parent / "session"
 

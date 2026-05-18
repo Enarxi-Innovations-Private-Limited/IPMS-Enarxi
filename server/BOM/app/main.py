@@ -5,9 +5,22 @@ import pandas as pd
 import io
 import json
 import asyncio
+import sys
+import traceback
 from .processor import BOMProcessor
 
 app = FastAPI()
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 # Headless API - No static files served directly from Python
 processor = BOMProcessor()
@@ -28,6 +41,10 @@ progress_state = {
 @app.get("/progress")
 async def get_progress():
     return JSONResponse(progress_state)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -109,6 +126,7 @@ async def inject_data(payload: dict):
             raise HTTPException(status_code=400, detail="No items provided.")
         
         df = pd.DataFrame(items)
+        df = df.replace([float('inf'), float('-inf')], "").fillna("")
         
         # Ensure standard column names if they don't exist
         if "component" not in df.columns and "Component" not in df.columns:
@@ -122,6 +140,10 @@ async def inject_data(payload: dict):
             "footprint": "footprint" if "footprint" in df.columns else None,
             "vendor_codes": {}
         }
+
+        for vendor in ["ROBU", "EVELTA", "ELEVTA", "KTRON", "SHARVI", "ELEMENT14"]:
+            if vendor in df.columns:
+                detected["vendor_codes"][vendor] = vendor
         
         # Save to memory
         current_data["df"] = df
@@ -154,10 +176,16 @@ async def process_bom(payload: dict):
         # If user selected vendors in UI, update mapping
         if "vendors" in user_mapping:
             # Re-map vendor selections to codes if needed
-            user_mapping["vendor_codes"] = current_data["detected_mapping"].get("vendor_codes", {})
+            vendor_codes = dict(current_data["detected_mapping"].get("vendor_codes", {}))
+            # Fallback: if injected payload has direct vendor columns (ROBU/EVELTA/KTRON/SHARVI),
+            # map vendor to same column name so processor can use those SKU values.
+            for vendor in user_mapping.get("vendors", []):
+                if vendor not in vendor_codes and vendor in current_data["df"].columns:
+                    vendor_codes[vendor] = vendor
+            user_mapping["vendor_codes"] = vendor_codes
             user_mapping["footprint"] = current_data["detected_mapping"].get("footprint")
 
-        print("🔥 API triggered processor via thread executor")
+        print("[BOM] API triggered processor via thread executor")
         
         # Reset progress
         progress_state["percent"] = 0
@@ -189,8 +217,12 @@ async def process_bom(payload: dict):
         
         return results
     except Exception as e:
-        print(f"❌ Error in /process: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        try:
+            traceback.print_exc()
+        except Exception:
+            pass
+        detail = str(e).strip() or "Unknown BOM processing error."
+        raise HTTPException(status_code=500, detail=detail)
 
 @app.get("/export")
 async def export_results():

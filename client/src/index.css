@@ -31,6 +31,9 @@ body {
 .light-theme [class*="bg-white"] td.text-white,
 .light-theme [class*="bg-white"] th.text-white,
 .light-theme [class*="bg-white"] label.text-white,
+.light-theme [class*="bg-white"] input.text-white,
+.light-theme [class*="bg-white"] select.text-white,
+.light-theme [class*="bg-white"] textarea.text-white,
 .light-theme [class*="bg-slate-50"] h1.text-white,
 .light-theme [class*="bg-slate-50"] h2.text-white,
 .light-theme [class*="bg-slate-50"] h3.text-white,
@@ -41,6 +44,9 @@ body {
 .light-theme [class*="bg-slate-50"] td.text-white,
 .light-theme [class*="bg-slate-50"] th.text-white,
 .light-theme [class*="bg-slate-50"] label.text-white,
+.light-theme [class*="bg-slate-50"] input.text-white,
+.light-theme [class*="bg-slate-50"] select.text-white,
+.light-theme [class*="bg-slate-50"] textarea.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h1.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h2.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h3.text-white,
@@ -50,8 +56,11 @@ body {
 .light-theme [class*="bg-[#ECF1FF]"] div.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] td.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] th.text-white,
-.light-theme [class*="bg-[#ECF1FF]"] label.text-white {
-  color: #556070 !important;
+.light-theme [class*="bg-[#ECF1FF]"] label.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] input.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] select.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] textarea.text-white {
+  color: #002045 !important;
 }
 
 .light-theme [class*="bg-white"] .hover\:text-white:hover,
@@ -71,6 +80,9 @@ body {
 .light-theme [class*="bg-surface-dark"] td.text-white,
 .light-theme [class*="bg-surface-dark"] th.text-white,
 .light-theme [class*="bg-surface-dark"] label.text-white,
+.light-theme [class*="bg-surface-dark"] input.text-white,
+.light-theme [class*="bg-surface-dark"] select.text-white,
+.light-theme [class*="bg-surface-dark"] textarea.text-white,
 .light-theme [class*="bg-background-dark"] h1.text-white,
 .light-theme [class*="bg-background-dark"] h2.text-white,
 .light-theme [class*="bg-background-dark"] h3.text-white,
@@ -80,8 +92,17 @@ body {
 .light-theme [class*="bg-background-dark"] div.text-white,
 .light-theme [class*="bg-background-dark"] td.text-white,
 .light-theme [class*="bg-background-dark"] th.text-white,
-.light-theme [class*="bg-background-dark"] label.text-white {
-  color: #556070 !important;
+.light-theme [class*="bg-background-dark"] label.text-white,
+.light-theme [class*="bg-background-dark"] input.text-white,
+.light-theme [class*="bg-background-dark"] select.text-white,
+.light-theme [class*="bg-background-dark"] textarea.text-white {
+  color: #002045 !important;
+}
+
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #002045 !important;
+  opacity: 0.6;
 }
 
 /* Keep button text readable on primary/semantic buttons */

@@ -289,21 +289,7 @@ export default function AdminMRRouting() {
                                                                  )}
                                                              </td>
                                                              <td className="py-4 px-2">
-                                                                 {line.status === 'SUBMITTED' ? (
-                                                                     <button
-                                                                         disabled={processing}
-                                                                         onClick={() => {
-                                                                             const storeInput = document.getElementById(`store-${lineId}`);
-                                                                             const purchaseInput = document.getElementById(`pur-${lineId}`);
-                                                                             const storeQty = parseFloat(storeInput?.value || '0');
-                                                                             const purchaseQty = parseFloat(purchaseInput?.value || '0');
-                                                                             handleRouteLine(lineId, storeQty, purchaseQty);
-                                                                         }}
-                                                                         className="p-1.5 rounded bg-primary text-white hover:bg-primary/80 transition-colors"
-                                                                     >
-                                                                         <span className="material-symbols-outlined text-sm font-bold">check</span>
-                                                                     </button>
-                                                                 ) : (
+                                                                 {line.status !== 'SUBMITTED' && (
                                                                      <span className="text-[9px] uppercase tracking-tighter text-text-secondary font-black">{line.status?.replace(/_/g, ' ')}</span>
                                                                  )}
                                                              </td>

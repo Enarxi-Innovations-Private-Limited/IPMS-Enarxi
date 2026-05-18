@@ -27,6 +27,7 @@ const inventoryService = {
   getPurchaseRequestQueue: () => inventoryApi.get('purchase/prq'),
   getPurchaseRequestQueueDetails: (id) => inventoryApi.get(`purchase/prq/${id}`),
   getCombinedPurchaseDemand: () => inventoryApi.get('purchase/combined-demand'),
+  autoQuotePurchasePlanning: (data) => inventoryApi.post('purchase-planning/auto-quote', data),
   getPurchasePlanning: (mode) => inventoryApi.get('inventory/purchase-planning', { params: { mode } }),
   getIndividualPurchaseRequests: () => inventoryApi.get('inventory/purchase-requests/individual'),
   generatePurchaseOrders: (data) => inventoryApi.post('generatePurchaseOrders', data),

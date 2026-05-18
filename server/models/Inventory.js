@@ -228,7 +228,14 @@ const PurchasePlanLineSchema = new mongoose.Schema({
     rate: { type: Number },
     gstPercent: { type: Number, default: 18 },
     sku: String,
-    remarks: String
+    remarks: String,
+    quoteMeta: {
+        source: String,
+        quoteId: String,
+        quotedAt: Date,
+        matchedSku: String,
+        resolvedBy: String
+    }
 }, { timestamps: true });
 
 PurchasePlanLineSchema.index({ purchaseRequestLineId: 1 }, { unique: true });
@@ -265,6 +272,13 @@ const PurchaseOrderSchema = new mongoose.Schema({
         rate: { type: Number, required: true },
         gstPercent: { type: Number, default: 18 },
         lineTotal: { type: Number, required: true },
+        quoteMeta: {
+            source: String,
+            quoteId: String,
+            quotedAt: Date,
+            matchedSku: String,
+            resolvedBy: String
+        },
         sourceLines: [{
             purchaseRequestLineId: String,
             quantity: Number,

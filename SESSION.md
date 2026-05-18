@@ -1,29 +1,25 @@
-# Session: BOM Procurement Engine & Purchasing Hub Integration (2026-05-15)
+# Session: Inventory Reservation Synchronization (2026-05-16)
 
 ## Objective
-Integrate the synchronized, production-grade BOM processing logic into the Purchasing Hub and Project Management server to enable end-to-end automated vendor allocation.
+Stabilize the Material Request (MR) fulfillment workflow by synchronizing inventory reservation with Store Manager confirmation and refining shortage reporting.
 
 ## Completed Tasks
-1.  **BOM Engine Integration**:
-    *   Added `/inject` endpoint to `server/BOM/app/main.py` for direct JSON data injection.
-    *   Enabled the PM server to push shortages directly to the BOM engine without manual file uploads.
-2.  **Server Proxy Architecture**:
-    *   Implemented `/api/bom*` reverse proxy in `server.js` to unify the API surface.
-    *   Added a specific multipart proxy handler for `/api/bom/upload`.
-    *   Updated `authMiddleware` to support token extraction from `req.query.token` for secure file exports.
-3.  **Inventory-BOM Bridge**:
-    *   Created `/api/inventory/shortages/send-to-bom` route in `inventoryRoutes.js`.
-    *   This endpoint aggregates all `PENDING` or `SHORTAGE_REPORTED` items from the purchase queue and pushes them to the BOM engine.
-4.  **Purchasing Hub Frontend (Financial Suite)**:
-    *   Refactored `PurchasingHub.jsx` to use proxied `/api/bom` routes.
-    *   Implemented "Pull from Shortage Queue" button to automate procurement data entry.
-    *   Applied the Financial Suite aesthetic (`#ECF1FF` background, `#556070` charcoal text, white panels).
-    *   Added real-time progress polling for live evaluation status.
+1.  **Refactored Routing Logic**:
+    *   Modified `handleRouteMaterialRequestLine` and `handleRouteMaterialRequestBulk` to remove immediate stock reservations.
+    *   Delayed reservations until the Store Manager physically confirms item availability.
+2.  **Implemented Delayed Reservation**:
+    *   Updated `confirmStoreAvailability` to trigger `reserveItemQuantity` only upon manual confirmation.
+    *   Implemented incremental reservation logic to handle changes in confirmed quantities without over-booking.
+3.  **Refined Shortage Reporting**:
+    *   Added `getCurrentStockAggregate` to calculate physical stock levels (excluding damaged hold).
+    *   Standardized shortage reporting: A `SHORTAGE_REPORTED` status is now triggered only if the confirmed physical quantity is less than the current system stock, ensuring discrepancies are flagged as audit items rather than simple fulfillment gaps.
+4.  **System Stability**:
+    *   Repaired critical code segments in `inventoryRoutes.js` that were damaged during refactoring of the large (4k+ line) file.
+    *   Ensured project-specific visibility remains intact for Store Manager operations.
 
 ## Technical Notes
-*   **CORS & Proxying**: All BOM frontend calls now go through `/api/bom`, resolving cross-origin issues and centralizing logging.
-*   **Auth**: Secure exports now work via `window.open` by passing the token in the query string, which the updated `authMiddleware` validates.
-*   **Engine Startup**: The BOM Python server is automatically managed as a child process by `server.js` on port 8000.
+*   **Decoupled State**: Shifted from an "eager" reservation model (at routing) to a "lazy" model (at confirmation) to eliminate ghost stock locks.
+*   **Physical Verification**: The system now explicitly distinguishes between "I requested 12 but we only have 10" (Confirmed) vs "System says we have 12 but I only found 10" (Shortage Reported).
 
 ## Next Step
-Execute a full "Procurement Loop" test: Approve a shortage in `StoreRequestsPage.jsx` -> Pull into `PurchasingHub` -> Optimize -> Export Excel.
+Perform a full end-to-end test (Routing -> Confirmation -> Dispatch) with multiple concurrent projects to verify that no race conditions affect the delayed reservation logic.

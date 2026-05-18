@@ -52,6 +52,148 @@ const getStoreLineDispatchableQty = (line) => {
     return Math.max(0, Number(line.pendingQuantity || 0));
 };
 
+const toNumber = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const parsePrice = (value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+        const cleaned = value.replace(/[^0-9.-]/g, '');
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+};
+
+const normalizeVendorKey = (value) =>
+    String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+const BOM_VENDOR_COLUMNS = ['ROBU', 'EVELTA', 'ELEVTA', 'KTRON', 'SHARVI', 'ELEMENT14'];
+
+const getCanonicalBomVendorKey = (...values) => {
+    for (const value of values) {
+        const normalized = normalizeVendorKey(value);
+        if (!normalized) continue;
+
+        const matched = BOM_VENDOR_COLUMNS.find((vendorKey) => {
+            const canonical = normalizeVendorKey(vendorKey);
+            return normalized === canonical || normalized.includes(canonical) || canonical.includes(normalized);
+        });
+
+        if (matched) {
+            return matched === 'ELEVTA' ? 'EVELTA' : matched;
+        }
+    }
+    return '';
+};
+
+const toBomInjectScalar = (value) => {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+    if (typeof value === 'string') return value.trim();
+    return String(value).trim();
+};
+
+const normalizeItemMatchKey = (value) =>
+    String(value || '')
+        .toUpperCase()
+        .replace(/\b(RESISTOR|CAPACITOR|COMPONENT)\b/g, '')
+        .replace(/[^A-Z0-9]/g, '');
+
+const resolveVendorByBomKey = (bomKey, vendorByKey) => {
+    const normalized = normalizeVendorKey(bomKey);
+    if (!normalized) return null;
+    if (vendorByKey.has(normalized)) return vendorByKey.get(normalized);
+    for (const [key, vendor] of vendorByKey.entries()) {
+        if (normalized.includes(key) || key.includes(normalized)) return vendor;
+    }
+    return null;
+};
+
+const selectBestBomOffer = (item, vendorByKey, vendorSkuMapByItemId) => {
+    const itemCode = String(item?.itemCode || '');
+    const itemName = String(item?.component || item?.name || '');
+    const explicitPrices = item?.prices && typeof item.prices === 'object' ? item.prices : {};
+    const inferredPrices = {};
+    if (Object.keys(explicitPrices).length === 0 && item && typeof item === 'object') {
+        Object.entries(item).forEach(([key, value]) => {
+            if (!resolveVendorByBomKey(key, vendorByKey)) return;
+            const parsed = parsePrice(value);
+            if (parsed !== null && parsed > 0) {
+                inferredPrices[key] = parsed;
+            }
+        });
+    }
+    const prices = Object.keys(explicitPrices).length > 0 ? explicitPrices : inferredPrices;
+    const itemId = normalizeId(item?.meta?.itemId || item?.itemId);
+    const skuCandidates = vendorSkuMapByItemId.get(itemId) || [];
+
+    if (skuCandidates.length === 0) {
+        return { resolved: false, reason: 'no_sku' };
+    }
+
+    const candidateByVendorId = new Map();
+    skuCandidates.forEach((entry) => {
+        if (!entry.vendorId || !entry.sku) return;
+        candidateByVendorId.set(entry.vendorId, entry);
+    });
+
+    const offers = [];
+    Object.entries(prices).forEach(([vendorNameOrCode, priceRaw]) => {
+        const vendor = resolveVendorByBomKey(vendorNameOrCode, vendorByKey);
+        if (!vendor) return;
+        const matchedSku = candidateByVendorId.get(normalizeId(vendor._id));
+        if (!matchedSku?.sku) return;
+        const rate = parsePrice(priceRaw);
+        if (rate === null || rate <= 0) return;
+
+        offers.push({
+            vendorId: normalizeId(vendor._id),
+            vendorName: vendor.name,
+            vendorCode: vendor.vendorCode || '',
+            rate,
+            matchedSku: matchedSku.sku,
+            sourceVendorKey: vendorNameOrCode
+        });
+    });
+
+    if (offers.length === 0) {
+        const bomVendorKeys = new Set([
+            ...Object.keys(prices || {}),
+            ...Object.keys(item || {}).filter((key) => BOM_VENDOR_COLUMNS.includes(getCanonicalBomVendorKey(key)))
+        ]);
+        const hasVendorInBom = Array.from(bomVendorKeys).some((key) => resolveVendorByBomKey(key, vendorByKey));
+        if (!hasVendorInBom) return { resolved: false, reason: 'vendor_unmapped' };
+        return { resolved: false, reason: 'no_quote' };
+    }
+
+    offers.sort((a, b) => a.rate - b.rate);
+    const best = offers[0];
+    return {
+        resolved: true,
+        itemCode,
+        itemName,
+        vendorId: best.vendorId,
+        vendorName: best.vendorName,
+        vendorCode: best.vendorCode,
+        rate: best.rate,
+        matchedSku: best.matchedSku,
+        quoteMeta: {
+            source: 'BOM_AUTOMATION',
+            quoteId: String(item?.component || itemCode || itemName || ''),
+            quotedAt: new Date().toISOString(),
+            resolvedBy: 'LOWEST_PRICE',
+            sourceVendorKey: best.sourceVendorKey
+        }
+    };
+};
+
 async function createPurchaseRequestBatchNumber(session = null) {
     const now = new Date();
     const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -117,12 +259,18 @@ const roles = {
 };
 
 const jwt = require('jsonwebtoken');
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const JWT_SECRET = process.env.JWT_SECRET || (NODE_ENV !== 'production' ? 'super-secret-key-change-in-production' : '');
+const BOM_SERVER_URL = (process.env.BOM_URL || 'http://127.0.0.1:8000').trim();
+
+if (NODE_ENV === 'production' && !JWT_SECRET) {
+    throw new Error('JWT_SECRET must be set in production.');
+}
 
 const authMiddleware = async (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        console.warn(`🚫 [Inventory Auth] No token for ${req.path}`);
+        console.warn(`?? [Inventory Auth] No token for ${req.path}`);
         return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
@@ -130,7 +278,7 @@ const authMiddleware = async (req, res, next) => {
         const decoded = jwt.verify(token, JWT_SECRET);
         const user = await User.findById(decoded.id);
         if (!user) {
-            console.warn(`🚫 [Inventory Auth] User not found for ID: ${decoded.id}`);
+            console.warn(`?? [Inventory Auth] User not found for ID: ${decoded.id}`);
             return res.status(401).json({ message: 'User not found' });
         }
         req.user = user;
@@ -138,7 +286,7 @@ const authMiddleware = async (req, res, next) => {
         req.user.role = (user.role || '').toUpperCase().replace(/\s+/g, '_');
         next();
     } catch (err) {
-        console.error(`🚫 [Inventory Auth] Error: ${err.message}`);
+        console.error(`?? [Inventory Auth] Error: ${err.message}`);
         return res.status(401).json({ message: 'Invalid token' });
     }
 };
@@ -158,7 +306,10 @@ function requireAnyRole(req, res, allowedRoles) {
 async function reserveItemQuantity(itemId, quantity, session = null) {
     if (quantity <= 0) return;
 
-    const balances = await StockBalance.find({ itemId })
+    const damagedHoldLocationId = await getDamagedHoldLocationId(session);
+    const query = { itemId };
+    if (damagedHoldLocationId) query.locationId = { $ne: damagedHoldLocationId };
+    const balances = await StockBalance.find(query)
         .sort({ updatedAt: 1 })
         .session(session);
 
@@ -361,8 +512,25 @@ async function issueReservedStock(itemId, quantity, referenceId, userId, session
     }
 }
 
-async function getCurrentAvailableStock(itemId, session = null) {
+async function getCurrentReservedStock(itemId, session = null) {
     const balances = await StockBalance.find({ itemId }).session(session);
+    return balances.reduce((total, balance) => total + Number(balance.reservedQuantity || 0), 0);
+}
+
+async function getCurrentStockAggregate(itemId, session = null) {
+    const damagedLocationId = await getDamagedHoldLocationId(session);
+    const balances = await StockBalance.find({ 
+        itemId, 
+        locationId: { $ne: damagedLocationId } 
+    }).session(session);
+    return balances.reduce((total, balance) => total + Number(balance.quantityOnHand || 0), 0);
+}
+
+async function getCurrentAvailableStock(itemId, session = null) {
+    const damagedHoldLocationId = await getDamagedHoldLocationId(session);
+    const query = { itemId };
+    if (damagedHoldLocationId) query.locationId = { $ne: damagedHoldLocationId };
+    const balances = await StockBalance.find(query).session(session);
     return balances.reduce((total, balance) => {
         const onHand = Number(balance.quantityOnHand || 0);
         const reserved = Number(balance.reservedQuantity || 0);
@@ -371,7 +539,10 @@ async function getCurrentAvailableStock(itemId, session = null) {
 }
 
 async function getCurrentReservedStock(itemId, session = null) {
-    const balances = await StockBalance.find({ itemId }).session(session);
+    const damagedHoldLocationId = await getDamagedHoldLocationId(session);
+    const query = { itemId };
+    if (damagedHoldLocationId) query.locationId = { $ne: damagedHoldLocationId };
+    const balances = await StockBalance.find(query).session(session);
     return balances.reduce((total, balance) => total + Number(balance.reservedQuantity || 0), 0);
 }
 
@@ -566,11 +737,11 @@ async function checkMRCompletion(mrId, session = null) {
         if (allFulfilled && mr.status !== 'COMPLETED') {
             mr.status = 'COMPLETED';
             await mr.save({ session });
-            console.log(`✅ [MR Completion] Material Request ${mr.requestNumber} marked as COMPLETED.`);
+            console.log(`? [MR Completion] Material Request ${mr.requestNumber} marked as COMPLETED.`);
             await logInvActivity('INV_MR_COMPLETE', `Material Request ${mr.requestNumber} fully fulfilled and acknowledged`, null, 'System', mr._id, mr.requestNumber);
         }
     } catch (err) {
-        console.error('❌ [MR Completion Check Error]:', err);
+        console.error('? [MR Completion Check Error]:', err);
     }
 }
 
@@ -730,7 +901,11 @@ async function listPurchaseRequestQueue() {
             select: 'requestNumber projectId engineerId',
             populate: [{ path: 'projectId', select: 'name projectCode' }, { path: 'engineerId', select: 'name' }]
         })
-        .populate('lines.itemId', 'name itemCode uom package');
+        .populate({
+            path: 'lines.itemId',
+            select: 'name itemCode uom package skuMappings',
+            populate: [{ path: 'skuMappings.vendorId', select: 'vendorCode name' }]
+        });
 
     return batches
         .map((batch) => {
@@ -761,6 +936,14 @@ async function listPurchaseRequestQueue() {
                     itemName: line.itemId?.name || '',
                     uom: line.itemId?.uom || 'Nos',
                     package: line.itemId?.package || '',
+                    skuMappings: (line.itemId?.skuMappings || [])
+                        .filter((mapping) => mapping?.sku)
+                        .map((mapping) => ({
+                            vendorId: normalizeId(mapping.vendorId?._id || mapping.vendorId),
+                            vendorCode: mapping.vendorId?.vendorCode || '',
+                            vendorName: mapping.vendorId?.name || '',
+                            sku: mapping.sku || ''
+                        })),
                     requiredQuantity: Number(line.requiredQuantity || 0),
                     pendingQuantity: Number(line.pendingQuantity || 0),
                     allocatedQuantity: Number(line.allocatedQuantity || 0),
@@ -792,6 +975,17 @@ async function buildCombinedDemandProjection() {
             if (existing) {
                 existing.totalRequiredQuantity += line.pendingQuantity;
                 existing.requestLines.push(entry);
+                const merged = new Map(
+                    (existing.skuMappings || []).map((mapping) => [
+                        `${mapping.vendorId || mapping.vendorCode}:${mapping.sku}`,
+                        mapping
+                    ])
+                );
+                (line.skuMappings || []).forEach((mapping) => {
+                    if (!mapping?.sku) return;
+                    merged.set(`${mapping.vendorId || mapping.vendorCode}:${mapping.sku}`, mapping);
+                });
+                existing.skuMappings = Array.from(merged.values());
             } else {
                 grouped.set(key, {
                     itemId: line.itemId,
@@ -800,12 +994,33 @@ async function buildCombinedDemandProjection() {
                     uom: line.uom,
                     package: line.package,
                     totalRequiredQuantity: line.pendingQuantity,
-                    requestLines: [entry]
+                    requestLines: [entry],
+                    skuMappings: line.skuMappings || []
                 });
             }
         });
     });
     return Array.from(grouped.values()).sort((a, b) => (a.itemCode || '').localeCompare(b.itemCode || ''));
+}
+
+function normalizeBomHubDemandRows(combinedRows = [], planningRows = []) {
+    if (Array.isArray(combinedRows) && combinedRows.length > 0) {
+        return combinedRows.map((row) => ({
+            itemId: row.itemId,
+            itemCode: row.itemCode,
+            itemName: row.itemName,
+            totalRequiredQuantity: Number(row.totalRequiredQuantity || 0),
+            skuMappings: Array.isArray(row.skuMappings) ? row.skuMappings : []
+        }));
+    }
+
+    return (planningRows || []).map((row) => ({
+        itemId: row.itemId,
+        itemCode: row.itemCode,
+        itemName: row.name,
+        totalRequiredQuantity: Number(row.requestedQuantity || 0),
+        skuMappings: Array.isArray(row.skuMappings) ? row.skuMappings : []
+    }));
 }
 
 // --- Master Data Routes ---
@@ -887,7 +1102,7 @@ router.post('/createItem', async (req, res) => {
         await logInvActivity('INV_MASTER_CREATE', `Item ${item.name} (${item.itemCode}) created`, req.user._id, req.user.name, item._id, item.name);
         res.status(201).json(item);
     } catch (err) {
-        console.error('❌ [Create Item Error]:', err);
+        console.error('? [Create Item Error]:', err);
         res.status(400).json({ message: err.message });
     }
 });
@@ -1464,11 +1679,11 @@ router.post('/submitStockAdjustment', async (req, res) => {
             const location = await findLocationByReference(row.locationCode || row.locationName);
 
             if (!item) {
-                console.warn(`⚠️ [Stock Adjust] Item not found for code: ${row.itemCode}`);
+                console.warn(`?? [Stock Adjust] Item not found for code: ${row.itemCode}`);
                 continue;
             }
             if (!location) {
-                console.warn(`⚠️ [Stock Adjust] Location not found for ref: ${row.locationCode || row.locationName}`);
+                console.warn(`?? [Stock Adjust] Location not found for ref: ${row.locationCode || row.locationName}`);
                 continue;
             }
 
@@ -1607,7 +1822,6 @@ router.post('/confirmStoreAvailability', async (req, res) => {
                 if (!line) continue;
 
                 const requestedQuantity = Number(line.requestedQuantity || 0);
-                const previousConfirmedQuantity = Number(line.confirmedQuantity || 0);
                 const isConfirmed = confirmedIdSet.has(String(lineId));
                 
                 const actualQuantity = isConfirmed 
@@ -1620,40 +1834,36 @@ router.post('/confirmStoreAvailability', async (req, res) => {
                     throw new Error(`Actual quantity for item ${lineId} must be between zero and requested (${requestedQuantity}).`);
                 }
 
-                const shortageQuantity = requestedQuantity - actualQuantity;
-                const status = shortageQuantity > 0 ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
-
-                if (shortageQuantity > 0) {
-                    hasShortage = true;
-                }
-
                 // RESERVATION ADJUSTMENT LOGIC:
-                // Use the tracked reservedQuantity instead of assuming requestedQuantity
-                const previousReservedTarget = line.status === 'PENDING'
-                    ? (line.reservedQuantity || 0)
-                    : previousConfirmedQuantity;
-                const confirmationIncrease = actualQuantity - previousReservedTarget;
-                
-                if (confirmationIncrease < 0) {
-                    // Manager reduced confirmed quantity (increased shortage) -> Release reservation
-                    const toRelease = Math.abs(confirmationIncrease);
-                    await releaseItemReservation(line.itemId, toRelease, session);
-                    line.reservedQuantity = (line.reservedQuantity || 0) - toRelease;
-                } else if (confirmationIncrease > 0) {
-                    // Manager increased confirmed quantity (reduced shortage) -> Reserve more if available
-                    const available = await getCurrentAvailableStock(line.itemId, session);
-                    if (available < confirmationIncrease) {
-                        throw new Error(`Cannot confirm ${actualQuantity} NOS for item ${lineId}. Only ${available + previousReservedTarget} NOS available total.`);
-                    }
-                    await reserveItemQuantity(line.itemId, confirmationIncrease, session);
-                    line.reservedQuantity = (line.reservedQuantity || 0) + confirmationIncrease;
-                }
+                const currentReserved = Number(line.reservedQuantity || 0);
+                const availableBeforeUpdate = await getCurrentAvailableStock(line.itemId, session);
+                const systemAvailableToThisLine = availableBeforeUpdate + currentReserved;
 
+                const reservationChange = actualQuantity - currentReserved;
+
+                if (reservationChange > 0) {
+                    // Manager confirmed items -> Reserve them
+                    if (availableBeforeUpdate < reservationChange) {
+                        throw new Error(`Cannot reserve ${actualQuantity} NOS for item ${lineId}. Only ${systemAvailableToThisLine} NOS available total.`);
+                    }
+                    await reserveItemQuantity(line.itemId, reservationChange, session);
+                } else if (reservationChange < 0) {
+                    // Manager reduced confirmed quantity -> Release reservation
+                    await releaseItemReservation(line.itemId, Math.abs(reservationChange), session);
+                }
+                
+                line.reservedQuantity = actualQuantity;
                 line.confirmedQuantity = actualQuantity;
-                line.shortageQuantity = shortageQuantity;
+                line.shortageQuantity = requestedQuantity - actualQuantity;
                 line.pendingQuantity = actualQuantity;
-                line.status = status;
-                line.shortageReason = shortageQuantity > 0 ? (reason || "Store reported lower physical availability.") : null;
+
+                // Status logic: Flag as shortage ONLY if there is a physical discrepancy with the system records
+                // AND the full request could not be met.
+                const isShortage = (actualQuantity < requestedQuantity) && (actualQuantity < systemAvailableToThisLine);
+                line.status = isShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
+                line.shortageReason = isShortage ? (reason || "Physical count mismatch.") : null;
+
+                if (isShortage) hasShortage = true;
             }
 
             batch.status = hasShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
@@ -1662,7 +1872,7 @@ router.post('/confirmStoreAvailability', async (req, res) => {
 
         res.json({ success: true, message: "Store availability confirmed successfully." });
     } catch (err) {
-        console.error('❌ [Confirm Store Availability Error]:', err);
+        console.error('? [Confirm Store Availability Error]:', err);
         res.status(400).json({ message: err.message });
     } finally {
         await session.endSession();
@@ -1735,7 +1945,7 @@ router.post('/dispatchConfirmedStoreRequest', async (req, res) => {
             nextAllowedActions: ['ACKNOWLEDGE_DISPATCH']
         });
     } catch (err) {
-        console.error('❌ [Dispatch Error]:', err);
+        console.error('? [Dispatch Error]:', err);
         res.status(400).json({ message: err.message });
     } finally {
         await session.endSession();
@@ -1827,7 +2037,14 @@ router.post('/acknowledgeDispatch', async (req, res) => {
 
 router.get('/bridge/material-requests', async (req, res) => {
     try {
-        const requests = await MaterialRequest.find()
+        let query = {};
+        const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'STORE_MANAGER'].includes(req.user.role);
+        if (!isAdmin) {
+            const managedProjects = await Project.find({ managerId: req.user._id }).select('_id');
+            const managedProjectIds = managedProjects.map(p => p._id);
+            query = { $or: [{ engineerId: req.user._id }, { projectId: { $in: managedProjectIds } }] };
+        }
+        const requests = await MaterialRequest.find(query)
             .populate('projectId', 'name projectCode')
             .populate('engineerId', 'name')
             .sort({ createdAt: -1 });
@@ -1919,9 +2136,22 @@ router.get('/bridge/material-requests/:id', async (req, res) => {
 });
 
 router.post('/projects/material-request', async (req, res) => {
-    console.log('📥 [Material Request] Incoming Body:', JSON.stringify(req.body, null, 2));
+    console.log('?? [Material Request] Incoming Body:', JSON.stringify(req.body, null, 2));
     try {
         let { projectId, notes, lines, payload } = req.body;
+
+        // Validate project access
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        
+        const isAdmin = [roles.SUPER_ADMIN, roles.SUPER_USER, roles.STORE_MANAGER].includes(req.user.role);
+        if (!isAdmin) {
+            const isAssigned = project.managerId?.toString() === req.user._id.toString() || 
+                               (Array.isArray(project.teamIds) && project.teamIds.some(id => id.toString() === req.user._id.toString()));
+            if (!isAssigned) {
+                return res.status(403).json({ message: 'Access denied: You are not assigned to this project' });
+            }
+        }
 
         // Support payload as string (legacy/compatibility)
         if (payload && !lines) {
@@ -1970,7 +2200,7 @@ router.post('/projects/material-request', async (req, res) => {
         await logInvActivity('INV_MR_SUBMIT', `MR ${requestNumber} submitted`, req.user._id, req.user.name, request._id, requestNumber);
         res.status(201).json(request);
     } catch (err) {
-        console.error('❌ [Material Request Submission Error]:', err);
+        console.error('? [Material Request Submission Error]:', err);
         res.status(400).json({ message: err.message });
     }
 });
@@ -2010,17 +2240,7 @@ async function handleRouteMaterialRequestLine(req, res) {
         }
 
         const before = request.toObject();
-        const reservationChange = storeQty - previousStoreQty;
-        if (reservationChange > 0) {
-            // Only reserve what is actually available now
-            const actualAvailable = await getCurrentAvailableStock(line.itemId, session);
-            const toReserve = Math.min(reservationChange, actualAvailable);
-            if (toReserve > 0) {
-                await reserveItemQuantity(line.itemId, toReserve, session);
-            }
-        } else if (reservationChange < 0) {
-            await releaseItemReservation(line.itemId, Math.abs(reservationChange), session);
-        }
+        // Stock reservation is now delayed until the Store Manager confirms physical availability.
 
         line.plannedStoreQuantity = storeQty;
         line.plannedPurchaseQuantity = purchaseQty;
@@ -2044,10 +2264,6 @@ async function handleRouteMaterialRequestLine(req, res) {
         let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
 
         if (storeQty > 0) {
-            // Calculate how much we actually managed to reserve
-            const actualAvailableForReserve = (await getCurrentAvailableStock(line.itemId, session)) + previousStoreQty;
-            const finalReserved = Math.min(storeQty, actualAvailableForReserve);
-
             if (!storeBatch) {
                 const batchCount = await StoreRequestBatch.countDocuments();
                 storeBatch = new StoreRequestBatch({
@@ -2061,14 +2277,14 @@ async function handleRouteMaterialRequestLine(req, res) {
             if (existingStoreLine) {
                 existingStoreLine.itemId = line.itemId;
                 existingStoreLine.requestedQuantity = storeQty;
-                existingStoreLine.reservedQuantity = finalReserved;
+                existingStoreLine.reservedQuantity = 0;
                 existingStoreLine.pendingQuantity = storeQty;
             } else {
                 storeBatch.lines.push({
                     materialRequestLineId: lineId,
                     itemId: line.itemId,
                     requestedQuantity: storeQty,
-                    reservedQuantity: finalReserved,
+                    reservedQuantity: 0,
                     pendingQuantity: storeQty
                 });
             }
@@ -2165,12 +2381,7 @@ async function handleRouteMaterialRequestBulk(req, res) {
             if (routeTarget === 'store') {
                 // Removed strict validation: Store quantity can now exceed available stock.
                 // Admin wants store manager to handle shortages formally.
-
-                const actualAvailable = await getCurrentAvailableStock(line.itemId, session);
-                const toReserve = Math.min(qty, actualAvailable);
-                if (toReserve > 0) {
-                    await reserveItemQuantity(line.itemId, toReserve, session);
-                }
+                
                 line.plannedStoreQuantity = qty;
                 line.plannedPurchaseQuantity = 0;
                 line.status = 'ROUTED_TO_STORE';
@@ -2190,14 +2401,14 @@ async function handleRouteMaterialRequestBulk(req, res) {
                 if (existingStoreLine) {
                     existingStoreLine.itemId = line.itemId;
                     existingStoreLine.requestedQuantity = qty;
-                    existingStoreLine.reservedQuantity = toReserve;
+                    existingStoreLine.reservedQuantity = 0;
                     existingStoreLine.pendingQuantity = qty;
                 } else {
                     storeBatch.lines.push({
                         materialRequestLineId: id,
                         itemId: line.itemId,
                         requestedQuantity: qty,
-                        reservedQuantity: toReserve,
+                        reservedQuantity: 0,
                         pendingQuantity: qty
                     });
                 }
@@ -2212,7 +2423,7 @@ async function handleRouteMaterialRequestBulk(req, res) {
                 line.status = 'ROUTED_TO_PURCHASE';
                 line.adminRemarks = 'Bulk routed to Purchase via IPMS';
 
-        let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
+                let purchaseBatch = await PurchaseRequestBatch.findOne({ materialRequestId: request._id, status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } });
                 if (!purchaseBatch) {
                     purchaseBatch = new PurchaseRequestBatch({
                         batchNumber: await createPurchaseRequestBatchNumber(session),
@@ -2300,6 +2511,15 @@ router.get('/purchase/prq/:id', async (req, res) => {
     }
 });
 
+router.get('/inventory/purchase-requests/individual', async (req, res) => {
+    try {
+        const rows = await buildIndividualPurchaseRequestRows();
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 router.get('/purchase/combined-demand', async (req, res) => {
     try {
         const rows = await buildCombinedDemandProjection();
@@ -2309,7 +2529,7 @@ router.get('/purchase/combined-demand', async (req, res) => {
     }
 });
 
-router.get('/inventory/purchase-requests/individual', async (req, res) => {
+router.get('/purchase/individual-demand', async (req, res) => {
     try {
         const rows = await buildIndividualPurchaseRequestRows();
         res.json(rows);
@@ -2317,6 +2537,7 @@ router.get('/inventory/purchase-requests/individual', async (req, res) => {
         res.status(500).json({ message: err.message });
     }
 });
+
 
 router.post('/purchase/generate', (req, res, next) => {
     // Alias for generatePurchaseOrders
@@ -2463,7 +2684,7 @@ router.get('/inventory', async (req, res) => {
 
 // --- Admin Master Data Aliases ---
 router.post('/admin/classifications', async (req, res) => {
-    console.log('📥 [Inventory API] Received Create Classification Request:', req.body);
+    console.log('?? [Inventory API] Received Create Classification Request:', req.body);
     try {
         const classification = await Classification.create(req.body);
         await logInvActivity('INV_MASTER_CREATE', `Classification ${classification.name} created`, req.user._id, req.user.name, classification._id, classification.name);
@@ -2593,7 +2814,17 @@ router.get('/bridge/vendors', async (req, res) => {
 
 router.get('/bridge/projects', async (req, res) => {
     try {
-        const data = await Project.find({ department: 'HARDWARE' }).sort({ name: 1 });
+        let query = { department: 'HARDWARE' };
+        const isAdmin = [roles.SUPER_ADMIN, roles.SUPER_USER, roles.STORE_MANAGER].includes(req.user.role);
+        
+        if (!isAdmin) {
+            query.$or = [
+                { managerId: req.user._id },
+                { teamIds: req.user._id }
+            ];
+        }
+
+        const data = await Project.find(query).sort({ name: 1 });
         // Map _id to id for frontend compatibility
         const mapped = data.map(p => ({
             ...p.toObject(),
@@ -3028,6 +3259,19 @@ router.post('/submitMaterialRequest', async (req, res) => {
     try {
         let { projectId, notes, lines, payload } = req.body;
 
+        // Validate project access
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        
+        const isAdmin = [roles.SUPER_ADMIN, roles.SUPER_USER, roles.STORE_MANAGER].includes(req.user.role);
+        if (!isAdmin) {
+            const isAssigned = project.managerId?.toString() === req.user._id.toString() || 
+                               (Array.isArray(project.teamIds) && project.teamIds.some(id => id.toString() === req.user._id.toString()));
+            if (!isAssigned) {
+                return res.status(403).json({ message: 'Access denied: You are not assigned to this project' });
+            }
+        }
+
         // Support payload as string (legacy/compatibility)
         if (payload && !lines) {
             try {
@@ -3087,7 +3331,7 @@ router.post('/submitMaterialRequest', async (req, res) => {
         
         res.status(201).json(request);
     } catch (err) {
-        console.error('❌ [Submit MR Error]:', err);
+        console.error('? [Submit MR Error]:', err);
         res.status(400).json({ message: err.message });
     }
 });
@@ -3149,7 +3393,7 @@ router.post('/projects/material-request/:id/add-items-bulk', async (req, res) =>
         
         res.json(request);
     } catch (err) {
-        console.error('❌ [Bulk Add Items Error]:', err);
+        console.error('? [Bulk Add Items Error]:', err);
         res.status(400).json({ message: err.message });
     }
 });
@@ -3236,7 +3480,14 @@ router.post('/routeMaterialRequestBulk', async (req, res) => {
 
 router.get('/material-requests', async (req, res) => {
     try {
-        const requests = await MaterialRequest.find()
+        let query = {};
+        const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'STORE_MANAGER'].includes(req.user.role);
+        if (!isAdmin) {
+            const managedProjects = await Project.find({ managerId: req.user._id }).select('_id');
+            const managedProjectIds = managedProjects.map(p => p._id);
+            query = { $or: [{ engineerId: req.user._id }, { projectId: { $in: managedProjectIds } }] };
+        }
+        const requests = await MaterialRequest.find(query)
             .populate('projectId', 'name projectCode')
             .populate('engineerId', 'name')
             .sort({ createdAt: -1 });
@@ -3327,6 +3578,248 @@ router.get('/purchase/requests', async (req, res) => {
     }
 });
 
+router.post('/purchase-planning/auto-quote', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        const { batchId, lineIds } = req.body || {};
+        const normalizedLineIds = Array.isArray(lineIds)
+            ? lineIds.map(normalizeId).filter(Boolean)
+            : [];
+
+        if (normalizedLineIds.length === 0) {
+            return res.status(400).json({ message: 'lineIds[] is required.' });
+        }
+
+        const query = { 'lines._id': { $in: normalizedLineIds } };
+        if (batchId) query._id = batchId;
+
+        const batches = await PurchaseRequestBatch.find(query)
+            .populate('lines.itemId')
+            .populate('materialRequestId', 'requestNumber');
+
+        if (!batches.length) {
+            return res.status(404).json({ message: 'No matching purchase request lines found.' });
+        }
+
+        const selectedLines = [];
+        const itemIds = new Set();
+        const itemDocById = new Map();
+        batches.forEach((batch) => {
+            (batch.lines || []).forEach((line) => {
+                const lineId = normalizeId(line._id);
+                if (!normalizedLineIds.includes(lineId)) return;
+                if (!line.itemId) return;
+                const itemId = normalizeId(line.itemId._id || line.itemId);
+                const requiredQty = toNumber(line.pendingQuantity || 0);
+                if (requiredQty <= 0) return;
+                selectedLines.push({
+                    lineId,
+                    itemId,
+                    batchId: normalizeId(batch._id),
+                    batchNumber: batch.batchNumber,
+                    materialRequestNumber: batch.materialRequestId?.requestNumber || '',
+                    itemCode: line.itemId.itemCode || '',
+                    itemName: line.itemId.name || '',
+                    quantity: requiredQty
+                });
+                itemIds.add(itemId);
+                if (!itemDocById.has(itemId)) itemDocById.set(itemId, line.itemId);
+            });
+        });
+
+        if (!selectedLines.length) {
+            return res.status(400).json({ message: 'Selected lines are not pending for purchase.' });
+        }
+
+        const [vendors, skuMappings] = await Promise.all([
+            Vendor.find({}, 'name vendorCode'),
+            ItemVendorSku.find({ itemId: { $in: Array.from(itemIds) } }).populate('vendorId', 'name vendorCode')
+        ]);
+
+        const vendorByKey = new Map();
+        const vendorById = new Map();
+        vendors.forEach((vendor) => {
+            vendorByKey.set(normalizeVendorKey(vendor.name), vendor);
+            vendorByKey.set(normalizeVendorKey(vendor.vendorCode), vendor);
+            vendorById.set(normalizeId(vendor._id), vendor);
+        });
+
+        const vendorSkuMapByItemId = new Map();
+        skuMappings.forEach((mapping) => {
+            const itemId = normalizeId(mapping.itemId);
+            if (!vendorSkuMapByItemId.has(itemId)) vendorSkuMapByItemId.set(itemId, []);
+            vendorSkuMapByItemId.get(itemId).push({
+                vendorId: normalizeId(mapping.vendorId?._id || mapping.vendorId),
+                vendorCode: mapping.vendorId?.vendorCode || '',
+                vendorName: mapping.vendorId?.name || '',
+                sku: mapping.sku || ''
+            });
+        });
+
+        itemDocById.forEach((itemDoc, itemId) => {
+            if ((vendorSkuMapByItemId.get(itemId) || []).length > 0) return;
+            const embedded = Array.isArray(itemDoc?.skuMappings) ? itemDoc.skuMappings : [];
+            embedded.forEach((mapping) => {
+                const vendorId = normalizeId(mapping?.vendorId?._id || mapping?.vendorId);
+                if (!vendorId || !mapping?.sku) return;
+                if (!vendorSkuMapByItemId.has(itemId)) vendorSkuMapByItemId.set(itemId, []);
+                const vendor = vendorById.get(vendorId);
+                vendorSkuMapByItemId.get(itemId).push({
+                    vendorId,
+                    vendorCode: vendor?.vendorCode || '',
+                    vendorName: vendor?.name || '',
+                    sku: mapping.sku
+                });
+            });
+        });
+
+        const bomItems = selectedLines.map((line) => {
+            const vendorCandidates = vendorSkuMapByItemId.get(line.itemId) || [];
+            return {
+                itemId: line.itemId,
+                lineId: line.lineId,
+                itemCode: line.itemCode,
+                component: line.itemName,
+                qty: line.quantity,
+                skuCandidates: vendorCandidates
+            };
+        });
+
+        const bomInjectRows = bomItems.map((entry) => {
+            const row = {
+                itemId: toBomInjectScalar(entry.itemId),
+                lineId: toBomInjectScalar(entry.lineId),
+                itemCode: toBomInjectScalar(entry.itemCode),
+                component: toBomInjectScalar(entry.component),
+                qty: toNumber(entry.qty)
+            };
+            (entry.skuCandidates || []).forEach((candidate) => {
+                const vendorKey = getCanonicalBomVendorKey(candidate.vendorName, candidate.vendorCode);
+                if (vendorKey && candidate.sku) {
+                    row[vendorKey] = toBomInjectScalar(candidate.sku);
+                }
+            });
+            return row;
+        });
+
+        const injectResponse = await fetch(`${BOM_SERVER_URL}/inject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                items: bomInjectRows
+            })
+        });
+
+        if (!injectResponse.ok) {
+            const errorPayload = await injectResponse.json().catch(() => ({}));
+            console.error('[BOM Inject Error]', {
+                status: injectResponse.status,
+                detail: errorPayload?.detail || null,
+                sampleRow: bomInjectRows[0] || null,
+                rowCount: bomInjectRows.length
+            });
+            return res.status(502).json({
+                message: 'BOM inject failed.',
+                detail: errorPayload?.detail || 'Unable to inject data into BOM service.'
+            });
+        }
+
+        const processResponse = await fetch(`${BOM_SERVER_URL}/process`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mapping: {
+                    component: 'component',
+                    quantity: 'qty',
+                    vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI'],
+                    skip_cart_phase: true
+                }
+            })
+        });
+
+        if (!processResponse.ok) {
+            const errorPayload = await processResponse.json().catch(() => ({}));
+            return res.status(502).json({
+                message: 'BOM processing failed.',
+                detail: errorPayload?.detail || 'Unable to process BOM quote.'
+            });
+        }
+
+        const bomResult = await processResponse.json();
+        const bomItemsResult = Array.isArray(bomResult?.items) ? bomResult.items : [];
+
+        const bomItemByCodeOrName = new Map();
+        bomItemsResult.forEach((entry) => {
+            const codeKey = String(entry?.itemCode || '').trim().toUpperCase();
+            const nameKey = String(entry?.component || '').trim().toUpperCase();
+            const normalizedName = normalizeItemMatchKey(entry?.component || '');
+            if (codeKey) bomItemByCodeOrName.set(codeKey, entry);
+            if (nameKey) bomItemByCodeOrName.set(nameKey, entry);
+            if (normalizedName) bomItemByCodeOrName.set(normalizedName, entry);
+        });
+
+        const results = selectedLines.map((line) => {
+            const codeKey = String(line.itemCode || '').trim().toUpperCase();
+            const nameKey = String(line.itemName || '').trim().toUpperCase();
+            const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
+            const itemResult = bomItemByCodeOrName.get(codeKey) || bomItemByCodeOrName.get(nameKey) || bomItemByCodeOrName.get(normalizedNameKey);
+
+            if (!itemResult) {
+                return {
+                    lineId: line.lineId,
+                    itemId: line.itemId,
+                    itemCode: line.itemCode,
+                    itemName: line.itemName,
+                    resolved: false,
+                    reason: 'no_quote'
+                };
+            }
+
+            const decision = selectBestBomOffer(
+                { ...itemResult, itemCode: line.itemCode, component: line.itemName, meta: { itemId: line.itemId } },
+                vendorByKey,
+                vendorSkuMapByItemId
+            );
+
+            if (!decision.resolved) {
+                return {
+                    lineId: line.lineId,
+                    itemId: line.itemId,
+                    itemCode: line.itemCode,
+                    itemName: line.itemName,
+                    resolved: false,
+                    reason: decision.reason
+                };
+            }
+
+            return {
+                lineId: line.lineId,
+                itemId: line.itemId,
+                itemCode: line.itemCode,
+                itemName: line.itemName,
+                resolved: true,
+                vendorId: decision.vendorId,
+                vendorName: decision.vendorName,
+                vendorCode: decision.vendorCode,
+                rate: decision.rate,
+                matchedSku: decision.matchedSku,
+                quoteMeta: decision.quoteMeta
+            };
+        });
+
+        const summary = {
+            total: results.length,
+            resolved: results.filter((entry) => entry.resolved).length,
+            unresolved: results.filter((entry) => !entry.resolved).length
+        };
+
+        res.json({ batchId: batchId || null, results, summary });
+    } catch (err) {
+        console.error('[Auto Quote Error]:', err);
+        res.status(500).json({ message: err.message || 'Failed to auto-quote selected lines.' });
+    }
+});
+
 router.post('/generatePurchaseOrders', async (req, res) => {
     const session = await mongoose.startSession();
     try {
@@ -3343,10 +3836,14 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             const orderQuantity = Number(item.orderQuantity || 0);
             const rate = Number(item.rate || 0);
             const vendorId = normalizeId(item.vendorId);
+            const resolved = Boolean(item.resolved);
+            const matchedSku = String(item.matchedSku || item.sku || '').trim();
 
             if (!vendorId) throw new Error(`Vendor selection is required for ${item.itemCode || item.itemId}.`);
             if (orderQuantity <= 0) throw new Error(`Order quantity must be greater than zero for ${item.itemCode || item.itemId}.`);
             if (rate <= 0) throw new Error(`Rate must be greater than zero for ${item.itemCode || item.itemId}.`);
+            if (!resolved) throw new Error(`BOM resolution is required for ${item.itemCode || item.itemId}.`);
+            if (!matchedSku) throw new Error(`Matched SKU is required for ${item.itemCode || item.itemId}.`);
             if (!Array.isArray(item.sourceLines) && !Array.isArray(item.sourceLineIds)) {
                 throw new Error(`Source allocation is missing for ${item.itemCode || item.itemId}.`);
             }
@@ -3424,8 +3921,15 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                                 orderQuantity: alloc.quantity,
                                 rate,
                                 gstPercent,
-                                sku: line.sku || null,
-                                remarks: notes || null
+                                sku: line.matchedSku || line.sku || null,
+                                remarks: notes || null,
+                                quoteMeta: {
+                                    source: line.quoteMeta?.source || 'BOM_AUTOMATION',
+                                    quoteId: line.quoteMeta?.quoteId || null,
+                                    quotedAt: line.quoteMeta?.quotedAt ? new Date(line.quoteMeta.quotedAt) : new Date(),
+                                    matchedSku: line.matchedSku || line.sku || null,
+                                    resolvedBy: line.quoteMeta?.resolvedBy || 'LOWEST_PRICE'
+                                }
                             },
                             { upsert: true, session }
                         );
@@ -3433,12 +3937,19 @@ router.post('/generatePurchaseOrders', async (req, res) => {
 
                     poLines.push({
                         itemId: line.itemId,
-                        sku: line.sku || null,
+                        sku: line.matchedSku || line.sku || null,
                         requestedQuantity,
                         orderQuantity,
                         rate,
                         gstPercent,
                         lineTotal: orderQuantity * rate * (1 + gstPercent / 100),
+                        quoteMeta: {
+                            source: line.quoteMeta?.source || 'BOM_AUTOMATION',
+                            quoteId: line.quoteMeta?.quoteId || null,
+                            quotedAt: line.quoteMeta?.quotedAt ? new Date(line.quoteMeta.quotedAt) : new Date(),
+                            matchedSku: line.matchedSku || line.sku || null,
+                            resolvedBy: line.quoteMeta?.resolvedBy || 'LOWEST_PRICE'
+                        },
                         sourceLines: allocations
                     });
                 }
@@ -4162,7 +4673,7 @@ router.post('/store/approve-shortage-request', async (req, res) => {
                         pendingQuantity: line.shortageQuantity
                     });
                 }
-                line.status = 'SHORTAGE_APPROVED';
+                line.status = 'CONFIRMED';
                 prLinesAdded++;
             }
         }
@@ -4173,7 +4684,7 @@ router.post('/store/approve-shortage-request', async (req, res) => {
         }
 
         // Update store request batch status to APPROVED
-        batch.status = 'SHORTAGE_APPROVED';
+        batch.status = 'CONFIRMED';
         if (adminRemarks) {
             batch.notes = (batch.notes ? batch.notes + '\n' : '') + `Admin Remarks: ${adminRemarks}`;
         }
@@ -4185,7 +4696,7 @@ router.post('/store/approve-shortage-request', async (req, res) => {
 
         res.json({ success: true, message: "Shortage approved and routed to Purchase Manager." });
     } catch (err) {
-        console.error('❌ [Approve Shortage Error]:', err);
+        console.error('? [Approve Shortage Error]:', err);
         res.status(400).json({ 
             message: err.message || "Failed to approve shortage.",
             stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
@@ -4212,42 +4723,39 @@ router.post('/shortages/send-to-bom', async (req, res) => {
     try {
         if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
 
-        // 1. Gather all active shortages from the purchase queue
-        const batches = await PurchaseRequestBatch.find({ 
-            status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES } 
-        }).populate('lines.itemId');
+        const combinedRows = await buildCombinedDemandProjection();
+        const planningRows = combinedRows.length === 0 ? await buildPurchasePlanningRows() : [];
+        const demandRows = normalizeBomHubDemandRows(combinedRows, planningRows);
+        const itemsToInject = demandRows.map((row) => {
+            const entry = {
+                itemId: toBomInjectScalar(row.itemId),
+                itemCode: toBomInjectScalar(row.itemCode),
+                component: toBomInjectScalar(row.itemName),
+                qty: toNumber(row.totalRequiredQuantity)
+            };
 
-        const itemsToInject = [];
-        const seenItems = new Map();
-
-        batches.forEach(batch => {
-            batch.lines.forEach(line => {
-                if (line.pendingQuantity > 0 && line.itemId) {
-                    const itemId = String(line.itemId._id);
-                    const qty = Number(line.pendingQuantity);
-                    
-                    if (seenItems.has(itemId)) {
-                        seenItems.get(itemId).qty += qty;
-                    } else {
-                        const entry = {
-                            component: line.itemId.name,
-                            itemCode: line.itemId.itemCode,
-                            qty: qty,
-                            package: line.itemId.package || ''
-                        };
-                        seenItems.set(itemId, entry);
-                        itemsToInject.push(entry);
-                    }
+            (row.skuMappings || []).forEach((mapping) => {
+                const vendorKey = getCanonicalBomVendorKey(mapping.vendorName, mapping.vendorCode, mapping.vendorId);
+                if (vendorKey && mapping?.sku) {
+                    entry[vendorKey] = toBomInjectScalar(mapping.sku);
                 }
             });
-        });
+
+            return entry;
+        }).filter((entry) => entry.qty > 0);
 
         if (itemsToInject.length === 0) {
-            return res.status(400).json({ message: 'No active shortages found in the queue.' });
+            return res.json({
+                message: 'No active purchase demand found in the queue.',
+                bomPreview: null,
+                meta: {
+                    combinedRows: combinedRows.length,
+                    planningRows: planningRows.length,
+                    injectedRows: 0
+                }
+            });
         }
 
-        // 2. Push to BOM Server
-        const BOM_SERVER_URL = 'http://localhost:8000';
         const response = await fetch(`${BOM_SERVER_URL}/inject`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4255,28 +4763,32 @@ router.post('/shortages/send-to-bom', async (req, res) => {
         });
 
         if (!response.ok) {
-            const error = await response.json();
+            const error = await response.json().catch(() => ({}));
             throw new Error(error.detail || 'Failed to inject data into BOM engine');
         }
 
         const result = await response.json();
 
-        // 3. Log Activity
         await logInvActivity(
             'INV_BOM_PUSH', 
-            `Sent ${itemsToInject.length} items to BOM engine for optimization`,
+            `Sent ${itemsToInject.length} purchase-demand items to BOM engine for optimization`,
             req.user._id,
             req.user.name
         );
 
         res.json({
             message: `Successfully sent ${itemsToInject.length} items to BOM engine.`,
-            bomPreview: result
+            bomPreview: result,
+            meta: {
+                combinedRows: combinedRows.length,
+                planningRows: planningRows.length,
+                injectedRows: itemsToInject.length
+            }
         });
 
     } catch (err) {
-        console.error('❌ [Send to BOM Error]:', err);
-        res.status(500).json({ message: 'Failed to send shortages to BOM engine', error: err.message });
+        console.error('? [Send to BOM Error]:', err);
+        res.status(500).json({ message: 'Failed to send purchase demand to BOM engine', error: err.message });
     }
 });
 
