@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
+const normalizeEmailValue = (value) => {
+    const raw = Array.isArray(value) ? (value.find(Boolean) || value[0] || '') : value;
+    return String(raw || '').trim().toLowerCase();
+};
+
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
@@ -11,7 +16,7 @@ const userSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true,
-        lowercase: true,
+        set: normalizeEmailValue,
         trim: true,
     },
     employeeId: {
@@ -26,7 +31,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['SUPER_ADMIN', 'MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER'],
+        enum: ['SUPER_ADMIN', 'SUPER_USER', 'MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER', 'ENGINEER', 'JUNIOR_ENGINEER', 'STOCK_ADMIN'],
         required: true,
     },
     department: {

@@ -140,6 +140,39 @@ const roles = {
     STOCK_ADMIN: 'STOCK_ADMIN' // Legacy
 };
 
+const USER_ROLE_NORMALIZATION_MAP = {
+    ADMIN: roles.SUPER_ADMIN,
+    SUPERADMIN: roles.SUPER_ADMIN,
+    SUPER_ADMIN: roles.SUPER_ADMIN,
+    SUPERUSER: roles.SUPER_USER,
+    SUPER_USER: roles.SUPER_USER,
+    MANAGER: roles.MANAGER,
+    EMPLOYEE: roles.EMPLOYEE,
+    INTERN: roles.INTERN,
+    PURCHASE_MANAGER: roles.PURCHASE_MANAGER,
+    PURCHASEMANAGER: roles.PURCHASE_MANAGER,
+    STORE_MANAGER: roles.STORE_MANAGER,
+    STOREMANAGER: roles.STORE_MANAGER,
+    ENGINEER: roles.ENGINEER,
+    JUNIOR_ENGINEER: roles.JUNIOR_ENGINEER,
+    JUNIORENGINEER: roles.JUNIOR_ENGINEER,
+    STOCK_ADMIN: roles.STOCK_ADMIN,
+    STOCKADMIN: roles.STOCK_ADMIN,
+};
+
+const normalizeUserRoleValue = (value) => {
+    const normalizedKey = String(value || '')
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, '_');
+    return USER_ROLE_NORMALIZATION_MAP[normalizedKey] || normalizedKey;
+};
+
+const normalizeUserEmailValue = (value) => {
+    const raw = Array.isArray(value) ? (value.find(Boolean) || value[0] || '') : value;
+    return String(raw || '').trim().toLowerCase();
+};
+
 function buildAppToken(user) {
     return jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
 }
@@ -156,6 +189,9 @@ function serializeUser(user) {
 }
 
 function getExternalBaseUrl(req) {
+    if (NODE_ENV !== 'production' && CLIENT_URL) {
+        return CLIENT_URL.replace(/\/+$/, '');
+    }
     const forwardedProtoHeader = req.headers['x-forwarded-proto'];
     const proto = forwardedProtoHeader ? forwardedProtoHeader.split(',')[0] : req.protocol;
     return `${proto}://${req.get('host')}`;
@@ -3343,6 +3379,38 @@ app.post('/api/bom/upload', authMiddleware, upload.single('file'), async (req, r
 const startServer = async () => {
     try {
         await connectDB();
+
+        try {
+            const usersCollection = mongoose.connection.collection('users');
+            const rawUsers = await usersCollection.find({}, {
+                projection: { _id: 1, email: 1, role: 1, department: 1 }
+            }).toArray();
+
+            let migratedUsers = 0;
+            for (const rawUser of rawUsers) {
+                const nextEmail = normalizeUserEmailValue(rawUser.email);
+                const nextRole = normalizeUserRoleValue(rawUser.role);
+                const nextDepartment = rawUser.department == null
+                    ? null
+                    : String(rawUser.department).trim().toUpperCase();
+
+                const update = {};
+                if (nextEmail && nextEmail !== rawUser.email) update.email = nextEmail;
+                if (nextRole && nextRole !== rawUser.role) update.role = nextRole;
+                if (nextDepartment !== rawUser.department) update.department = nextDepartment;
+
+                if (Object.keys(update).length > 0) {
+                    await usersCollection.updateOne({ _id: rawUser._id }, { $set: update });
+                    migratedUsers += 1;
+                }
+            }
+
+            if (migratedUsers > 0) {
+                console.log(`✅ [Migration] Normalized ${migratedUsers} user document(s) for email/role compatibility`);
+            }
+        } catch (migErr) {
+            console.error('⚠️ [Migration] User normalization failed (non-fatal):', migErr.message);
+        }
 
         // ── Role Normalization Migration ─────────────────────────────
         // Normalize all stored roles to uppercase so queries work correctly
