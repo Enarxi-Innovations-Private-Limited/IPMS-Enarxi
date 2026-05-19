@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -1264,11 +1264,20 @@ class BOMProcessor:
                 item_data["available_stock"] = {} # Store for allocation logic
                 future_total = max(1, len(futures))
                 future_done = 0
+                VENDOR_THREAD_TIMEOUT = 120  # 2 minutes max per vendor thread
                 future_to_vendor = {future: vendor for vendor, future in futures.items()}
-                for future in as_completed(future_to_vendor):
+                try:
+                    completed_futures = as_completed(future_to_vendor, timeout=VENDOR_THREAD_TIMEOUT * max(1, len(future_to_vendor)))
+                except TimeoutError:
+                    completed_futures = iter([])  # All remaining futures timed out
+                    print(f"⚠️ as_completed global timeout — some vendor threads hung")
+                for future in completed_futures:
                     vendor = future_to_vendor[future]
                     try:
-                        res = future.result()
+                        res = future.result(timeout=VENDOR_THREAD_TIMEOUT)
+                    except TimeoutError:
+                        print(f"[{vendor}] ⚠️ Thread timed out after {VENDOR_THREAD_TIMEOUT}s — skipping")
+                        res = None
                     except Exception as e:
                         print(f"[{vendor}] ⚠️ Future timed out / errored: {e}")
                         res = None
