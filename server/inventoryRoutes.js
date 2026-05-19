@@ -4081,6 +4081,8 @@ router.post('/purchase-planning/auto-quote/start', async (req, res) => {
             status: 'RUNNING',
             progress: 0,
             progressStatus: 'Queued BOM analysis...',
+            phase: 'queued',
+            partialItems: [],
             createdAt: new Date().toISOString(),
             request: {
                 batchId: batchId || null,
@@ -4098,7 +4100,9 @@ router.post('/purchase-planning/auto-quote/start', async (req, res) => {
                     status: 'COMPLETED',
                     progress: 100,
                     progressStatus: 'BOM analysis and cart verification completed.',
+                    phase: 'complete',
                     completedAt: new Date().toISOString(),
+                    partialItems: Array.isArray(result?.results) ? result.results : [],
                     result
                 });
             } catch (err) {
@@ -4107,6 +4111,7 @@ router.post('/purchase-planning/auto-quote/start', async (req, res) => {
                     ...purchasePlanningQuoteJobs.get(jobId),
                     status: 'FAILED',
                     progressStatus: err.detail || err.message || 'BOM analysis failed.',
+                    phase: 'failed',
                     completedAt: new Date().toISOString(),
                     error: {
                         message: err.message || 'Failed to auto-quote selected lines.',
@@ -4145,6 +4150,8 @@ router.get('/purchase-planning/auto-quote/status/:jobId', async (req, res) => {
                     job.progress = toNumber(progressData?.percent);
                     job.progressStatus = String(progressData?.status || job.progressStatus || '').trim() || 'Processing BOM...';
                     job.bomRunning = Boolean(progressData?.is_running);
+                    job.phase = String(progressData?.phase || job.phase || '').trim() || 'processing';
+                    job.partialItems = Array.isArray(progressData?.partial_items) ? progressData.partial_items : [];
                     purchasePlanningQuoteJobs.set(job.id, job);
                 }
             } catch (progressError) {
@@ -4157,8 +4164,10 @@ router.get('/purchase-planning/auto-quote/status/:jobId', async (req, res) => {
             status: job.status,
             progress: toNumber(job.progress),
             progressStatus: job.progressStatus || '',
+            phase: job.phase || 'processing',
             createdAt: job.createdAt,
             completedAt: job.completedAt || null,
+            partialItems: Array.isArray(job.partialItems) ? job.partialItems : [],
             result: job.status === 'COMPLETED' ? job.result : null,
             error: job.status === 'FAILED' ? job.error : null
         });

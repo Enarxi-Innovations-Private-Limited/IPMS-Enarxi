@@ -29,6 +29,12 @@ function formatMappedSkus(mappings = []) {
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
+function normalizeVendorDisplayName(value = '') {
+    const normalized = String(value || '').trim().toUpperCase();
+    if (normalized === 'ELEVTA') return 'EVELTA';
+    return normalized;
+}
+
 export default function PurchasePlanning() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
@@ -233,6 +239,59 @@ export default function PurchasePlanning() {
         }));
     };
 
+    const applyPartialProgress = (partialItems = []) => {
+        if (!Array.isArray(partialItems) || partialItems.length === 0) return;
+
+        const byLineId = new Map();
+        const byItemId = new Map();
+        partialItems.forEach((entry) => {
+            if (entry?.lineId) byLineId.set(String(entry.lineId), entry);
+            if (entry?.itemId) byItemId.set(String(entry.itemId), entry);
+        });
+
+        if (tab === 'individual') {
+            setLineStates((prev) => {
+                const next = { ...prev };
+                selectedIndividualLines.forEach((line) => {
+                    const partial = byLineId.get(String(line.purchaseRequestLineId));
+                    if (!partial) return;
+                    const bestVendor = normalizeVendorDisplayName(partial.best_vendor || partial.allocations?.[0]?.vendor || '');
+                    const bestRate = partial.best_price ? String(partial.best_price).replace(/^₹/, '') : '';
+                    next[line.purchaseRequestLineId] = {
+                        ...next[line.purchaseRequestLineId],
+                        selected: true,
+                        vendorName: bestVendor || next[line.purchaseRequestLineId]?.vendorName || '',
+                        rate: bestRate || next[line.purchaseRequestLineId]?.rate || '',
+                        matchedSku: next[line.purchaseRequestLineId]?.matchedSku || '',
+                        cartStatus: next[line.purchaseRequestLineId]?.cartStatus || 'PROCESSING',
+                        cartMessage: next[line.purchaseRequestLineId]?.cartMessage || 'Pricing captured. Cart automation in progress...'
+                    };
+                });
+                return next;
+            });
+            return;
+        }
+
+        setCombinedStates((prev) => {
+            const next = { ...prev };
+            selectedCombinedRows.forEach((row) => {
+                const partial = byItemId.get(String(row.itemId));
+                if (!partial) return;
+                const bestVendor = normalizeVendorDisplayName(partial.best_vendor || partial.allocations?.[0]?.vendor || '');
+                const bestRate = partial.best_price ? String(partial.best_price).replace(/^₹/, '') : '';
+                next[row.itemId] = {
+                    ...next[row.itemId],
+                    selected: true,
+                    vendorName: bestVendor || next[row.itemId]?.vendorName || '',
+                    rate: bestRate || next[row.itemId]?.rate || '',
+                    cartStatus: next[row.itemId]?.cartStatus || 'PROCESSING',
+                    cartMessage: next[row.itemId]?.cartMessage || 'Pricing captured. Cart automation in progress...'
+                };
+            });
+            return next;
+        });
+    };
+
     const handleAnalyzeWithBom = async () => {
         const lineIds = tab === 'individual'
             ? selectedIndividualLines.map((line) => line.purchaseRequestLineId)
@@ -267,6 +326,7 @@ export default function PurchasePlanning() {
                 const job = statusResponse.data || {};
                 setAnalysisProgress(toNumber(job.progress));
                 setAnalysisProgressStatus(job.progressStatus || 'Processing BOM...');
+                applyPartialProgress(job.partialItems || []);
 
                 if (job.status === 'FAILED') {
                     const error = new Error(job.error?.message || 'Failed to analyze selected lines with BOM.');
@@ -612,6 +672,8 @@ export default function PurchasePlanning() {
                                                                         <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
                                                                     ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
                                                                         <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
+                                                                    ) : state.cartStatus === 'PROCESSING' ? (
+                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
                                                                     ) : state.resolved ? (
                                                                         <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                     ) : state.reason ? (
@@ -693,6 +755,8 @@ export default function PurchasePlanning() {
                                                                     <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
                                                                 ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
                                                                     <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
+                                                                ) : state.cartStatus === 'PROCESSING' ? (
+                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
                                                                 ) : state.resolved ? (
                                                                     <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                 ) : state.reason ? (

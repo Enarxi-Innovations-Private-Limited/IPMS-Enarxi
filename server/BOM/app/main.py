@@ -35,7 +35,9 @@ current_data = {
 progress_state = {
     "percent": 0,
     "status": "Ready",
-    "is_running": False
+    "is_running": False,
+    "partial_items": [],
+    "phase": "idle"
 }
 
 @app.get("/progress")
@@ -191,11 +193,18 @@ async def process_bom(payload: dict):
         progress_state["percent"] = 0
         progress_state["status"] = "Initializing..."
         progress_state["is_running"] = True
+        progress_state["partial_items"] = []
+        progress_state["phase"] = "initializing"
 
-        def update_progress(p, s):
+        def update_progress(p, s, meta=None):
             p = min(100, round(p, 2))
             progress_state["percent"] = p
             progress_state["status"] = s
+            if isinstance(meta, dict):
+                if "partial_items" in meta and isinstance(meta["partial_items"], list):
+                    progress_state["partial_items"] = meta["partial_items"]
+                if "phase" in meta and meta["phase"]:
+                    progress_state["phase"] = str(meta["phase"])
 
         # Run the blocking Playwright code in a separate thread to prevent FastAPI from freezing
         loop = asyncio.get_event_loop()
@@ -211,6 +220,8 @@ async def process_bom(payload: dict):
         progress_state["percent"] = 100
         progress_state["status"] = "Complete"
         progress_state["is_running"] = False
+        progress_state["partial_items"] = results.get("items", [])
+        progress_state["phase"] = "complete"
         
         # Store processed results for export
         current_data["results"] = results
@@ -222,6 +233,9 @@ async def process_bom(payload: dict):
         except Exception:
             pass
         detail = str(e).strip() or "Unknown BOM processing error."
+        progress_state["is_running"] = False
+        progress_state["status"] = detail
+        progress_state["phase"] = "failed"
         raise HTTPException(status_code=500, detail=detail)
 
 @app.get("/export")

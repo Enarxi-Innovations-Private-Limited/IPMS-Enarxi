@@ -1188,6 +1188,33 @@ class BOMProcessor:
         # REMOVED: _initialize_sessions(parallel_vendors) - Now part of sequential Phase 2
         
         try:
+            def build_partial_items_snapshot(items):
+                snapshot = []
+                for item in items:
+                    snapshot.append({
+                        "lineId": item.get("lineId"),
+                        "itemId": item.get("itemId"),
+                        "itemCode": item.get("itemCode"),
+                        "component": item.get("component"),
+                        "qty": item.get("qty"),
+                        "best_vendor": item.get("best_vendor", ""),
+                        "best_price": item.get("best_price", ""),
+                        "allocations": item.get("allocations", []),
+                        "unfulfilled": item.get("unfulfilled", item.get("remaining_qty", 0)),
+                        "cart_url": item.get("cart_url", "")
+                    })
+                return snapshot
+
+            def emit_progress(percent, status, phase="processing", extra_items=None):
+                snapshot_items = list(processed_items)
+                if extra_items:
+                    snapshot_items.extend(extra_items)
+                if progress_callback:
+                    progress_callback(percent, status, {
+                        "phase": phase,
+                        "partial_items": build_partial_items_snapshot(snapshot_items)
+                    })
+
             # Helper for progress smoothing
             def get_smooth_progress(real_progress, base, weight, phase_start_time, min_phase_time):
                 elapsed = time.time() - phase_start_time
@@ -1199,7 +1226,7 @@ class BOMProcessor:
             total_items = len(df)
             completed1 = 0
             start_time1 = time.time()
-            if progress_callback: progress_callback(0, "Starting item scouting...")
+            emit_progress(3, "Starting item scouting...", "pricing")
             
             for idx, row in df.iterrows():
                 comp = str(row.get(mapping["component"], "")).strip()
@@ -1207,10 +1234,8 @@ class BOMProcessor:
                 if not comp or qty <= 0: continue
                 
                 completed1 += 1
-                if progress_callback:
-                    real_p = base1 + (completed1 / total_items) * weight1
-                    p = get_smooth_progress(real_p, base1, weight1, start_time1, 5)
-                    progress_callback(p, f"Fetching prices ({completed1}/{total_items}) - {comp}")
+                current_item_base = base1 + ((completed1 - 1) / max(1, total_items)) * weight1
+                emit_progress(max(5, current_item_base), f"Fetching prices ({completed1}/{total_items}) - {comp}", "pricing")
                 item_data = {"component": comp, "qty": qty}
                 for meta_key in ("lineId", "itemId", "itemCode"):
                     meta_val = row.get(meta_key, None)
@@ -1237,6 +1262,8 @@ class BOMProcessor:
                 
                 item_data["links"] = {}
                 item_data["available_stock"] = {} # Store for allocation logic
+                future_total = max(1, len(futures))
+                future_done = 0
                 for vendor, future in futures.items():
                     try:
                         res = future.result(timeout=120)
@@ -1267,6 +1294,28 @@ class BOMProcessor:
                             item_data[f"{vendor}_tiers"] = res["tiers"]
                     else:
                         item_data[vendor] = None
+
+                    provisional_options = []
+                    for provisional_vendor in selected_vendors:
+                        provisional_price_str = str(item_data.get(provisional_vendor, ""))
+                        provisional_match = re.search(r"(?:\u20B9|Rs\.?|â‚¹)\s*([\d,]+\.?\d*)", provisional_price_str)
+                        if provisional_match:
+                            try:
+                                provisional_options.append({
+                                    "vendor": provisional_vendor,
+                                    "price": float(provisional_match.group(1).replace(',', ''))
+                                })
+                            except Exception:
+                                pass
+                    provisional_options.sort(key=lambda x: x["price"])
+                    if provisional_options:
+                        item_data["best_vendor"] = provisional_options[0]["vendor"]
+                        item_data["best_price"] = f"\u20B9{provisional_options[0]['price']:.2f}"
+
+                    future_done += 1
+                    vendor_progress = current_item_base + ((future_done / future_total) * (weight1 / max(1, total_items)))
+                    p = get_smooth_progress(vendor_progress, base1, weight1, start_time1, 5)
+                    emit_progress(max(8, p), f"Fetching prices ({completed1}/{total_items}) - {comp}", "pricing", [item_data.copy()])
 
                 # 🔥 NEW ALLOCATION LOGIC (Multi-Vendor Split)
                 allocations = []
@@ -1369,12 +1418,14 @@ class BOMProcessor:
                     item_data["total_amt"] = "-"
 
                 processed_items.append(item_data)
+                real_p = base1 + (completed1 / total_items) * weight1
+                p = get_smooth_progress(real_p, base1, weight1, start_time1, 5)
+                emit_progress(max(12, p), f"Pricing captured ({completed1}/{total_items}) - {comp}", "pricing")
         finally:
             pass # ThreadPoolExecutor handles cleanup
 
         if skip_cart_phase:
-            if progress_callback:
-                progress_callback(95, "Finalizing price-only results...")
+            emit_progress(95, "Finalizing price-only results...", "finalizing")
             for item in processed_items:
                 keys_to_remove = [k for k in item.keys() if "_tiers" in k]
                 for k in keys_to_remove:
@@ -1425,21 +1476,19 @@ class BOMProcessor:
 
         for vendor in cart_order:
             if vendor in vendor_cart_plan:
-                if progress_callback:
-                    real_p = base2 + (done2 / max(1, total_vendors)) * weight2
-                    p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
-                    progress_callback(p, f"Starting cart automation - {vendor}")
+                real_p = base2 + (done2 / max(1, total_vendors)) * weight2
+                p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
+                emit_progress(max(52, p), f"Starting cart automation - {vendor}", "cart")
                 
                 self._process_vendor_cart_sequentially(vendor, vendor_cart_plan[vendor], progress_callback=progress_callback)
                 processed_vendors.add(vendor)
                 
                 done2 += 1
-                if progress_callback:
-                    real_p = base2 + (done2 / max(1, total_vendors)) * weight2
-                    p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
-                    progress_callback(p, f"Cart automation - {vendor}")
+                real_p = base2 + (done2 / max(1, total_vendors)) * weight2
+                p = get_smooth_progress(real_p, base2, weight2, start_time2, 5)
+                emit_progress(max(58, p), f"Cart automation - {vendor}", "cart")
 
-        if progress_callback: progress_callback(95, "Finalizing allocations...")
+        emit_progress(90, "Finalizing allocations...", "fallback")
 
         # 🔥 DYNAMIC RE-ALLOCATION (Phase 3)
         fallback_base = 75
@@ -1534,16 +1583,14 @@ class BOMProcessor:
                         break
                         
                 fallback_done += 1
-                if progress_callback:
-                    real_p = fallback_base + (fallback_done / fallback_total) * fallback_weight
-                    p = get_smooth_progress(real_p, fallback_base, fallback_weight, start_time3, 3)
-                    progress_callback(p, f"Fallback processing ({fallback_done}/{fallback_total})")
+                real_p = fallback_base + (fallback_done / fallback_total) * fallback_weight
+                p = get_smooth_progress(real_p, fallback_base, fallback_weight, start_time3, 3)
+                emit_progress(max(76, p), f"Fallback processing ({fallback_done}/{fallback_total})", "fallback")
         else:
-            if progress_callback:
-                progress_callback(90, "No fallback needed")
+            emit_progress(90, "No fallback needed", "fallback")
 
         # Phase 4: Finalization
-        if progress_callback: progress_callback(90, "Preparing results...")
+        emit_progress(97, "Preparing results...", "finalizing")
 
         # Recalculate final totals based on ACTUAL fulfillment
         optimized_total = 0
