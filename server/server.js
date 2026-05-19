@@ -7,6 +7,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const multer = require('multer');
 const xlsx = require('xlsx');
 const path = require('path');
@@ -24,13 +25,21 @@ const ADDITIONAL_ALLOWED_ORIGINS = (process.env.ADDITIONAL_ALLOWED_ORIGINS || ''
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
-const JWT_SECRET = process.env.JWT_SECRET || (NODE_ENV !== 'production' ? 'super-secret-key-change-in-production' : '');
+const JWT_SECRET = process.env.JWT_SECRET || process.env.AUTH_SECRET || (NODE_ENV !== 'production' ? 'super-secret-key-change-in-production' : '');
+const MICROSOFT_CLIENT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_ID || '';
+const MICROSOFT_CLIENT_SECRET = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET || '';
+const MICROSOFT_TENANT_ID = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID || 'common';
+const MICROSOFT_SCOPES = ['openid', 'profile', 'email', 'User.Read'];
 
 if (NODE_ENV === 'production' && !JWT_SECRET) {
     throw new Error('JWT_SECRET must be set in production.');
 }
 
 const app = express();
+const staticAllowedOrigins = [
+    'https://ipms-enarxi.vercel.app',
+    'https://tracker.enarxi.com',
+];
 
 const developmentOrigins = [
     'http://localhost:5173',
@@ -40,6 +49,7 @@ const developmentOrigins = [
 ];
 const allowedOrigins = new Set([
     CLIENT_URL,
+    ...staticAllowedOrigins,
     ...ADDITIONAL_ALLOWED_ORIGINS,
     ...(NODE_ENV !== 'production' ? developmentOrigins : [])
 ].filter(Boolean));
@@ -129,6 +139,88 @@ const roles = {
     JUNIOR_ENGINEER: 'JUNIOR_ENGINEER', // Legacy
     STOCK_ADMIN: 'STOCK_ADMIN' // Legacy
 };
+
+function buildAppToken(user) {
+    return jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+}
+
+function serializeUser(user) {
+    return {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        employeeId: user.employeeId,
+        role: user.role,
+        department: user.department,
+    };
+}
+
+function getExternalBaseUrl(req) {
+    const forwardedProtoHeader = req.headers['x-forwarded-proto'];
+    const proto = forwardedProtoHeader ? forwardedProtoHeader.split(',')[0] : req.protocol;
+    return `${proto}://${req.get('host')}`;
+}
+
+function getMicrosoftCallbackUrl(req) {
+    return `${getExternalBaseUrl(req)}/api/auth/microsoft/callback`;
+}
+
+function createMicrosoftState(origin) {
+    return jwt.sign(
+        {
+            type: 'MICROSOFT_OAUTH_STATE',
+            origin,
+            nonce: crypto.randomUUID(),
+        },
+        JWT_SECRET,
+        { expiresIn: '10m' }
+    );
+}
+
+function verifyMicrosoftState(state) {
+    const payload = jwt.verify(state, JWT_SECRET);
+    if (payload?.type !== 'MICROSOFT_OAUTH_STATE') {
+        throw new Error('Invalid Microsoft OAuth state');
+    }
+    return payload;
+}
+
+async function exchangeMicrosoftCodeForTokens({ code, redirectUri }) {
+    const tokenEndpoint = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`;
+    const body = new URLSearchParams({
+        client_id: MICROSOFT_CLIENT_ID,
+        client_secret: MICROSOFT_CLIENT_SECRET,
+        code,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+        scope: MICROSOFT_SCOPES.join(' '),
+    });
+
+    const response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data?.error_description || data?.error || 'Failed to exchange Microsoft authorization code');
+    }
+    return data;
+}
+
+async function fetchMicrosoftProfile(accessToken) {
+    const response = await fetch('https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName', {
+        headers: {
+            Authorization: `Bearer ${accessToken}`,
+        },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data?.error?.message || 'Failed to fetch Microsoft profile');
+    }
+    return data;
+}
 
 // Helper to validate ObjectId
 const isValidObjectId = (id) => {
@@ -465,12 +557,123 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
         return res.status(401).json({ message: 'Invalid credentials' });
     }
-    const token = jwt.sign({ id: user._id, name: user.name, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '24h' });
+    user.lastLoginProvider = 'PASSWORD';
+    await user.save();
+    const token = buildAppToken(user);
     await logActivity('LOGIN', `${user.name} logged in`, user._id, user.name, null, null);
-    res.json({
-        token,
-        user: { id: user._id, name: user.name, email: user.email, employeeId: user.employeeId, role: user.role, department: user.department },
+    res.json({ token, user: serializeUser(user) });
+});
+
+app.get('/api/auth/microsoft/start', async (req, res) => {
+    if (!MICROSOFT_CLIENT_ID || !MICROSOFT_CLIENT_SECRET || !MICROSOFT_TENANT_ID) {
+        return res.status(500).send('Microsoft Entra ID is not configured on the server.');
+    }
+
+    const origin = req.query.origin || req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const state = createMicrosoftState(origin);
+    const authorizationEndpoint = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`;
+    const params = new URLSearchParams({
+        client_id: MICROSOFT_CLIENT_ID,
+        response_type: 'code',
+        redirect_uri: getMicrosoftCallbackUrl(req),
+        response_mode: 'query',
+        scope: MICROSOFT_SCOPES.join(' '),
+        state,
     });
+
+    res.redirect(`${authorizationEndpoint}?${params.toString()}`);
+});
+
+app.get('/api/auth/microsoft/callback', async (req, res) => {
+    const closePopup = (payload) => {
+        const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
+        return res.send(`<!doctype html>
+<html>
+  <body>
+    <script>
+      (function () {
+        var payload = ${scriptPayload};
+        if (window.opener) {
+          window.opener.postMessage(payload, payload.origin || '*');
+        }
+        window.close();
+      })();
+    </script>
+  </body>
+</html>`);
+    };
+
+    try {
+        const { code, state, error, error_description: errorDescription } = req.query;
+
+        if (error) {
+            return closePopup({
+                type: 'MICROSOFT_AUTH_RESULT',
+                success: false,
+                origin: '*',
+                error: errorDescription || error,
+            });
+        }
+
+        if (!code || !state) {
+            return closePopup({
+                type: 'MICROSOFT_AUTH_RESULT',
+                success: false,
+                origin: '*',
+                error: 'Missing Microsoft authorization response data.',
+            });
+        }
+
+        const statePayload = verifyMicrosoftState(state);
+        const tokenData = await exchangeMicrosoftCodeForTokens({
+            code,
+            redirectUri: getMicrosoftCallbackUrl(req),
+        });
+        const profile = await fetchMicrosoftProfile(tokenData.access_token);
+        const email = String(profile.mail || profile.userPrincipalName || '').trim().toLowerCase();
+
+        if (!email) {
+            return closePopup({
+                type: 'MICROSOFT_AUTH_RESULT',
+                success: false,
+                origin: statePayload.origin || '*',
+                error: 'Microsoft account did not return an email address.',
+            });
+        }
+
+        const user = await User.findOne({ email });
+        if (!user) {
+            return closePopup({
+                type: 'MICROSOFT_AUTH_RESULT',
+                success: false,
+                origin: statePayload.origin || '*',
+                error: 'No IPMS user is mapped to this Microsoft account email.',
+            });
+        }
+
+        user.microsoftEntraId = profile.id || user.microsoftEntraId || null;
+        user.lastLoginProvider = 'MICROSOFT';
+        await user.save();
+
+        const token = buildAppToken(user);
+        await logActivity('LOGIN', `${user.name} logged in with Microsoft`, user._id, user.name, null, null);
+
+        return closePopup({
+            type: 'MICROSOFT_AUTH_RESULT',
+            success: true,
+            origin: statePayload.origin || '*',
+            token,
+            user: serializeUser(user),
+        });
+    } catch (err) {
+        console.error('Microsoft auth callback error:', err);
+        return closePopup({
+            type: 'MICROSOFT_AUTH_RESULT',
+            success: false,
+            origin: '*',
+            error: err.message || 'Microsoft authentication failed.',
+        });
+    }
 });
 
 app.get('/api/auth/me', authMiddleware, async (req, res) => {

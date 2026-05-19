@@ -11,6 +11,9 @@ const ROLE_ROUTE_MAP = {
   JUNIOR_ENGINEER: '/junior-engineer',
   EMPLOYEE: '/junior-engineer',
   INTERN: '/intern',
+  STOCK_ADMIN: '/stock-admin',
+  STORE_MANAGER: '/store',
+  PURCHASE_MANAGER: '/purchase',
 };
 
 export default function LoginPage() {
@@ -20,6 +23,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
 
@@ -29,6 +33,27 @@ export default function LoginPage() {
       const path = ROLE_ROUTE_MAP[user.role] || '/';
       navigate(path, { replace: true });
     }
+  }, [navigate]);
+
+  useEffect(() => {
+    const handleMicrosoftMessage = (event) => {
+      const data = event.data;
+      if (!data || data.type !== 'MICROSOFT_AUTH_RESULT') return;
+
+      if (!data.success) {
+        setMicrosoftLoading(false);
+        setError(data.error || 'Microsoft sign-in failed.');
+        return;
+      }
+
+      saveAuth(data.token, data.user);
+      setMicrosoftLoading(false);
+      const path = ROLE_ROUTE_MAP[data.user.role] || '/';
+      navigate(path, { replace: true });
+    };
+
+    window.addEventListener('message', handleMicrosoftMessage);
+    return () => window.removeEventListener('message', handleMicrosoftMessage);
   }, [navigate]);
 
   const handleSubmit = async (e) => {
@@ -46,6 +71,29 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMicrosoftLogin = () => {
+    setError('');
+    setMicrosoftLoading(true);
+    const popup = window.open(
+      `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`,
+      'ipms-microsoft-login',
+      'width=520,height=720,resizable=yes,scrollbars=yes'
+    );
+
+    if (!popup) {
+      setMicrosoftLoading(false);
+      setError('Popup blocked. Allow popups and try Microsoft sign-in again.');
+      return;
+    }
+
+    const popupTimer = window.setInterval(() => {
+      if (popup.closed) {
+        window.clearInterval(popupTimer);
+        setMicrosoftLoading(false);
+      }
+    }, 500);
   };
 
   return (
@@ -152,6 +200,26 @@ export default function LoginPage() {
                 >
                   <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
+                </button>
+
+                <div className="relative my-3">
+                  <div className="border-t border-[#324467]/50"></div>
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-[#111827] px-3 text-xs text-[#92a4c9]">or</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleMicrosoftLogin}
+                  disabled={microsoftLoading}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-lg border border-[#324467] bg-white text-[#111827] font-bold text-base tracking-wide transition-all hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+                    <path fill="#f25022" d="M1 1h10v10H1z" />
+                    <path fill="#00a4ef" d="M13 1h10v10H13z" />
+                    <path fill="#7fba00" d="M1 13h10v10H1z" />
+                    <path fill="#ffb900" d="M13 13h10v10H13z" />
+                  </svg>
+                  <span>{microsoftLoading ? 'Connecting to Microsoft...' : 'Continue with Microsoft'}</span>
                 </button>
               </form>
 

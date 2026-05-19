@@ -34,6 +34,16 @@ const userSchema = new mongoose.Schema({
         enum: ['IT', 'HARDWARE', 'SOFTWARE', null],
         default: null,
     },
+    microsoftEntraId: {
+        type: String,
+        default: null,
+        index: true,
+    },
+    lastLoginProvider: {
+        type: String,
+        enum: ['PASSWORD', 'MICROSOFT'],
+        default: 'PASSWORD',
+    },
     createdAt: {
         type: Date,
         default: Date.now,
