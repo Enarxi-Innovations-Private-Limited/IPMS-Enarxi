@@ -36,6 +36,7 @@ if (NODE_ENV === 'production' && !JWT_SECRET) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 const staticAllowedOrigins = [
     'https://ipms-enarxi.vercel.app',
     'https://tracker.enarxi.com',
@@ -189,9 +190,23 @@ function serializeUser(user) {
 }
 
 function getExternalBaseUrl(req) {
+    const normalizedClientUrl = CLIENT_URL.replace(/\/+$/, '');
     if (NODE_ENV !== 'production' && CLIENT_URL) {
-        return CLIENT_URL.replace(/\/+$/, '');
+        return normalizedClientUrl;
     }
+
+    if (NODE_ENV === 'production' && normalizedClientUrl) {
+        try {
+            const configuredClientHost = new URL(normalizedClientUrl).host.toLowerCase();
+            const requestHost = String(req.get('host') || '').toLowerCase();
+            if (requestHost === configuredClientHost) {
+                return normalizedClientUrl;
+            }
+        } catch (error) {
+            console.warn('Unable to parse CLIENT_URL for external base URL resolution:', error.message);
+        }
+    }
+
     const forwardedProtoHeader = req.headers['x-forwarded-proto'];
     const proto = forwardedProtoHeader ? forwardedProtoHeader.split(',')[0] : req.protocol;
     return `${proto}://${req.get('host')}`;
