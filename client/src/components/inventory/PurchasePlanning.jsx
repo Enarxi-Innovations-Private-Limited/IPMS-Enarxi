@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import * as XLSX from 'xlsx';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
@@ -35,9 +36,32 @@ function normalizeVendorDisplayName(value = '') {
     return normalized;
 }
 
+function escapeCsv(value) {
+    const text = String(value ?? '');
+    if (/[",\n]/.test(text)) {
+        return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+}
+
+function normalizeText(value) {
+    return String(value || '').trim().toUpperCase();
+}
+
+function resolveVendorFromCell(rawValue, vendorOptions) {
+    const normalized = normalizeText(rawValue);
+    if (!normalized) return null;
+    return vendorOptions.find((vendor) =>
+        normalizeText(vendor.id) === normalized ||
+        normalizeText(vendor.code) === normalized ||
+        normalizeText(vendor.name) === normalized
+    ) || null;
+}
+
 export default function PurchasePlanning() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
+    const uploadInputRef = useRef(null);
     const [tab, setTab] = useState('individual');
     const [queueRows, setQueueRows] = useState([]);
     const [combinedRows, setCombinedRows] = useState([]);
@@ -45,6 +69,7 @@ export default function PurchasePlanning() {
     const [selectedBatchId, setSelectedBatchId] = useState('');
     const [lineStates, setLineStates] = useState({});
     const [combinedStates, setCombinedStates] = useState({});
+    const [vendors, setVendors] = useState([]);
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(true);
     const [generating, setGenerating] = useState(false);
@@ -57,10 +82,11 @@ export default function PurchasePlanning() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            const [queueRes, combinedRes, orderRes] = await Promise.all([
+            const [queueRes, combinedRes, orderRes, vendorRes] = await Promise.all([
                 inventoryService.getPurchaseRequestQueue(),
                 inventoryService.getCombinedPurchaseDemand(),
-                inventoryService.getPurchaseOrders()
+                inventoryService.getPurchaseOrders(),
+                inventoryService.getVendors()
             ]);
             const queue = queueRes.data || [];
             const selectedFallbackId = selectedBatchId && queue.some((batch) => batch.id === selectedBatchId)
@@ -70,6 +96,7 @@ export default function PurchasePlanning() {
             setQueueRows(queue);
             setCombinedRows(combinedRes.data || []);
             setOrders(orderRes.data || []);
+            setVendors(vendorRes.data || []);
             setSelectedBatchId(selectedFallbackId);
         } catch (err) {
             notifyError(err.response?.data?.message || 'Failed to load purchase planning data.');
@@ -200,6 +227,15 @@ export default function PurchasePlanning() {
 
     const activePayload = tab === 'combined' ? combinedPayload : individualPayload;
 
+    const vendorOptions = useMemo(
+        () => (vendors || []).map((vendor) => ({
+            id: vendor._id || vendor.id,
+            name: vendor.name || vendor.vendorName || '',
+            code: vendor.vendorCode || ''
+        })),
+        [vendors]
+    );
+
     const selectedIndividualLines = useMemo(
         () => (selectedBatch?.lines || []).filter((line) => lineStates[line.purchaseRequestLineId]?.selected),
         [selectedBatch, lineStates]
@@ -213,11 +249,12 @@ export default function PurchasePlanning() {
     const unresolvedBlocking = useMemo(
         () => activePayload.filter((line) => {
             const hasCartAllocations = Array.isArray(line.cartAllocations) && line.cartAllocations.length > 0;
+            const manualReady = Boolean(line.vendorId) && line.rate > 0 && Boolean(line.matchedSku);
             return (
-                !line.resolved ||
-                line.cartStatus !== 'VERIFIED' ||
-                line.cartUnfulfilledQty > 0 ||
-                (!hasCartAllocations && (!line.vendorId || line.rate <= 0 || !line.matchedSku))
+                (!line.resolved && !manualReady) ||
+                (!manualReady && line.cartStatus !== 'VERIFIED') ||
+                (!manualReady && line.cartUnfulfilledQty > 0) ||
+                (!hasCartAllocations && !manualReady)
             );
         }),
         [activePayload]
@@ -237,6 +274,183 @@ export default function PurchasePlanning() {
             ...prev,
             [itemId]: { ...(prev[itemId] || {}), ...patch }
         }));
+    };
+
+    const handleManualVendorChange = (mode, key, vendorId) => {
+        const vendor = vendorOptions.find((entry) => String(entry.id) === String(vendorId));
+        const patch = {
+            vendorId,
+            vendorName: vendor?.name || '',
+            resolved: false,
+            reason: '',
+            cartStatus: '',
+            cartMessage: ''
+        };
+        if (mode === 'individual') {
+            updateIndividualState(key, patch);
+            return;
+        }
+        updateCombinedState(key, patch);
+    };
+
+    const handleDownloadRequest = () => {
+        const rows = tab === 'individual'
+            ? (selectedBatch?.lines || []).map((line) => {
+                const state = lineStates[line.purchaseRequestLineId] || {};
+                return {
+                    request: selectedBatch?.batchNumber || '',
+                    itemCode: line.itemCode || '',
+                    itemName: line.itemName || '',
+                    pendingQuantity: line.pendingQuantity || 0,
+                    vendor: state.vendorName || '',
+                    rate: state.rate || '',
+                    sku: state.matchedSku || formatMappedSkus(line.skuMappings).join(' | ')
+                };
+            })
+            : (combinedRows || []).map((row) => {
+                const state = combinedStates[row.itemId] || {};
+                return {
+                    request: 'COMBINED',
+                    itemCode: row.itemCode || '',
+                    itemName: row.itemName || '',
+                    pendingQuantity: row.totalRequiredQuantity || 0,
+                    vendor: state.vendorName || '',
+                    rate: state.rate || '',
+                    sku: state.matchedSku || formatMappedSkus(row.skuMappings).join(' | ')
+                };
+            });
+
+        if (!rows.length) {
+            notifyError('No request rows available to download.');
+            return;
+        }
+
+        const header = ['Request', 'Item Code', 'Item Name', 'Pending Quantity', 'Vendor', 'Rate', 'SKU'];
+        const csv = [
+            header.join(','),
+            ...rows.map((row) => [
+                escapeCsv(row.request),
+                escapeCsv(row.itemCode),
+                escapeCsv(row.itemName),
+                escapeCsv(row.pendingQuantity),
+                escapeCsv(row.vendor),
+                escapeCsv(row.rate),
+                escapeCsv(row.sku)
+            ].join(','))
+        ].join('\n');
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = tab === 'individual'
+            ? `${selectedBatch?.batchNumber || 'purchase-request'}.csv`
+            : 'combined-demand.csv';
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleOpenUpload = () => {
+        uploadInputRef.current?.click();
+    };
+
+    const handleUploadRequestSheet = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = '';
+        if (!file) return;
+
+        try {
+            const buffer = await file.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+            if (!Array.isArray(rows) || rows.length === 0) {
+                notifyError('The uploaded file does not contain any rows.');
+                return;
+            }
+
+            let updatedCount = 0;
+
+            if (tab === 'individual') {
+                const lineByItemCode = new Map((selectedBatch?.lines || []).map((line) => [normalizeText(line.itemCode), line]));
+                setLineStates((prev) => {
+                    const next = { ...prev };
+                    rows.forEach((row) => {
+                        const line = lineByItemCode.get(normalizeText(row['Item Code'] || row['ITEM CODE']));
+                        if (!line) return;
+                        const vendor = resolveVendorFromCell(
+                            row['Vendor'] || row['Vendor Name'] || row['Vendor Code'] || row['VENDOR'],
+                            vendorOptions
+                        );
+                        const rate = String(row['Rate'] || row['RATE'] || '').trim();
+                        const matchedSku = String(row['SKU'] || row['Matched SKU'] || row['Vendor SKU'] || '').trim();
+                        const orderQuantity = String(row['Order Quantity'] || row['Pending Quantity'] || '').trim();
+                        next[line.purchaseRequestLineId] = {
+                            ...next[line.purchaseRequestLineId],
+                            selected: true,
+                            vendorId: vendor?.id || next[line.purchaseRequestLineId]?.vendorId || '',
+                            vendorName: vendor?.name || next[line.purchaseRequestLineId]?.vendorName || '',
+                            rate: rate || next[line.purchaseRequestLineId]?.rate || '',
+                            matchedSku: matchedSku || next[line.purchaseRequestLineId]?.matchedSku || '',
+                            orderQuantity: orderQuantity || next[line.purchaseRequestLineId]?.orderQuantity || '',
+                            resolved: false,
+                            reason: '',
+                            cartStatus: '',
+                            cartMessage: '',
+                            cartUnfulfilledQty: 0,
+                            cartAllocations: []
+                        };
+                        updatedCount += 1;
+                    });
+                    return next;
+                });
+            } else {
+                const rowByItemCode = new Map((combinedRows || []).map((row) => [normalizeText(row.itemCode), row]));
+                setCombinedStates((prev) => {
+                    const next = { ...prev };
+                    rows.forEach((sheetRow) => {
+                        const demandRow = rowByItemCode.get(normalizeText(sheetRow['Item Code'] || sheetRow['ITEM CODE']));
+                        if (!demandRow) return;
+                        const vendor = resolveVendorFromCell(
+                            sheetRow['Vendor'] || sheetRow['Vendor Name'] || sheetRow['Vendor Code'] || sheetRow['VENDOR'],
+                            vendorOptions
+                        );
+                        const rate = String(sheetRow['Rate'] || sheetRow['RATE'] || '').trim();
+                        const matchedSku = String(sheetRow['SKU'] || sheetRow['Matched SKU'] || sheetRow['Vendor SKU'] || '').trim();
+                        const orderQuantity = String(sheetRow['Order Quantity'] || sheetRow['Pending Quantity'] || '').trim();
+                        next[demandRow.itemId] = {
+                            ...next[demandRow.itemId],
+                            selected: true,
+                            vendorId: vendor?.id || next[demandRow.itemId]?.vendorId || '',
+                            vendorName: vendor?.name || next[demandRow.itemId]?.vendorName || '',
+                            rate: rate || next[demandRow.itemId]?.rate || '',
+                            matchedSku: matchedSku || next[demandRow.itemId]?.matchedSku || '',
+                            orderQuantity: orderQuantity || next[demandRow.itemId]?.orderQuantity || '',
+                            resolved: false,
+                            reason: '',
+                            cartStatus: '',
+                            cartMessage: '',
+                            cartUnfulfilledQty: 0,
+                            cartAllocations: []
+                        };
+                        updatedCount += 1;
+                    });
+                    return next;
+                });
+            }
+
+            if (!updatedCount) {
+                notifyError('No matching item codes were found in the uploaded file.');
+                return;
+            }
+
+            notifySuccess(`Imported pricing details for ${updatedCount} line(s).`);
+        } catch (err) {
+            notifyError(err.message || 'Failed to import the uploaded Excel/CSV file.');
+        }
     };
 
     const applyPartialProgress = (partialItems = []) => {
@@ -484,7 +698,7 @@ export default function PurchasePlanning() {
             return;
         }
         if (unresolvedBlocking.length > 0) {
-            notifyError('All selected lines must be BOM-resolved and cart-verified before PO generation.');
+            notifyError('Complete BOM/cart validation or fill vendor, rate, and SKU manually for every selected line before PO generation.');
             return;
         }
 
@@ -536,12 +750,31 @@ export default function PurchasePlanning() {
                         <>
                             {(tab === 'individual' || tab === 'combined') && (
                                 <div className="mb-4 flex flex-wrap gap-3">
+                                    <input
+                                        ref={uploadInputRef}
+                                        type="file"
+                                        accept=".xlsx,.xls,.csv"
+                                        onChange={handleUploadRequestSheet}
+                                        className="hidden"
+                                    />
                                     <button
                                         onClick={handleAnalyzeWithBom}
                                         disabled={analyzing}
                                         className="bg-primary/90 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-primary/20 disabled:opacity-50 transition-all active:scale-95"
                                     >
                                         {analyzing ? 'Analyzing BOM...' : 'Analyze with BOM'}
+                                    </button>
+                                    <button
+                                        onClick={handleOpenUpload}
+                                        className="bg-white border border-slate-300 text-[#556070] px-6 py-3 rounded-xl font-bold shadow-sm transition-all active:scale-95"
+                                    >
+                                        Upload Price Sheet
+                                    </button>
+                                    <button
+                                        onClick={handleDownloadRequest}
+                                        className="bg-white border border-slate-300 text-[#556070] px-6 py-3 rounded-xl font-bold shadow-sm transition-all active:scale-95"
+                                    >
+                                        Download Request
                                     </button>
                                     <button
                                         onClick={handleGenerate}
@@ -616,8 +849,8 @@ export default function PurchasePlanning() {
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Sel</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Item</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Pending</th>
-                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor (Auto)</th>
-                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate (Auto)</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor</th>
+                                                        <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">SKU</th>
                                                         <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
                                                     </tr>
@@ -659,13 +892,37 @@ export default function PurchasePlanning() {
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-3 text-[#556070] text-sm">
-                                                                    {state.vendorName || '-'}
+                                                                    <select
+                                                                        value={state.vendorId || ''}
+                                                                        onChange={(e) => handleManualVendorChange('individual', line.purchaseRequestLineId, e.target.value)}
+                                                                        className="w-44 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[#556070] focus:border-primary outline-none"
+                                                                    >
+                                                                        <option value="">Select vendor</option>
+                                                                        {vendorOptions.map((vendor) => (
+                                                                            <option key={vendor.id} value={vendor.id}>
+                                                                                {vendor.name}{vendor.code ? ` (${vendor.code})` : ''}
+                                                                            </option>
+                                                                        ))}
+                                                                    </select>
                                                                 </td>
                                                                 <td className="px-4 py-3 text-right text-[#556070] font-semibold">
-                                                                    {state.rate ? Number(state.rate).toFixed(2) : '-'}
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        step="0.01"
+                                                                        value={state.rate || ''}
+                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { rate: e.target.value, resolved: false, reason: '', cartStatus: '', cartMessage: '', cartUnfulfilledQty: 0, cartAllocations: [] })}
+                                                                        className="w-24 text-right bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
+                                                                    />
                                                                 </td>
                                                                 <td className="px-4 py-3 text-xs text-text-secondary">
-                                                                    {state.matchedSku || formatMappedSkus(line.skuMappings).join(' | ') || '-'}
+                                                                    <input
+                                                                        type="text"
+                                                                        value={state.matchedSku || ''}
+                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { matchedSku: e.target.value, resolved: false, reason: '', cartStatus: '', cartMessage: '', cartUnfulfilledQty: 0, cartAllocations: [] })}
+                                                                        placeholder={formatMappedSkus(line.skuMappings)[0] || 'Enter SKU'}
+                                                                        className="w-56 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[#556070] focus:border-primary outline-none"
+                                                                    />
                                                                 </td>
                                                                 <td className="px-4 py-3">
                                                                     {state.cartStatus === 'PARTIAL' ? (
@@ -674,6 +931,8 @@ export default function PurchasePlanning() {
                                                                         <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
                                                                     ) : state.cartStatus === 'PROCESSING' ? (
                                                                         <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
+                                                                    ) : state.vendorId && toNumber(state.rate) > 0 && state.matchedSku ? (
+                                                                        <span className="text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700">Manual ready</span>
                                                                     ) : state.resolved ? (
                                                                         <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                     ) : state.reason ? (
@@ -704,8 +963,8 @@ export default function PurchasePlanning() {
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Sel</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Item</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Total Required</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor (Auto)</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate (Auto)</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor</th>
+                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Rate</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">SKU</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Breakdown</th>
@@ -747,9 +1006,39 @@ export default function PurchasePlanning() {
                                                                     className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
                                                                 />
                                                             </td>
-                                                            <td className="px-4 py-3 text-[#556070] text-sm">{state.vendorName || '-'}</td>
-                                                            <td className="px-4 py-3 text-right text-[#556070] font-semibold">{state.rate ? Number(state.rate).toFixed(2) : '-'}</td>
-                                                            <td className="px-4 py-3 text-xs text-text-secondary">{state.matchedSku || formatMappedSkus(row.skuMappings).join(' | ') || '-'}</td>
+                                                            <td className="px-4 py-3 text-[#556070] text-sm">
+                                                                <select
+                                                                    value={state.vendorId || ''}
+                                                                    onChange={(e) => handleManualVendorChange('combined', row.itemId, e.target.value)}
+                                                                    className="w-44 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[#556070] focus:border-primary outline-none"
+                                                                >
+                                                                    <option value="">Select vendor</option>
+                                                                    {vendorOptions.map((vendor) => (
+                                                                        <option key={vendor.id} value={vendor.id}>
+                                                                            {vendor.name}{vendor.code ? ` (${vendor.code})` : ''}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-right text-[#556070] font-semibold">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0"
+                                                                    step="0.01"
+                                                                    value={state.rate || ''}
+                                                                    onChange={(e) => updateCombinedState(row.itemId, { rate: e.target.value, resolved: false, reason: '', cartStatus: '', cartMessage: '', cartUnfulfilledQty: 0, cartAllocations: [] })}
+                                                                    className="w-24 text-right bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 text-xs text-text-secondary">
+                                                                <input
+                                                                    type="text"
+                                                                    value={state.matchedSku || ''}
+                                                                    onChange={(e) => updateCombinedState(row.itemId, { matchedSku: e.target.value, resolved: false, reason: '', cartStatus: '', cartMessage: '', cartUnfulfilledQty: 0, cartAllocations: [] })}
+                                                                    placeholder={formatMappedSkus(row.skuMappings)[0] || 'Enter SKU'}
+                                                                    className="w-56 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[#556070] focus:border-primary outline-none"
+                                                                />
+                                                            </td>
                                                             <td className="px-4 py-3">
                                                                 {state.cartStatus === 'PARTIAL' ? (
                                                                     <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
@@ -757,6 +1046,8 @@ export default function PurchasePlanning() {
                                                                     <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
                                                                 ) : state.cartStatus === 'PROCESSING' ? (
                                                                     <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
+                                                                ) : state.vendorId && toNumber(state.rate) > 0 && state.matchedSku ? (
+                                                                    <span className="text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700">Manual ready</span>
                                                                 ) : state.resolved ? (
                                                                     <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                 ) : state.reason ? (
@@ -787,7 +1078,7 @@ export default function PurchasePlanning() {
                                     <ul className="mt-2 text-xs text-amber-800 list-disc list-inside">
                                         {unresolvedBlocking.slice(0, 8).map((line, idx) => (
                                             <li key={`${line.itemCode}-${idx}`}>
-                                                {line.itemCode || line.itemId} — {!line.resolved ? 'Not resolved' : !line.matchedSku ? 'Missing matched SKU' : 'Missing vendor/rate'}
+                                                {line.itemCode || line.itemId} — {!line.resolved && !(line.vendorId && line.rate > 0 && line.matchedSku) ? 'Not resolved or manually completed' : !line.matchedSku ? 'Missing matched SKU' : 'Missing vendor/rate'}
                                             </li>
                                         ))}
                                     </ul>

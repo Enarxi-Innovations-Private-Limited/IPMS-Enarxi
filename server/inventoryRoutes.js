@@ -4210,6 +4210,7 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             const vendorId = normalizeId(item.vendorId);
             const resolved = Boolean(item.resolved);
             const matchedSku = String(item.matchedSku || item.sku || '').trim();
+            const manualReady = Boolean(vendorId) && rate > 0 && Boolean(matchedSku);
             const cartStatus = String(item.cartStatus || '').trim().toUpperCase();
             const cartUnfulfilledQty = Number(item.cartUnfulfilledQty || 0);
             const sourceEntries = Array.isArray(item.sourceLines)
@@ -4220,11 +4221,11 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                 : [];
 
             if (orderQuantity <= 0) throw new Error(`Order quantity must be greater than zero for ${item.itemCode || item.itemId}.`);
-            if (!resolved) throw new Error(`BOM resolution is required for ${item.itemCode || item.itemId}.`);
-            if (cartStatus && cartStatus !== 'VERIFIED') {
+            if (!resolved && !manualReady) throw new Error(`BOM resolution or manual vendor/rate/SKU entry is required for ${item.itemCode || item.itemId}.`);
+            if (!manualReady && cartStatus && cartStatus !== 'VERIFIED') {
                 throw new Error(`Cart verification is incomplete for ${item.itemCode || item.itemId}.`);
             }
-            if (cartUnfulfilledQty > 0) {
+            if (!manualReady && cartUnfulfilledQty > 0) {
                 throw new Error(`Cart fulfillment is incomplete for ${item.itemCode || item.itemId}.`);
             }
             if (!Array.isArray(item.sourceLines) && !Array.isArray(item.sourceLineIds)) {
@@ -4315,11 +4316,12 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             const vendorId = normalizeId(item.vendorId);
             const resolved = Boolean(item.resolved);
             const matchedSku = String(item.matchedSku || item.sku || '').trim();
+            const manualReady = Boolean(vendorId) && rate > 0 && Boolean(matchedSku);
 
             if (!vendorId) throw new Error(`Vendor selection is required for ${item.itemCode || item.itemId}.`);
             if (orderQuantity <= 0) throw new Error(`Order quantity must be greater than zero for ${item.itemCode || item.itemId}.`);
             if (rate <= 0) throw new Error(`Rate must be greater than zero for ${item.itemCode || item.itemId}.`);
-            if (!resolved) throw new Error(`BOM resolution is required for ${item.itemCode || item.itemId}.`);
+            if (!resolved && !manualReady) throw new Error(`BOM resolution or manual vendor/rate/SKU entry is required for ${item.itemCode || item.itemId}.`);
             if (!matchedSku) throw new Error(`Matched SKU is required for ${item.itemCode || item.itemId}.`);
             if (!Array.isArray(item.sourceLines) || item.sourceLines.length === 0) {
                 throw new Error(`Source allocation is missing for ${item.itemCode || item.itemId}.`);

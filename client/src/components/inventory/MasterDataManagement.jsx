@@ -170,14 +170,14 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <div className="absolute inset-0 bg-background-dark/80 backdrop-blur-sm" onClick={resetModal}></div>
-            <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col">
-                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex justify-between items-center">
-                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={resetModal}></div>
+            <div className="relative bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col">
+                <div className="px-6 py-4 border-b border-slate-200 bg-white flex justify-between items-center">
+                    <h2 className="text-lg font-semibold text-[#16325c] flex items-center gap-2">
                         <span className="material-symbols-outlined text-primary">upload_file</span>
                         Bulk Item Upload
                     </h2>
-                    <button onClick={resetModal} className="text-text-secondary hover:text-white transition-colors">
+                    <button onClick={resetModal} className="text-text-secondary hover:text-[#16325c] transition-colors">
                         <span className="material-symbols-outlined">close</span>
                     </button>
                 </div>
@@ -185,27 +185,27 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
                 <div className="p-6 overflow-y-auto max-h-[80vh]">
                     {!uploadResults ? (
                         <div className="space-y-6">
-                            <div className="bg-background-dark/50 p-4 rounded-xl border border-border-dark border-dashed">
-                                <h3 className="text-white font-medium mb-2 flex items-center gap-2">
+                            <div className="bg-[#f7faff] p-4 rounded-xl border border-slate-200 border-dashed">
+                                <h3 className="text-[#16325c] font-medium mb-2 flex items-center gap-2">
                                     <span className="text-primary font-bold">1.</span> Download Template
                                 </h3>
-                                <p className="text-text-secondary text-sm mb-4">
+                                <p className="text-[#35507a] text-sm mb-4">
                                     Download the Excel template. It includes the base item columns and one SKU column for each vendor code.
                                 </p>
                                 <button
                                     onClick={handleDownloadTemplate}
-                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-dark border border-border-dark text-white text-sm font-medium hover:bg-background-dark transition-all"
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white border border-slate-300 text-[#16325c] text-sm font-medium hover:bg-slate-50 transition-all shadow-sm"
                                 >
                                     <span className="material-symbols-outlined text-base">download</span>
                                     Download Excel Template
                                 </button>
                             </div>
 
-                            <div className="bg-background-dark/50 p-4 rounded-xl border border-border-dark">
-                                <h3 className="text-white font-medium mb-4 flex items-center gap-2">
+                            <div className="bg-[#f7faff] p-4 rounded-xl border border-slate-200">
+                                <h3 className="text-[#16325c] font-medium mb-4 flex items-center gap-2">
                                     <span className="text-primary font-bold">2.</span> Upload Completed File
                                 </h3>
-                                <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? 'border-primary/50 bg-primary/5' : 'border-border-dark hover:border-primary/30'}`}>
+                                <div className={`border-2 border-dashed rounded-xl p-8 text-center transition-all ${file ? 'border-primary/50 bg-primary/5' : 'border-slate-300 hover:border-primary/30 bg-white'}`}>
                                     <input
                                         type="file"
                                         id="bulk-item-upload-input"
@@ -219,12 +219,12 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
                                         </span>
                                         {file ? (
                                             <div className="space-y-1">
-                                                <p className="text-white font-medium">{file.name}</p>
+                                                <p className="text-[#16325c] font-medium">{file.name}</p>
                                                 <p className="text-text-secondary text-xs">{(file.size / 1024).toFixed(1)} KB</p>
                                             </div>
                                         ) : (
                                             <div>
-                                                <p className="text-white font-medium">Click to select Excel/CSV file</p>
+                                                <p className="text-[#16325c] font-medium">Click to select Excel/CSV file</p>
                                                 <p className="text-text-secondary text-xs mt-1">Supported: .xlsx, .xls, .csv</p>
                                             </div>
                                         )}
@@ -232,9 +232,9 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
                                 </div>
                             </div>
 
-                            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-text-secondary">
-                                <p className="text-white font-medium mb-2">Template columns</p>
-                                <p>`Classification`, `Item Code`, `Item Name`, `Package`, `UOM`, `Description`, plus one column for each vendor code.</p>
+                            <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-[#35507a]">
+                                <p className="text-[#16325c] font-medium mb-2">Template columns</p>
+                                <p>Classification, Item Code, Item Name, Package, UOM, Description, plus one column for each vendor code.</p>
                             </div>
 
                             {error && (
@@ -247,7 +247,7 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
                             <div className="flex justify-end gap-3 pt-2">
                                 <button
                                     onClick={resetModal}
-                                    className="px-4 py-2 rounded-lg text-white font-medium hover:bg-surface-dark transition-colors"
+                                    className="px-4 py-2 rounded-lg text-[#16325c] font-medium hover:bg-slate-100 transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -270,7 +270,7 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
                                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-500 mb-4">
                                     <span className="material-symbols-outlined text-4xl">check_circle</span>
                                 </div>
-                                <h3 className="text-xl font-bold text-white">Import Complete</h3>
+                                <h3 className="text-xl font-bold text-[#16325c]">Import Complete</h3>
                                 <p className="text-text-secondary">Successfully imported {uploadResults.imported || 0} items.</p>
                             </div>
 
@@ -292,7 +292,7 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
 
                             <button
                                 onClick={resetModal}
-                                className="w-full py-3 rounded-xl bg-surface-dark border border-border-dark text-white font-bold hover:bg-background-dark transition-all"
+                                className="w-full py-3 rounded-xl bg-slate-100 border border-slate-300 text-[#16325c] font-bold hover:bg-slate-200 transition-all"
                             >
                                 Done
                             </button>
@@ -574,7 +574,7 @@ export default function MasterDataManagement() {
                             {activeTab === 'items' && (
                                 <button
                                     onClick={() => setShowBulkModal(true)}
-                                    className="bg-surface-dark border border-border-dark text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-background-dark transition-all"
+                                    className="bg-white border border-slate-300 text-[#16325c] px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
                                 >
                                     <span className="material-symbols-outlined">upload_file</span>
                                     Bulk Upload

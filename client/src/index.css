@@ -119,6 +119,63 @@ body {
   color: #ffffff !important;
 }
 
+/* Final light-theme pass:
+   default any leftover white typography to dark, then opt back in for truly colored surfaces. */
+.light-theme .text-white {
+  color: #556070 !important;
+}
+
+.light-theme .hover\:text-white:hover {
+  color: #556070 !important;
+}
+
+.light-theme .bg-gradient-primary.text-white,
+.light-theme .bg-gradient-primary .text-white,
+.light-theme [class*="bg-gradient-to-"].text-white,
+.light-theme [class*="bg-gradient-to-"] .text-white,
+.light-theme [class*="from-"].text-white,
+.light-theme [class*="from-"] .text-white,
+.light-theme [class*="to-"].text-white,
+.light-theme [class*="to-"] .text-white,
+.light-theme [class*="via-"].text-white,
+.light-theme [class*="via-"] .text-white,
+.light-theme [class*="bg-primary"].text-white,
+.light-theme [class*="bg-primary"] .text-white,
+.light-theme [class*="bg-emerald-"].text-white,
+.light-theme [class*="bg-emerald-"] .text-white,
+.light-theme [class*="bg-indigo-"].text-white,
+.light-theme [class*="bg-indigo-"] .text-white,
+.light-theme [class*="bg-red-"].text-white,
+.light-theme [class*="bg-red-"] .text-white,
+.light-theme [class*="bg-amber-"].text-white,
+.light-theme [class*="bg-amber-"] .text-white,
+.light-theme [class*="bg-violet-"].text-white,
+.light-theme [class*="bg-violet-"] .text-white,
+.light-theme [class*="bg-blue-"].text-white,
+.light-theme [class*="bg-blue-"] .text-white,
+.light-theme [class*="bg-cyan-"].text-white,
+.light-theme [class*="bg-cyan-"] .text-white,
+.light-theme [class*="bg-teal-"].text-white,
+.light-theme [class*="bg-teal-"] .text-white,
+.light-theme [class*="bg-green-"].text-white,
+.light-theme [class*="bg-green-"] .text-white,
+.light-theme [class*="bg-orange-"].text-white,
+.light-theme [class*="bg-orange-"] .text-white,
+.light-theme [class*="bg-yellow-"].text-white,
+.light-theme [class*="bg-yellow-"] .text-white,
+.light-theme [class*="bg-slate-700"].text-white,
+.light-theme [class*="bg-slate-700"] .text-white,
+.light-theme [class*="bg-slate-800"].text-white,
+.light-theme [class*="bg-slate-800"] .text-white,
+.light-theme [class*="bg-slate-900"].text-white,
+.light-theme [class*="bg-slate-900"] .text-white,
+.light-theme [class*="bg-background-dark"].text-white,
+.light-theme [class*="bg-background-dark"] .text-white,
+.light-theme [class*="bg-surface-dark"].text-white,
+.light-theme [class*="bg-surface-dark"] .text-white {
+  color: #ffffff !important;
+}
+
 /* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

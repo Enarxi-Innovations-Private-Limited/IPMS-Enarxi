@@ -9,6 +9,7 @@ export default function ClassificationsPage() {
     const [classifications, setClassifications] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
+    const [editingClassification, setEditingClassification] = useState(null);
     const [formData, setFormData] = useState({
         name: '',
         prefix: ''
@@ -30,16 +31,44 @@ export default function ClassificationsPage() {
         }
     };
 
+    const resetForm = () => {
+        setFormData({ name: '', prefix: '' });
+        setEditingClassification(null);
+        setShowModal(false);
+    };
+
+    const openCreateModal = () => {
+        setEditingClassification(null);
+        setFormData({ name: '', prefix: '' });
+        setShowModal(true);
+    };
+
+    const openEditModal = (classification) => {
+        setEditingClassification(classification);
+        setFormData({
+            name: classification.name || '',
+            prefix: classification.prefix || ''
+        });
+        setShowModal(true);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await inventoryService.createClassification(formData);
-            setShowModal(false);
-            setFormData({ name: '', prefix: '' });
+            if (editingClassification?._id) {
+                await inventoryService.updateClassification(editingClassification._id, formData);
+                notifySuccess('Classification updated successfully.');
+            } else {
+                await inventoryService.createClassification(formData);
+                notifySuccess('Classification created successfully.');
+            }
+            resetForm();
             fetchClassifications();
-            notifySuccess('Classification created successfully.');
         } catch (err) {
-            notifyError(err.response?.data?.message || 'Failed to create classification');
+            notifyError(
+                err.response?.data?.message ||
+                (editingClassification ? 'Failed to update classification' : 'Failed to create classification')
+            );
         }
     };
 
@@ -53,7 +82,7 @@ export default function ClassificationsPage() {
                             <p className="text-text-secondary text-lg">Define categories and groups for your inventory items.</p>
                         </div>
                         <button 
-                            onClick={() => setShowModal(true)}
+                            onClick={openCreateModal}
                             className="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
                         >
                             <span className="material-symbols-outlined">category</span>
@@ -86,7 +115,12 @@ export default function ClassificationsPage() {
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-text-secondary font-bold uppercase tracking-widest">Active Status</span>
                                     </div>
-                                    <button className="text-primary hover:underline text-xs font-bold">Edit</button>
+                                    <button
+                                        onClick={() => openEditModal(cls)}
+                                        className="text-primary hover:underline text-xs font-bold"
+                                    >
+                                        Edit
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -94,14 +128,16 @@ export default function ClassificationsPage() {
                 </div>
             </div>
 
-            {/* Create Classification Modal */}
+            {/* Create / Edit Classification Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={resetForm}></div>
                     <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                         <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                            <h2 className="text-xl font-bold text-white">Create Classification</h2>
-                            <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-white">
+                            <h2 className="text-xl font-bold text-white">
+                                {editingClassification ? 'Edit Classification' : 'Create Classification'}
+                            </h2>
+                            <button onClick={resetForm} className="text-text-secondary hover:text-white">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
@@ -130,7 +166,7 @@ export default function ClassificationsPage() {
                             </div>
                             <div className="pt-2">
                                 <button type="submit" className="w-full bg-primary py-3 rounded-xl text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-95 transition-all">
-                                    Save Classification
+                                    {editingClassification ? 'Update Classification' : 'Save Classification'}
                                 </button>
                             </div>
                         </form>
