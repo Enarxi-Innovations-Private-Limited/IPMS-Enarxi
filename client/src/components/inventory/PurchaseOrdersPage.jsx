@@ -150,17 +150,17 @@ export default function PurchaseOrdersPage() {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-2xl font-bold text-white tracking-tight">Purchase Order Details</h1>
-                            <p className="text-text-secondary text-sm">Financial Suite & Procurement Management</p>
+                            <h1 className="text-2xl font-bold text-[#0b2850] tracking-tight">Purchase Order Details</h1>
+                            <p className="text-[#556070] text-sm">Financial Suite & Procurement Management</p>
                         </div>
-                        <div className="flex bg-surface-dark p-1 rounded-xl border border-border-dark">
+                        <div className="flex flex-wrap gap-1 bg-white/95 p-1 rounded-xl border border-[#d7dfeb] shadow-sm">
                             {['ALL', 'PENDING_ADMIN_APPROVAL', 'APPROVED', 'PLACED', 'REJECTED'].map(status => (
                                 <button
                                     key={status}
                                     onClick={() => setFilterStatus(status)}
                                     className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${filterStatus === status
                                         ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                                        : 'text-text-secondary hover:text-white'
+                                        : 'text-[#5b6880] hover:bg-[#eef3ff] hover:text-[#0b2850]'
                                         }`}
                                 >
                                     {status.replace(/_/g, ' ')}
@@ -174,11 +174,11 @@ export default function PurchaseOrdersPage() {
                         <div className="lg:col-span-1 space-y-3 overflow-y-auto max-h-[calc(100vh-250px)] custom-scrollbar pr-2">
                             {loading ? (
                                 Array(5).fill(0).map((_, i) => (
-                                    <div key={i} className="h-24 bg-surface-dark rounded-xl border border-border-dark animate-pulse"></div>
+                                    <div key={i} className="h-24 bg-white rounded-xl border border-[#d7dfeb] shadow-sm animate-pulse"></div>
                                 ))
                             ) : filteredOrders.length === 0 ? (
-                                <div className="p-8 text-center bg-surface-dark/30 border border-dashed border-border-dark rounded-xl">
-                                    <p className="text-text-secondary text-xs">No orders found.</p>
+                                <div className="p-8 text-center bg-white/80 border border-dashed border-[#d7dfeb] rounded-xl shadow-sm">
+                                    <p className="text-[#6d7890] text-xs">No orders found.</p>
                                 </div>
                             ) : (
                                 filteredOrders.map(order => (
@@ -186,22 +186,22 @@ export default function PurchaseOrdersPage() {
                                         key={order._id || order.id}
                                         onClick={() => setSelectedOrder(order)}
                                         className={`w-full text-left p-4 rounded-xl border transition-all group ${selectedOrder?.id === order.id
-                                            ? 'bg-primary border-primary shadow-lg shadow-primary/10'
-                                            : 'bg-surface-dark border-border-dark hover:border-text-secondary/30'
+                                            ? 'bg-[#edf3ff] border-[#9cb6e7] shadow-lg shadow-[#b9c8e4]/35'
+                                            : 'bg-white border-[#d7dfeb] shadow-sm hover:border-[#9cb6e7] hover:shadow-md'
                                             }`}
                                     >
                                         <div className="flex justify-between items-start mb-1">
-                                            <span className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-white' : 'text-primary'}`}>{order.poNumber}</span>
-                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${selectedOrder?.id === order.id ? 'bg-white/20 text-white' : getStatusColor(order.status)}`}>
+                                            <span className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-[#0b2850]' : 'text-primary'}`}>{order.poNumber}</span>
+                                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase ${selectedOrder?.id === order.id ? 'bg-[#d9e5fb] text-[#0b2850]' : getStatusColor(order.status)}`}>
                                                 {order.status}
                                             </span>
                                         </div>
-                                        <div className={`font-bold truncate text-sm ${selectedOrder?.id === order.id ? 'text-white' : 'text-slate-700'}`}>{order.vendor?.name}</div>
-                                        <div className="flex justify-between items-center mt-3 pt-2 border-t border-white/10">
-                                            <div className={`text-[9px] uppercase font-black ${selectedOrder?.id === order.id ? 'text-white/60' : 'text-text-secondary'}`}>
+                                        <div className={`font-bold truncate text-sm ${selectedOrder?.id === order.id ? 'text-[#102f57]' : 'text-slate-700'}`}>{order.vendor?.name}</div>
+                                        <div className={`flex justify-between items-center mt-3 pt-2 ${selectedOrder?.id === order.id ? 'border-t border-[#d3def2]' : 'border-t border-[#edf1f7]'}`}>
+                                            <div className={`text-[9px] uppercase font-black ${selectedOrder?.id === order.id ? 'text-[#6c7a90]' : 'text-text-secondary'}`}>
                                                 {order.lines?.length || 0} Items
                                             </div>
-                                            <div className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-white' : 'text-primary'}`}>
+                                            <div className={`font-mono text-[10px] font-bold ${selectedOrder?.id === order.id ? 'text-[#0b2850]' : 'text-primary'}`}>
                                                 ₹{order.lines?.reduce((sum, l) => sum + Number(l.lineTotal), 0).toLocaleString()}
                                             </div>
                                         </div>
@@ -215,14 +215,14 @@ export default function PurchaseOrdersPage() {
                             {selectedOrder ? (
                                 <div className="space-y-6">
                                     {/* Action Bar */}
-                                    <div className="flex items-center justify-between bg-surface-dark border border-border-dark p-3 rounded-xl">
+                                    <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between bg-white border border-[#d7dfeb] p-4 rounded-xl shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <span className="text-[10px] font-black text-text-secondary uppercase tracking-widest">Status:</span>
+                                            <span className="text-[10px] font-black text-[#6d7890] uppercase tracking-widest">Status:</span>
                                             <span className={`text-[10px] font-black px-3 py-1 rounded uppercase ${getStatusColor(selectedOrder.status)}`}>
                                                 {selectedOrder.status}
                                             </span>
                                         </div>
-                                        <div className="flex gap-2">
+                                        <div className="flex flex-wrap gap-2">
                                             {canMarkPlaced && (
                                                 <button
                                                     disabled={processing}
@@ -240,19 +240,19 @@ export default function PurchaseOrdersPage() {
                                                 <span className="material-symbols-outlined text-sm">print</span>
                                                 Print / Export
                                             </button>
-                                            <button className="flex items-center gap-2 bg-[#2b45a2]/20 text-[#2b45a2] border border-[#2b45a2]/30 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-[#2b45a2] hover:text-white transition-all">
+                                            <button className="flex items-center gap-2 bg-[#eef3ff] text-[#2b45a2] border border-[#c8d7fb] px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-[#2b45a2] hover:text-white transition-all">
                                                 <span className="material-symbols-outlined text-sm">edit</span>
                                                 Edit Order
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="bg-surface-dark border border-border-dark p-4 rounded-xl">
-                                        <h4 className="text-[10px] font-black text-text-secondary uppercase tracking-widest mb-3">Lifecycle Timeline</h4>
+                                    <div className="bg-white border border-[#d7dfeb] p-4 rounded-xl shadow-sm">
+                                        <h4 className="text-[10px] font-black text-[#6d7890] uppercase tracking-widest mb-3">Lifecycle Timeline</h4>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[11px]">
-                                            <div className={`${selectedOrder.createdAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Submitted</div>
-                                            <div className={`${selectedOrder.approvedAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Approved</div>
-                                            <div className={`${selectedOrder.placedAt ? 'text-emerald-400' : 'text-text-secondary'}`}>Placed</div>
-                                            <div className={`${selectedOrder.status === 'RECEIVED' ? 'text-emerald-400' : 'text-text-secondary'}`}>
+                                            <div className={`${selectedOrder.createdAt ? 'text-emerald-600 font-semibold' : 'text-[#6d7890]'}`}>Submitted</div>
+                                            <div className={`${selectedOrder.approvedAt ? 'text-emerald-600 font-semibold' : 'text-[#6d7890]'}`}>Approved</div>
+                                            <div className={`${selectedOrder.placedAt ? 'text-emerald-600 font-semibold' : 'text-[#6d7890]'}`}>Placed</div>
+                                            <div className={`${selectedOrder.status === 'RECEIVED' ? 'text-emerald-600 font-semibold' : 'text-[#6d7890]'}`}>
                                                 Inward {selectedOrder.inwardProgress ? `(${selectedOrder.inwardProgress.receivedQty}/${selectedOrder.inwardProgress.orderedQty})` : ''}
                                             </div>
                                         </div>
@@ -347,13 +347,13 @@ export default function PurchaseOrdersPage() {
                                     {/* Action Footers (Review/Approve) */}
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-12">
                                         {selectedOrder.status === 'PENDING_ADMIN_APPROVAL' && isAdmin && (
-                                            <div className="bg-[#10b981]/10 border border-[#10b981]/20 rounded-xl p-6 col-span-2">
-                                                <h4 className="text-white font-bold mb-4 flex items-center gap-2">
+                                            <div className="bg-[#f3fbf7] border border-[#c8edd8] rounded-xl p-6 col-span-2 shadow-sm">
+                                                <h4 className="text-[#113b2b] font-bold mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-emerald-400">rate_review</span>
                                                     Administrative Review
                                                 </h4>
                                                 <textarea
-                                                    className="w-full bg-surface-dark border border-border-dark rounded-lg p-3 text-white text-sm outline-none focus:border-emerald-400 mb-4 h-24"
+                                                    className="w-full bg-white border border-[#cfe1d6] rounded-lg p-3 text-[#1c2b40] text-sm outline-none focus:border-emerald-400 mb-4 h-24"
                                                     placeholder="Enter approval/rejection remarks..."
                                                     value={reviewRemarks}
                                                     onChange={(e) => setReviewRemarks(e.target.value)}
@@ -378,8 +378,8 @@ export default function PurchaseOrdersPage() {
                                         )}
 
                                         {(selectedOrder.status === 'DRAFT' || selectedOrder.status === 'REJECTED') && (
-                                            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-6 col-span-2">
-                                                <h4 className="text-white font-bold mb-4 flex items-center gap-2">
+                                            <div className="bg-[#fff9ec] border border-[#f2dfab] rounded-xl p-6 col-span-2 shadow-sm">
+                                                <h4 className="text-[#5d4500] font-bold mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-amber-400">approval</span>
                                                     Submit For Approval
                                                 </h4>
@@ -395,9 +395,9 @@ export default function PurchaseOrdersPage() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="h-[600px] flex flex-col items-center justify-center bg-surface-dark/30 border border-dashed border-border-dark rounded-2xl">
-                                    <span className="material-symbols-outlined text-border-dark text-6xl mb-4">description</span>
-                                    <p className="text-text-secondary font-medium tracking-wide">Select a Purchase Order to view the document details</p>
+                                <div className="h-[600px] flex flex-col items-center justify-center bg-white/80 border border-dashed border-[#d7dfeb] rounded-2xl shadow-sm">
+                                    <span className="material-symbols-outlined text-[#b0bccd] text-6xl mb-4">description</span>
+                                    <p className="text-[#6d7890] font-medium tracking-wide">Select a Purchase Order to view the document details</p>
                                 </div>
                             )}
                         </div>
