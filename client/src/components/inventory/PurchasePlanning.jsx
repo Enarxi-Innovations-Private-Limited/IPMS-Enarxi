@@ -27,6 +27,8 @@ function formatMappedSkus(mappings = []) {
     return values;
 }
 
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 export default function PurchasePlanning() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
@@ -42,6 +44,9 @@ export default function PurchasePlanning() {
     const [generating, setGenerating] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
     const [analysisSummary, setAnalysisSummary] = useState(null);
+    const [analysisJobId, setAnalysisJobId] = useState('');
+    const [analysisProgress, setAnalysisProgress] = useState(0);
+    const [analysisProgressStatus, setAnalysisProgressStatus] = useState('');
 
     const fetchData = async () => {
         try {
@@ -240,12 +245,42 @@ export default function PurchasePlanning() {
 
         try {
             setAnalyzing(true);
-            const response = await inventoryService.autoQuotePurchasePlanning({
+            setAnalysisJobId('');
+            setAnalysisProgress(0);
+            setAnalysisProgressStatus('Queued BOM analysis...');
+
+            const startResponse = await inventoryService.startAutoQuotePurchasePlanning({
                 batchId: tab === 'individual' ? selectedBatchId : null,
                 lineIds
             });
-            const resultRows = response.data?.results || [];
-            setAnalysisSummary(response.data?.summary || null);
+            const jobId = startResponse.data?.jobId;
+            if (!jobId) {
+                throw new Error('BOM analysis job could not be started.');
+            }
+
+            setAnalysisJobId(jobId);
+
+            let finalPayload = null;
+            while (!finalPayload) {
+                await sleep(1500);
+                const statusResponse = await inventoryService.getAutoQuotePurchasePlanningStatus(jobId);
+                const job = statusResponse.data || {};
+                setAnalysisProgress(toNumber(job.progress));
+                setAnalysisProgressStatus(job.progressStatus || 'Processing BOM...');
+
+                if (job.status === 'FAILED') {
+                    const error = new Error(job.error?.message || 'Failed to analyze selected lines with BOM.');
+                    error.detail = job.error?.detail || '';
+                    throw error;
+                }
+
+                if (job.status === 'COMPLETED') {
+                    finalPayload = job.result || {};
+                }
+            }
+
+            const resultRows = finalPayload.results || [];
+            setAnalysisSummary(finalPayload.summary || null);
 
             if (tab === 'individual') {
                 const byLine = new Map(resultRows.map((entry) => [entry.lineId, entry]));
@@ -367,18 +402,19 @@ export default function PurchasePlanning() {
                 });
             }
 
-            const unresolvedCount = (response.data?.summary?.unresolved || 0);
+            const unresolvedCount = (finalPayload.summary?.unresolved || 0);
             if (unresolvedCount > 0) {
                 notifyError(`BOM analysis and cart automation completed with ${unresolvedCount} blocked line(s). Review cart/SKU/vendor issues and retry.`);
             } else {
                 notifySuccess('BOM analysis and cart automation completed. Final vendor, rate, and SKU were verified.');
             }
         } catch (err) {
-            const detail = err.response?.data?.detail;
-            const message = err.response?.data?.message || 'Failed to analyze selected lines with BOM.';
+            const detail = err.detail || err.response?.data?.detail;
+            const message = err.response?.data?.message || err.message || 'Failed to analyze selected lines with BOM.';
             notifyError(detail ? `${message} ${detail}` : message);
         } finally {
             setAnalyzing(false);
+            setAnalysisJobId('');
         }
     };
 
@@ -454,6 +490,25 @@ export default function PurchasePlanning() {
                                     >
                                         {generating ? 'Generating...' : 'Generate Vendor POs'}
                                     </button>
+                                </div>
+                            )}
+
+                            {analyzing && (
+                                <div className="mb-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                        <p className="text-sm font-semibold text-[#556070]">BOM analysis in progress</p>
+                                        <span className="text-xs font-bold text-primary">{Math.min(100, Math.max(0, Math.round(analysisProgress)))}%</span>
+                                    </div>
+                                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                                        <div
+                                            className="h-full bg-primary transition-all duration-500"
+                                            style={{ width: `${Math.min(100, Math.max(3, analysisProgress || 3))}%` }}
+                                        />
+                                    </div>
+                                    <div className="mt-2 flex items-center justify-between gap-3">
+                                        <p className="text-xs text-text-secondary">{analysisProgressStatus || 'Preparing BOM job...'}</p>
+                                        {analysisJobId && <p className="text-[11px] text-slate-400">Job: {analysisJobId.slice(0, 8)}</p>}
+                                    </div>
                                 </div>
                             )}
 

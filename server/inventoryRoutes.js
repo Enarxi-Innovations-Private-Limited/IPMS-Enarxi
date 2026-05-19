@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
 const router = express.Router();
 const { generatePurchaseOrderPdf } = require('./services/poPdfService');
 const { 
@@ -22,6 +23,7 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const normalizeId = (value) => (value ? String(value) : '');
 const ACTIVE_PURCHASE_QUEUE_STATUSES = ['OPEN', 'PARTIALLY_ORDERED', 'PENDING', 'IN_PO'];
+const purchasePlanningQuoteJobs = new Map();
 
 const getPurchaseOrderNextAllowedActions = (status) => {
     switch (status) {
@@ -3790,273 +3792,393 @@ router.get('/purchase/requests', async (req, res) => {
     }
 });
 
-router.post('/purchase-planning/auto-quote', async (req, res) => {
-    try {
-        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
-        const { batchId, lineIds } = req.body || {};
-        const normalizedLineIds = Array.isArray(lineIds)
-            ? lineIds.map(normalizeId).filter(Boolean)
-            : [];
+function buildInventoryHttpError(status, message, detail = '') {
+    const error = new Error(message);
+    error.status = status;
+    error.detail = detail;
+    return error;
+}
 
-        if (normalizedLineIds.length === 0) {
-            return res.status(400).json({ message: 'lineIds[] is required.' });
-        }
+async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
+    const normalizedLineIds = Array.isArray(lineIds)
+        ? lineIds.map(normalizeId).filter(Boolean)
+        : [];
 
-        const query = { 'lines._id': { $in: normalizedLineIds } };
-        if (batchId) query._id = batchId;
+    if (normalizedLineIds.length === 0) {
+        throw buildInventoryHttpError(400, 'lineIds[] is required.');
+    }
 
-        const batches = await PurchaseRequestBatch.find(query)
-            .populate('lines.itemId')
-            .populate('materialRequestId', 'requestNumber');
+    const query = { 'lines._id': { $in: normalizedLineIds } };
+    if (batchId) query._id = batchId;
 
-        if (!batches.length) {
-            return res.status(404).json({ message: 'No matching purchase request lines found.' });
-        }
+    const batches = await PurchaseRequestBatch.find(query)
+        .populate('lines.itemId')
+        .populate('materialRequestId', 'requestNumber');
 
-        const selectedLines = [];
-        const itemIds = new Set();
-        const itemDocById = new Map();
-        batches.forEach((batch) => {
-            (batch.lines || []).forEach((line) => {
-                const lineId = normalizeId(line._id);
-                if (!normalizedLineIds.includes(lineId)) return;
-                if (!line.itemId) return;
-                const itemId = normalizeId(line.itemId._id || line.itemId);
-                const requiredQty = toNumber(line.pendingQuantity || 0);
-                if (requiredQty <= 0) return;
-                selectedLines.push({
-                    lineId,
-                    itemId,
-                    batchId: normalizeId(batch._id),
-                    batchNumber: batch.batchNumber,
-                    materialRequestNumber: batch.materialRequestId?.requestNumber || '',
-                    itemCode: line.itemId.itemCode || '',
-                    itemName: line.itemId.name || '',
-                    quantity: requiredQty
-                });
-                itemIds.add(itemId);
-                if (!itemDocById.has(itemId)) itemDocById.set(itemId, line.itemId);
+    if (!batches.length) {
+        throw buildInventoryHttpError(404, 'No matching purchase request lines found.');
+    }
+
+    const selectedLines = [];
+    const itemIds = new Set();
+    const itemDocById = new Map();
+    batches.forEach((batch) => {
+        (batch.lines || []).forEach((line) => {
+            const lineId = normalizeId(line._id);
+            if (!normalizedLineIds.includes(lineId)) return;
+            if (!line.itemId) return;
+            const itemId = normalizeId(line.itemId._id || line.itemId);
+            const requiredQty = toNumber(line.pendingQuantity || 0);
+            if (requiredQty <= 0) return;
+            selectedLines.push({
+                lineId,
+                itemId,
+                batchId: normalizeId(batch._id),
+                batchNumber: batch.batchNumber,
+                materialRequestNumber: batch.materialRequestId?.requestNumber || '',
+                itemCode: line.itemId.itemCode || '',
+                itemName: line.itemId.name || '',
+                quantity: requiredQty
             });
+            itemIds.add(itemId);
+            if (!itemDocById.has(itemId)) itemDocById.set(itemId, line.itemId);
         });
+    });
 
-        if (!selectedLines.length) {
-            return res.status(400).json({ message: 'Selected lines are not pending for purchase.' });
-        }
+    if (!selectedLines.length) {
+        throw buildInventoryHttpError(400, 'Selected lines are not pending for purchase.');
+    }
 
-        const [vendors, skuMappings] = await Promise.all([
-            Vendor.find({}, 'name vendorCode'),
-            ItemVendorSku.find({ itemId: { $in: Array.from(itemIds) } }).populate('vendorId', 'name vendorCode')
-        ]);
+    const [vendors, skuMappings] = await Promise.all([
+        Vendor.find({}, 'name vendorCode'),
+        ItemVendorSku.find({ itemId: { $in: Array.from(itemIds) } }).populate('vendorId', 'name vendorCode')
+    ]);
 
-        const vendorByKey = new Map();
-        const vendorById = new Map();
-        vendors.forEach((vendor) => {
-            vendorByKey.set(normalizeVendorKey(vendor.name), vendor);
-            vendorByKey.set(normalizeVendorKey(vendor.vendorCode), vendor);
-            vendorById.set(normalizeId(vendor._id), vendor);
+    const vendorByKey = new Map();
+    const vendorById = new Map();
+    vendors.forEach((vendor) => {
+        vendorByKey.set(normalizeVendorKey(vendor.name), vendor);
+        vendorByKey.set(normalizeVendorKey(vendor.vendorCode), vendor);
+        vendorById.set(normalizeId(vendor._id), vendor);
+    });
+
+    const vendorSkuMapByItemId = new Map();
+    skuMappings.forEach((mapping) => {
+        const itemId = normalizeId(mapping.itemId);
+        if (!vendorSkuMapByItemId.has(itemId)) vendorSkuMapByItemId.set(itemId, []);
+        vendorSkuMapByItemId.get(itemId).push({
+            vendorId: normalizeId(mapping.vendorId?._id || mapping.vendorId),
+            vendorCode: mapping.vendorId?.vendorCode || '',
+            vendorName: mapping.vendorId?.name || '',
+            sku: mapping.sku || ''
         });
+    });
 
-        const vendorSkuMapByItemId = new Map();
-        skuMappings.forEach((mapping) => {
-            const itemId = normalizeId(mapping.itemId);
+    itemDocById.forEach((itemDoc, itemId) => {
+        if ((vendorSkuMapByItemId.get(itemId) || []).length > 0) return;
+        const embedded = Array.isArray(itemDoc?.skuMappings) ? itemDoc.skuMappings : [];
+        embedded.forEach((mapping) => {
+            const vendorId = normalizeId(mapping?.vendorId?._id || mapping?.vendorId);
+            if (!vendorId || !mapping?.sku) return;
             if (!vendorSkuMapByItemId.has(itemId)) vendorSkuMapByItemId.set(itemId, []);
+            const vendor = vendorById.get(vendorId);
             vendorSkuMapByItemId.get(itemId).push({
-                vendorId: normalizeId(mapping.vendorId?._id || mapping.vendorId),
-                vendorCode: mapping.vendorId?.vendorCode || '',
-                vendorName: mapping.vendorId?.name || '',
-                sku: mapping.sku || ''
+                vendorId,
+                vendorCode: vendor?.vendorCode || '',
+                vendorName: vendor?.name || '',
+                sku: mapping.sku
             });
         });
+    });
 
-        itemDocById.forEach((itemDoc, itemId) => {
-            if ((vendorSkuMapByItemId.get(itemId) || []).length > 0) return;
-            const embedded = Array.isArray(itemDoc?.skuMappings) ? itemDoc.skuMappings : [];
-            embedded.forEach((mapping) => {
-                const vendorId = normalizeId(mapping?.vendorId?._id || mapping?.vendorId);
-                if (!vendorId || !mapping?.sku) return;
-                if (!vendorSkuMapByItemId.has(itemId)) vendorSkuMapByItemId.set(itemId, []);
-                const vendor = vendorById.get(vendorId);
-                vendorSkuMapByItemId.get(itemId).push({
-                    vendorId,
-                    vendorCode: vendor?.vendorCode || '',
-                    vendorName: vendor?.name || '',
-                    sku: mapping.sku
-                });
-            });
-        });
+    const bomItems = selectedLines.map((line) => {
+        const vendorCandidates = vendorSkuMapByItemId.get(line.itemId) || [];
+        return {
+            itemId: line.itemId,
+            lineId: line.lineId,
+            itemCode: line.itemCode,
+            component: line.itemName,
+            qty: line.quantity,
+            skuCandidates: vendorCandidates
+        };
+    });
 
-        const bomItems = selectedLines.map((line) => {
-            const vendorCandidates = vendorSkuMapByItemId.get(line.itemId) || [];
-            return {
-                itemId: line.itemId,
-                lineId: line.lineId,
-                itemCode: line.itemCode,
-                component: line.itemName,
-                qty: line.quantity,
-                skuCandidates: vendorCandidates
-            };
-        });
-
-        const bomInjectRows = bomItems.map((entry) => {
-            const row = {
-                itemId: toBomInjectScalar(entry.itemId),
-                lineId: toBomInjectScalar(entry.lineId),
-                itemCode: toBomInjectScalar(entry.itemCode),
-                component: toBomInjectScalar(entry.component),
-                qty: toNumber(entry.qty)
-            };
-            (entry.skuCandidates || []).forEach((candidate) => {
-                const vendorKey = getCanonicalBomVendorKey(candidate.vendorName, candidate.vendorCode);
-                if (vendorKey && candidate.sku) {
-                    row[vendorKey] = toBomInjectScalar(candidate.sku);
-                }
-            });
-            return row;
-        });
-
-        const injectResponse = await fetch(`${BOM_SERVER_URL}/inject`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                items: bomInjectRows
-            })
-        });
-
-        if (!injectResponse.ok) {
-            const errorPayload = await injectResponse.json().catch(() => ({}));
-            console.error('[BOM Inject Error]', {
-                status: injectResponse.status,
-                detail: errorPayload?.detail || null,
-                sampleRow: bomInjectRows[0] || null,
-                rowCount: bomInjectRows.length
-            });
-            return res.status(502).json({
-                message: 'BOM inject failed.',
-                detail: errorPayload?.detail || 'Unable to inject data into BOM service.'
-            });
-        }
-
-        const processResponse = await fetch(`${BOM_SERVER_URL}/process`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                mapping: {
-                    component: 'component',
-                    quantity: 'qty',
-                    vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI']
-                }
-            })
-        });
-
-        if (!processResponse.ok) {
-            const errorPayload = await processResponse.json().catch(() => ({}));
-            return res.status(502).json({
-                message: 'BOM processing failed.',
-                detail: errorPayload?.detail || 'Unable to process BOM quote.'
-            });
-        }
-
-        const bomResult = await processResponse.json();
-        const bomItemsResult = Array.isArray(bomResult?.items) ? bomResult.items : [];
-        const vendorCartUrls = bomResult?.vendor_cart_urls && typeof bomResult.vendor_cart_urls === 'object'
-            ? bomResult.vendor_cart_urls
-            : {};
-
-        const bomItemByLineId = new Map();
-        const bomItemByCodeOrName = new Map();
-        bomItemsResult.forEach((entry) => {
-            const lineIdKey = normalizeId(entry?.lineId);
-            const codeKey = String(entry?.itemCode || '').trim().toUpperCase();
-            const nameKey = String(entry?.component || '').trim().toUpperCase();
-            const normalizedName = normalizeItemMatchKey(entry?.component || '');
-            if (lineIdKey) bomItemByLineId.set(lineIdKey, entry);
-            if (codeKey) bomItemByCodeOrName.set(codeKey, entry);
-            if (nameKey) bomItemByCodeOrName.set(nameKey, entry);
-            if (normalizedName) bomItemByCodeOrName.set(normalizedName, entry);
-        });
-
-        const results = selectedLines.map((line) => {
-            const lineKey = normalizeId(line.lineId);
-            const codeKey = String(line.itemCode || '').trim().toUpperCase();
-            const nameKey = String(line.itemName || '').trim().toUpperCase();
-            const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
-            const itemResult = bomItemByLineId.get(lineKey) || bomItemByCodeOrName.get(codeKey) || bomItemByCodeOrName.get(nameKey) || bomItemByCodeOrName.get(normalizedNameKey);
-
-            if (!itemResult) {
-                return {
-                    lineId: line.lineId,
-                    itemId: line.itemId,
-                    itemCode: line.itemCode,
-                    itemName: line.itemName,
-                    resolved: false,
-                    reason: 'no_quote',
-                    cartStatus: 'FAILED',
-                    cartMessage: 'BOM did not return a result for this line.',
-                    cartVendorUrl: '',
-                    cartAllocatedQty: 0,
-                    cartUnfulfilledQty: line.quantity,
-                    cartAllocations: []
-                };
+    const bomInjectRows = bomItems.map((entry) => {
+        const row = {
+            itemId: toBomInjectScalar(entry.itemId),
+            lineId: toBomInjectScalar(entry.lineId),
+            itemCode: toBomInjectScalar(entry.itemCode),
+            component: toBomInjectScalar(entry.component),
+            qty: toNumber(entry.qty)
+        };
+        (entry.skuCandidates || []).forEach((candidate) => {
+            const vendorKey = getCanonicalBomVendorKey(candidate.vendorName, candidate.vendorCode);
+            if (vendorKey && candidate.sku) {
+                row[vendorKey] = toBomInjectScalar(candidate.sku);
             }
+        });
+        return row;
+    });
 
-            const decision = buildCartAwareBomDecision(
-                { ...itemResult, itemCode: line.itemCode, component: line.itemName, meta: { itemId: line.itemId } },
-                vendorByKey,
-                vendorSkuMapByItemId,
-                vendorCartUrls
-            );
+    const injectResponse = await fetch(`${BOM_SERVER_URL}/inject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: bomInjectRows })
+    });
 
-            if (!decision.resolved) {
-                return {
-                    lineId: line.lineId,
-                    itemId: line.itemId,
-                    itemCode: line.itemCode,
-                    itemName: line.itemName,
-                    resolved: false,
-                    reason: decision.reason,
-                    cartStatus: decision.cartStatus || 'FAILED',
-                    cartMessage: decision.cartMessage || '',
-                    cartVendorUrl: decision.cartVendorUrl || '',
-                    cartAllocatedQty: toNumber(decision.cartAllocatedQty),
-                    cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty || line.quantity),
-                    cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
-                };
+    if (!injectResponse.ok) {
+        const errorPayload = await injectResponse.json().catch(() => ({}));
+        console.error('[BOM Inject Error]', {
+            status: injectResponse.status,
+            detail: errorPayload?.detail || null,
+            sampleRow: bomInjectRows[0] || null,
+            rowCount: bomInjectRows.length
+        });
+        throw buildInventoryHttpError(
+            502,
+            'BOM inject failed.',
+            errorPayload?.detail || 'Unable to inject data into BOM service.'
+        );
+    }
+
+    const processResponse = await fetch(`${BOM_SERVER_URL}/process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            mapping: {
+                component: 'component',
+                quantity: 'qty',
+                vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI']
             }
+        })
+    });
 
+    if (!processResponse.ok) {
+        const errorPayload = await processResponse.json().catch(() => ({}));
+        throw buildInventoryHttpError(
+            502,
+            'BOM processing failed.',
+            errorPayload?.detail || 'Unable to process BOM quote.'
+        );
+    }
+
+    const bomResult = await processResponse.json();
+    const bomItemsResult = Array.isArray(bomResult?.items) ? bomResult.items : [];
+    const vendorCartUrls = bomResult?.vendor_cart_urls && typeof bomResult.vendor_cart_urls === 'object'
+        ? bomResult.vendor_cart_urls
+        : {};
+
+    const bomItemByLineId = new Map();
+    const bomItemByCodeOrName = new Map();
+    bomItemsResult.forEach((entry) => {
+        const lineIdKey = normalizeId(entry?.lineId);
+        const codeKey = String(entry?.itemCode || '').trim().toUpperCase();
+        const nameKey = String(entry?.component || '').trim().toUpperCase();
+        const normalizedName = normalizeItemMatchKey(entry?.component || '');
+        if (lineIdKey) bomItemByLineId.set(lineIdKey, entry);
+        if (codeKey) bomItemByCodeOrName.set(codeKey, entry);
+        if (nameKey) bomItemByCodeOrName.set(nameKey, entry);
+        if (normalizedName) bomItemByCodeOrName.set(normalizedName, entry);
+    });
+
+    const results = selectedLines.map((line) => {
+        const lineKey = normalizeId(line.lineId);
+        const codeKey = String(line.itemCode || '').trim().toUpperCase();
+        const nameKey = String(line.itemName || '').trim().toUpperCase();
+        const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
+        const itemResult = bomItemByLineId.get(lineKey)
+            || bomItemByCodeOrName.get(codeKey)
+            || bomItemByCodeOrName.get(nameKey)
+            || bomItemByCodeOrName.get(normalizedNameKey);
+
+        if (!itemResult) {
             return {
                 lineId: line.lineId,
                 itemId: line.itemId,
                 itemCode: line.itemCode,
                 itemName: line.itemName,
-                resolved: true,
-                vendorId: decision.vendorId,
-                vendorName: decision.vendorName,
-                vendorCode: decision.vendorCode,
-                rate: decision.rate,
-                matchedSku: decision.matchedSku,
-                quoteMeta: decision.quoteMeta,
-                cartStatus: decision.cartStatus || 'VERIFIED',
+                resolved: false,
+                reason: 'no_quote',
+                cartStatus: 'FAILED',
+                cartMessage: 'BOM did not return a result for this line.',
+                cartVendorUrl: '',
+                cartAllocatedQty: 0,
+                cartUnfulfilledQty: line.quantity,
+                cartAllocations: []
+            };
+        }
+
+        const decision = buildCartAwareBomDecision(
+            { ...itemResult, itemCode: line.itemCode, component: line.itemName, meta: { itemId: line.itemId } },
+            vendorByKey,
+            vendorSkuMapByItemId,
+            vendorCartUrls
+        );
+
+        if (!decision.resolved) {
+            return {
+                lineId: line.lineId,
+                itemId: line.itemId,
+                itemCode: line.itemCode,
+                itemName: line.itemName,
+                resolved: false,
+                reason: decision.reason,
+                cartStatus: decision.cartStatus || 'FAILED',
                 cartMessage: decision.cartMessage || '',
                 cartVendorUrl: decision.cartVendorUrl || '',
                 cartAllocatedQty: toNumber(decision.cartAllocatedQty),
-                cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty),
+                cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty || line.quantity),
                 cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
             };
+        }
+
+        return {
+            lineId: line.lineId,
+            itemId: line.itemId,
+            itemCode: line.itemCode,
+            itemName: line.itemName,
+            resolved: true,
+            vendorId: decision.vendorId,
+            vendorName: decision.vendorName,
+            vendorCode: decision.vendorCode,
+            rate: decision.rate,
+            matchedSku: decision.matchedSku,
+            quoteMeta: decision.quoteMeta,
+            cartStatus: decision.cartStatus || 'VERIFIED',
+            cartMessage: decision.cartMessage || '',
+            cartVendorUrl: decision.cartVendorUrl || '',
+            cartAllocatedQty: toNumber(decision.cartAllocatedQty),
+            cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty),
+            cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
+        };
+    });
+
+    const summary = {
+        total: results.length,
+        resolved: results.filter((entry) => entry.resolved).length,
+        unresolved: results.filter((entry) => !entry.resolved).length,
+        cartVerified: results.filter((entry) => entry.cartStatus === 'VERIFIED').length,
+        cartPartial: results.filter((entry) => entry.cartStatus === 'PARTIAL').length,
+        cartFailed: results.filter((entry) => entry.cartStatus === 'FAILED').length
+    };
+
+    return { batchId: batchId || null, results, summary };
+}
+
+router.post('/purchase-planning/auto-quote/start', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        const { batchId, lineIds } = req.body || {};
+        const normalizedLineIds = Array.isArray(lineIds) ? lineIds.map(normalizeId).filter(Boolean) : [];
+
+        if (normalizedLineIds.length === 0) {
+            return res.status(400).json({ message: 'lineIds[] is required.' });
+        }
+
+        const jobId = randomUUID();
+        purchasePlanningQuoteJobs.set(jobId, {
+            id: jobId,
+            status: 'RUNNING',
+            progress: 0,
+            progressStatus: 'Queued BOM analysis...',
+            createdAt: new Date().toISOString(),
+            request: {
+                batchId: batchId || null,
+                lineIds: normalizedLineIds
+            },
+            result: null,
+            error: null
         });
 
-        const summary = {
-            total: results.length,
-            resolved: results.filter((entry) => entry.resolved).length,
-            unresolved: results.filter((entry) => !entry.resolved).length,
-            cartVerified: results.filter((entry) => entry.cartStatus === 'VERIFIED').length,
-            cartPartial: results.filter((entry) => entry.cartStatus === 'PARTIAL').length,
-            cartFailed: results.filter((entry) => entry.cartStatus === 'FAILED').length
-        };
+        (async () => {
+            try {
+                const result = await executePurchasePlanningAutoQuote({ batchId, lineIds: normalizedLineIds });
+                purchasePlanningQuoteJobs.set(jobId, {
+                    ...purchasePlanningQuoteJobs.get(jobId),
+                    status: 'COMPLETED',
+                    progress: 100,
+                    progressStatus: 'BOM analysis and cart verification completed.',
+                    completedAt: new Date().toISOString(),
+                    result
+                });
+            } catch (err) {
+                console.error('[Auto Quote Job Error]:', err);
+                purchasePlanningQuoteJobs.set(jobId, {
+                    ...purchasePlanningQuoteJobs.get(jobId),
+                    status: 'FAILED',
+                    progressStatus: err.detail || err.message || 'BOM analysis failed.',
+                    completedAt: new Date().toISOString(),
+                    error: {
+                        message: err.message || 'Failed to auto-quote selected lines.',
+                        detail: err.detail || '',
+                        status: err.status || 500
+                    }
+                });
+            }
+        })();
 
-        res.json({ batchId: batchId || null, results, summary });
+        res.status(202).json({
+            jobId,
+            status: 'RUNNING',
+            progress: 0,
+            progressStatus: 'Queued BOM analysis...'
+        });
+    } catch (err) {
+        console.error('[Auto Quote Start Error]:', err);
+        res.status(500).json({ message: err.message || 'Failed to start BOM analysis.' });
+    }
+});
+
+router.get('/purchase-planning/auto-quote/status/:jobId', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        const job = purchasePlanningQuoteJobs.get(req.params.jobId);
+        if (!job) {
+            return res.status(404).json({ message: 'BOM analysis job not found.' });
+        }
+
+        if (job.status === 'RUNNING') {
+            try {
+                const progressResponse = await fetch(`${BOM_SERVER_URL}/progress`);
+                if (progressResponse.ok) {
+                    const progressData = await progressResponse.json();
+                    job.progress = toNumber(progressData?.percent);
+                    job.progressStatus = String(progressData?.status || job.progressStatus || '').trim() || 'Processing BOM...';
+                    job.bomRunning = Boolean(progressData?.is_running);
+                    purchasePlanningQuoteJobs.set(job.id, job);
+                }
+            } catch (progressError) {
+                console.warn('[Auto Quote Progress Warning]:', progressError.message);
+            }
+        }
+
+        res.json({
+            jobId: job.id,
+            status: job.status,
+            progress: toNumber(job.progress),
+            progressStatus: job.progressStatus || '',
+            createdAt: job.createdAt,
+            completedAt: job.completedAt || null,
+            result: job.status === 'COMPLETED' ? job.result : null,
+            error: job.status === 'FAILED' ? job.error : null
+        });
+    } catch (err) {
+        console.error('[Auto Quote Status Error]:', err);
+        res.status(500).json({ message: err.message || 'Failed to fetch BOM analysis status.' });
+    }
+});
+
+router.post('/purchase-planning/auto-quote', async (req, res) => {
+    try {
+        if (!requireAnyRole(req, res, [roles.PURCHASE_MANAGER, roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        const result = await executePurchasePlanningAutoQuote(req.body || {});
+        res.json(result);
     } catch (err) {
         console.error('[Auto Quote Error]:', err);
-        res.status(500).json({ message: err.message || 'Failed to auto-quote selected lines.' });
+        res.status(err.status || 500).json({
+            message: err.message || 'Failed to auto-quote selected lines.',
+            ...(err.detail ? { detail: err.detail } : {})
+        });
     }
 });
 

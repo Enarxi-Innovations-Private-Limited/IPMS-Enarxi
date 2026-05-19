@@ -126,8 +126,58 @@ class RobuScraper:
                     log_action(f"✅ Selected first visible dropdown item: {target_product.inner_text().strip()[:50]}")
                     
                 if not target_product:
-                    log_action("❌ No dropdown items found - blocking fallback search")
-                    log_action("⚠️ Dropdown failed, not proceeding to prevent search fallback")
+                    log_action("❌ No dropdown items found - attempting verified fallback search")
+                    try:
+                        page.keyboard.press("Enter")
+                    except Exception:
+                        pass
+                    try:
+                        page.wait_for_load_state("domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+
+                    candidate_links = []
+                    seen_hrefs = set()
+                    sku_lower = str(sku).strip().lower()
+
+                    for j in range(product_links.count()):
+                        try:
+                            link = product_links.nth(j)
+                            href = (link.get_attribute("href") or "").strip()
+                            text = link.inner_text().strip()
+                            if not href or "/product/" not in href:
+                                continue
+                            full_href = href if href.startswith("http") else f"{self.base_url}{href}"
+                            if full_href in seen_hrefs:
+                                continue
+                            seen_hrefs.add(full_href)
+                            candidate_links.append({"href": full_href, "text": text})
+                        except Exception:
+                            continue
+
+                    prioritized = []
+                    fallback = []
+                    for candidate in candidate_links:
+                        haystack = f"{candidate['href']} {candidate['text']}".lower()
+                        if sku_lower and sku_lower in haystack:
+                            prioritized.append(candidate)
+                        else:
+                            fallback.append(candidate)
+
+                    for candidate in (prioritized + fallback)[:6]:
+                        try:
+                            log_action(f"Fallback candidate: {candidate['href']}")
+                            page.goto(candidate["href"], wait_until="domcontentloaded", timeout=self.timeout)
+                            time.sleep(1.5)
+                            body_text = page.evaluate("() => document.body.innerText")
+                            if sku_lower and sku_lower in body_text.lower():
+                                log_action(f"Verified fallback product page for SKU: {sku}")
+                                return {"sku": sku, "product_url": page.url, "found": True}
+                        except Exception as fallback_error:
+                            log_action(f"Fallback candidate failed: {fallback_error}")
+                            continue
+
+                    log_action("⚠️ Dropdown fallback did not yield a verified product page")
                     return {"sku": sku, "found": False}
                 
                 product_text = target_product.inner_text().strip()

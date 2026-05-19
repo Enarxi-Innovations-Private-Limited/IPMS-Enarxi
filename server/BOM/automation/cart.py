@@ -745,13 +745,52 @@ class CartAutomation:
             except: continue
             
         if found_in_cart:
+            try:
+                row_data = _get_row_locator()
+                row = row_data["row"] if isinstance(row_data, dict) else row_data
+                if row and row.count() > 0:
+                    qty_input = row.locator("input.qty, input[name*='qty'], input[type='number'], input.form-input--incrementTotal").first
+                    if qty_input.count() > 0:
+                        actual_qty = int(qty_input.input_value() or 0)
+                        if actual_qty > 0:
+                            print(f"[✓] Successfully verified in cart with quantity {actual_qty}")
+                            return {
+                                "success": actual_qty >= target_qty,
+                                "added_qty": actual_qty,
+                                "insufficient_stock": actual_qty < target_qty,
+                                "available": actual_qty,
+                                "cart_url": cart_url,
+                                "message": "Verified quantity from cart"
+                            }
+            except Exception as verification_error:
+                print(f"[!] Quantity re-verification warning: {verification_error}")
+
             print(f"[✓] Successfully verified in cart")
-            # Return target_qty (which is target_qty or final_moq_qty) as the added_qty
             return {"success": True, "added_qty": target_qty, "cart_url": cart_url, "message": "Added and verified in cart"}
         else:
             # One last try: wait 2 seconds and check again
             time.sleep(2)
             if page.locator(", ".join(verification_selectors)).count() > 0:
+                try:
+                    row_data = _get_row_locator()
+                    row = row_data["row"] if isinstance(row_data, dict) else row_data
+                    if row and row.count() > 0:
+                        qty_input = row.locator("input.qty, input[name*='qty'], input[type='number'], input.form-input--incrementTotal").first
+                        if qty_input.count() > 0:
+                            actual_qty = int(qty_input.input_value() or 0)
+                            if actual_qty > 0:
+                                print(f"[✓] Successfully verified in cart (after extra wait) with quantity {actual_qty}")
+                                return {
+                                    "success": actual_qty >= target_qty,
+                                    "added_qty": actual_qty,
+                                    "insufficient_stock": actual_qty < target_qty,
+                                    "available": actual_qty,
+                                    "cart_url": cart_url,
+                                    "message": "Verified quantity from cart after retry"
+                                }
+                except Exception as verification_error:
+                    print(f"[!] Quantity re-verification warning after extra wait: {verification_error}")
+
                 print(f"[✓] Successfully verified in cart (after extra wait)")
                 return {"success": True, "added_qty": target_qty, "cart_url": cart_url, "message": "Added and verified in cart"}
             
