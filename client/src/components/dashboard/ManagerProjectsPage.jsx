@@ -5,6 +5,7 @@ import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
 import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
+import GanttChart from './GanttChart.jsx';
 
 // Draggable Task Component
 
@@ -25,6 +26,7 @@ export default function ManagerProjectsPage() {
 
     // Task Detail Modal State
     const [showTaskDetail, setShowTaskDetail] = useState(false);
+    const [showGanttModal, setShowGanttModal] = useState(false);
     const [selectedTaskDetail, setSelectedTaskDetail] = useState(null);
 
     // Add Task State
@@ -698,6 +700,13 @@ export default function ManagerProjectsPage() {
                                 </div>
                             </div>
                             <div className="flex items-center space-x-4">
+                                <button
+                                    onClick={() => setShowGanttModal(true)}
+                                    className="flex items-center space-x-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-lg hover:bg-indigo-500/30 transition-colors shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                                >
+                                    <span className="material-symbols-outlined text-sm">timeline</span>
+                                    <span className="text-sm font-bold">Gantt View</span>
+                                </button>
                                 <button
                                     onClick={() => setShowDetailsModal(false)}
                                     className="p-2 text-slate-500 hover:text-white transition-colors"
@@ -1775,6 +1784,10 @@ export default function ManagerProjectsPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {showGanttModal && selectedProject && (
+                <GanttChart projectId={selectedProject.id} onClose={() => setShowGanttModal(false)} />
             )}
 
         </ManagerLayout >

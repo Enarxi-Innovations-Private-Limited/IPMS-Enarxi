@@ -4,6 +4,7 @@ import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import api from '../../services/api.js';
 import EmployeeLayout from '../common/EmployeeLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
+import GanttChart from './GanttChart.jsx';
 
 // Kanban Components
 const KanbanTaskCard = ({ task, onClick }) => {
@@ -86,6 +87,7 @@ export default function EmployeeProjectsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selectedProject, setSelectedProject] = useState(null);
+    const [showGanttModal, setShowGanttModal] = useState(false);
     const user = getCurrentUser();
 
     // Attachments State
@@ -286,13 +288,22 @@ export default function EmployeeProjectsPage() {
                                     {selectedProject.description || 'No description provided'}
                                 </p>
                             </div>
-                            <button
-                                onClick={() => setSelectedProject(null)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-surface-dark transition-colors"
-                            >
-                                <span className="material-symbols-outlined text-lg">arrow_back</span>
-                                Back to Projects
-                            </button>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => setShowGanttModal(true)}
+                                    className="flex items-center space-x-2 px-4 py-2 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-lg hover:bg-indigo-500/30 transition-colors shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+                                >
+                                    <span className="material-symbols-outlined text-sm">timeline</span>
+                                    <span className="text-sm font-bold">Gantt View</span>
+                                </button>
+                                <button
+                                    onClick={() => setSelectedProject(null)}
+                                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-surface-dark transition-colors"
+                                >
+                                    <span className="material-symbols-outlined text-lg">arrow_back</span>
+                                    Back to Projects
+                                </button>
+                            </div>
                         </div>
 
                         {/* Progress Stats */}
@@ -560,6 +571,10 @@ export default function EmployeeProjectsPage() {
                         </div>
                     </div>
                 </div>
+
+                {showGanttModal && selectedProject && (
+                    <GanttChart projectId={selectedProject.id} onClose={() => setShowGanttModal(false)} />
+                )}
             </EmployeeLayout >
         );
     }
