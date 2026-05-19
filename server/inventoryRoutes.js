@@ -194,6 +194,122 @@ const selectBestBomOffer = (item, vendorByKey, vendorSkuMapByItemId) => {
     };
 };
 
+const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vendorCartUrls = {}) => {
+    const quoteOnlyDecision = selectBestBomOffer(item, vendorByKey, vendorSkuMapByItemId);
+    const itemId = normalizeId(item?.meta?.itemId || item?.itemId);
+    const skuCandidates = vendorSkuMapByItemId.get(itemId) || [];
+    const candidateByVendorId = new Map();
+    skuCandidates.forEach((entry) => {
+        if (!entry.vendorId || !entry.sku) return;
+        candidateByVendorId.set(normalizeId(entry.vendorId), entry);
+    });
+
+    const rawAllocations = Array.isArray(item?.allocations) ? item.allocations : [];
+    const finalAllocations = rawAllocations
+        .map((allocation) => {
+            const vendor = resolveVendorByBomKey(allocation?.vendor, vendorByKey);
+            if (!vendor) return null;
+            const vendorId = normalizeId(vendor._id);
+            const matchedSku = candidateByVendorId.get(vendorId)?.sku || '';
+            const quantity = toNumber(allocation?.qty);
+            const rate = toNumber(allocation?.unit_price);
+            if (quantity <= 0 || rate <= 0 || !matchedSku) return null;
+            return {
+                vendorId,
+                vendorName: vendor.name,
+                vendorCode: vendor.vendorCode || '',
+                matchedSku,
+                quantity,
+                rate,
+                total: toNumber(allocation?.total) || quantity * rate,
+                cartUrl: vendorCartUrls[getCanonicalBomVendorKey(vendor.name, vendor.vendorCode, vendor._id)] || item?.cart_url || ''
+            };
+        })
+        .filter(Boolean);
+
+    const cartAllocatedQty = finalAllocations.reduce((sum, allocation) => sum + toNumber(allocation.quantity), 0);
+    const cartUnfulfilledQty = Math.max(
+        0,
+        toNumber(item?.unfulfilled ?? item?.remaining_qty ?? Math.max(0, toNumber(item?.qty) - cartAllocatedQty))
+    );
+
+    if (finalAllocations.length === 0) {
+        if (quoteOnlyDecision.resolved) {
+            return {
+                ...quoteOnlyDecision,
+                resolved: false,
+                reason: 'cart_failed',
+                cartStatus: 'FAILED',
+                cartMessage: 'Price was found, but cart automation failed for all vendors.',
+                cartVendorUrl: '',
+                cartAllocatedQty: 0,
+                cartUnfulfilledQty: toNumber(item?.qty),
+                cartAllocations: []
+            };
+        }
+
+        return {
+            resolved: false,
+            reason: quoteOnlyDecision.reason,
+            cartStatus: 'FAILED',
+            cartMessage: quoteOnlyDecision.reason === 'no_quote'
+                ? 'No valid vendor quote was returned.'
+                : 'Cart automation could not begin because BOM resolution did not succeed.',
+            cartVendorUrl: '',
+            cartAllocatedQty: 0,
+            cartUnfulfilledQty: toNumber(item?.qty),
+            cartAllocations: []
+        };
+    }
+
+    const primary = finalAllocations[0];
+    const vendorLabel = finalAllocations.length > 1
+        ? `${primary.vendorName} +${finalAllocations.length - 1}`
+        : primary.vendorName;
+    const cartStatus = cartUnfulfilledQty > 0 ? 'PARTIAL' : 'VERIFIED';
+    const resolved = cartStatus === 'VERIFIED';
+    const quoteMeta = {
+        source: 'BOM_AUTOMATION',
+        quoteId: String(item?.lineId || item?.component || item?.itemCode || ''),
+        quotedAt: new Date().toISOString(),
+        resolvedBy: finalAllocations.length > 1 ? 'CART_VERIFIED_SPLIT' : 'CART_VERIFIED',
+        cartStatus,
+        allocations: finalAllocations.map((allocation) => ({
+            vendorId: allocation.vendorId,
+            vendorName: allocation.vendorName,
+            vendorCode: allocation.vendorCode,
+            matchedSku: allocation.matchedSku,
+            quantity: allocation.quantity,
+            rate: allocation.rate,
+            total: allocation.total,
+            cartUrl: allocation.cartUrl
+        }))
+    };
+
+    return {
+        resolved,
+        reason: resolved ? '' : 'partial_fulfillment',
+        itemCode: String(item?.itemCode || ''),
+        itemName: String(item?.component || item?.name || ''),
+        vendorId: primary.vendorId,
+        vendorName: vendorLabel,
+        vendorCode: primary.vendorCode,
+        rate: primary.rate,
+        matchedSku: primary.matchedSku,
+        quoteMeta,
+        cartStatus,
+        cartMessage: resolved
+            ? (finalAllocations.length > 1
+                ? `Cart verified across ${finalAllocations.length} vendors.`
+                : 'Cart verified successfully.')
+            : `${cartUnfulfilledQty} unit(s) remain unfulfilled after cart fallback.`,
+        cartVendorUrl: primary.cartUrl,
+        cartAllocatedQty,
+        cartUnfulfilledQty,
+        cartAllocations: finalAllocations
+    };
+};
+
 async function createPurchaseRequestBatchNumber(session = null) {
     const now = new Date();
     const dateCode = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
@@ -201,6 +317,87 @@ async function createPurchaseRequestBatchNumber(session = null) {
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
     const todayCount = await PurchaseRequestBatch.countDocuments({ createdAt: { $gte: start, $lte: end } }).session(session);
     return `PRQ-${dateCode}-${String(todayCount + 1).padStart(4, '0')}`;
+}
+
+async function syncPurchaseQueueForStoreShortage({
+    materialRequestId,
+    materialRequestLineId,
+    itemId,
+    shortageQuantity,
+    userId,
+    generatedContext = 'STORE_CONFIRMATION',
+    purchaseRemarks = '',
+    session
+}) {
+    const normalizedShortage = Math.max(0, Number(shortageQuantity || 0));
+    let purchaseBatch = await PurchaseRequestBatch.findOne({
+        materialRequestId,
+        status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES }
+    }).session(session);
+
+    let createdNewBatch = false;
+    if (!purchaseBatch && normalizedShortage > 0) {
+        purchaseBatch = new PurchaseRequestBatch({
+            batchNumber: await createPurchaseRequestBatchNumber(session),
+            materialRequestId,
+            status: 'OPEN',
+            routedById: userId,
+            routedAt: new Date(),
+            sourceRequestIds: [],
+            generatedContext,
+            lines: []
+        });
+        createdNewBatch = true;
+    }
+
+    if (!purchaseBatch) return null;
+
+    const existingLine = purchaseBatch.lines.find((line) => String(line.materialRequestLineId) === String(materialRequestLineId));
+    const allocatedQuantity = Number(existingLine?.allocatedQuantity || 0);
+
+    if (normalizedShortage > 0) {
+        const requiredQuantity = Math.max(normalizedShortage, allocatedQuantity);
+        const pendingQuantity = Math.max(requiredQuantity - allocatedQuantity, 0);
+
+        if (existingLine) {
+            existingLine.itemId = itemId;
+            existingLine.requiredQuantity = requiredQuantity;
+            existingLine.pendingQuantity = pendingQuantity;
+            if (purchaseRemarks) existingLine.purchaseRemarks = purchaseRemarks;
+        } else {
+            purchaseBatch.lines.push({
+                materialRequestLineId,
+                itemId,
+                requiredQuantity,
+                pendingQuantity,
+                allocatedQuantity: 0,
+                purchaseRemarks: purchaseRemarks || undefined
+            });
+        }
+    } else if (existingLine) {
+        if (allocatedQuantity > 0) {
+            existingLine.requiredQuantity = allocatedQuantity;
+            existingLine.pendingQuantity = 0;
+            if (purchaseRemarks) existingLine.purchaseRemarks = purchaseRemarks;
+        } else {
+            existingLine.deleteOne();
+        }
+    }
+
+    if ((purchaseBatch.lines || []).length === 0) {
+        if (createdNewBatch) {
+            return null;
+        }
+        purchaseBatch.status = 'CANCELLED';
+    } else {
+        purchaseBatch.generatedContext = purchaseBatch.generatedContext || generatedContext;
+        purchaseBatch.routedById = purchaseBatch.routedById || userId;
+        purchaseBatch.routedAt = purchaseBatch.routedAt || new Date();
+        purchaseBatch.status = resolvePurchaseBatchStatusFromLines(purchaseBatch.lines || []);
+    }
+
+    await purchaseBatch.save({ session });
+    return purchaseBatch;
 }
 
 const findLocationByReference = async (reference) => {
@@ -1857,13 +2054,28 @@ router.post('/confirmStoreAvailability', async (req, res) => {
                 line.shortageQuantity = requestedQuantity - actualQuantity;
                 line.pendingQuantity = actualQuantity;
 
-                // Status logic: Flag as shortage ONLY if there is a physical discrepancy with the system records
-                // AND the full request could not be met.
-                const isShortage = (actualQuantity < requestedQuantity) && (actualQuantity < systemAvailableToThisLine);
+                const unfulfilledQuantity = Math.max(0, requestedQuantity - actualQuantity);
+
+                // Only escalate to admin shortage review when the physical count is below what the system
+                // believed was available. Routine no-stock / partial-stock shortages go directly to Purchase.
+                const isShortage = unfulfilledQuantity > 0 && actualQuantity < systemAvailableToThisLine;
                 line.status = isShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
-                line.shortageReason = isShortage ? (reason || "Physical count mismatch.") : null;
+                line.shortageReason = isShortage ? (reason || "Physical count mismatch.") : (unfulfilledQuantity > 0 ? (reason || 'Auto-routed to Purchase from Store confirmation.') : null);
 
                 if (isShortage) hasShortage = true;
+
+                await syncPurchaseQueueForStoreShortage({
+                    materialRequestId: batch.materialRequestId,
+                    materialRequestLineId: line.materialRequestLineId,
+                    itemId: line.itemId,
+                    shortageQuantity: unfulfilledQuantity,
+                    userId: req.user._id,
+                    generatedContext: 'STORE_CONFIRMATION',
+                    purchaseRemarks: isShortage
+                        ? (line.shortageReason || 'Pending admin discrepancy review.')
+                        : (unfulfilledQuantity > 0 ? (line.shortageReason || 'Auto-routed from Store confirmation.') : ''),
+                    session
+                });
             }
 
             batch.status = hasShortage ? 'SHORTAGE_REPORTED' : 'CONFIRMED';
@@ -3731,8 +3943,7 @@ router.post('/purchase-planning/auto-quote', async (req, res) => {
                 mapping: {
                     component: 'component',
                     quantity: 'qty',
-                    vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI'],
-                    skip_cart_phase: true
+                    vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI']
                 }
             })
         });
@@ -3747,22 +3958,29 @@ router.post('/purchase-planning/auto-quote', async (req, res) => {
 
         const bomResult = await processResponse.json();
         const bomItemsResult = Array.isArray(bomResult?.items) ? bomResult.items : [];
+        const vendorCartUrls = bomResult?.vendor_cart_urls && typeof bomResult.vendor_cart_urls === 'object'
+            ? bomResult.vendor_cart_urls
+            : {};
 
+        const bomItemByLineId = new Map();
         const bomItemByCodeOrName = new Map();
         bomItemsResult.forEach((entry) => {
+            const lineIdKey = normalizeId(entry?.lineId);
             const codeKey = String(entry?.itemCode || '').trim().toUpperCase();
             const nameKey = String(entry?.component || '').trim().toUpperCase();
             const normalizedName = normalizeItemMatchKey(entry?.component || '');
+            if (lineIdKey) bomItemByLineId.set(lineIdKey, entry);
             if (codeKey) bomItemByCodeOrName.set(codeKey, entry);
             if (nameKey) bomItemByCodeOrName.set(nameKey, entry);
             if (normalizedName) bomItemByCodeOrName.set(normalizedName, entry);
         });
 
         const results = selectedLines.map((line) => {
+            const lineKey = normalizeId(line.lineId);
             const codeKey = String(line.itemCode || '').trim().toUpperCase();
             const nameKey = String(line.itemName || '').trim().toUpperCase();
             const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
-            const itemResult = bomItemByCodeOrName.get(codeKey) || bomItemByCodeOrName.get(nameKey) || bomItemByCodeOrName.get(normalizedNameKey);
+            const itemResult = bomItemByLineId.get(lineKey) || bomItemByCodeOrName.get(codeKey) || bomItemByCodeOrName.get(nameKey) || bomItemByCodeOrName.get(normalizedNameKey);
 
             if (!itemResult) {
                 return {
@@ -3771,14 +3989,21 @@ router.post('/purchase-planning/auto-quote', async (req, res) => {
                     itemCode: line.itemCode,
                     itemName: line.itemName,
                     resolved: false,
-                    reason: 'no_quote'
+                    reason: 'no_quote',
+                    cartStatus: 'FAILED',
+                    cartMessage: 'BOM did not return a result for this line.',
+                    cartVendorUrl: '',
+                    cartAllocatedQty: 0,
+                    cartUnfulfilledQty: line.quantity,
+                    cartAllocations: []
                 };
             }
 
-            const decision = selectBestBomOffer(
+            const decision = buildCartAwareBomDecision(
                 { ...itemResult, itemCode: line.itemCode, component: line.itemName, meta: { itemId: line.itemId } },
                 vendorByKey,
-                vendorSkuMapByItemId
+                vendorSkuMapByItemId,
+                vendorCartUrls
             );
 
             if (!decision.resolved) {
@@ -3788,7 +4013,13 @@ router.post('/purchase-planning/auto-quote', async (req, res) => {
                     itemCode: line.itemCode,
                     itemName: line.itemName,
                     resolved: false,
-                    reason: decision.reason
+                    reason: decision.reason,
+                    cartStatus: decision.cartStatus || 'FAILED',
+                    cartMessage: decision.cartMessage || '',
+                    cartVendorUrl: decision.cartVendorUrl || '',
+                    cartAllocatedQty: toNumber(decision.cartAllocatedQty),
+                    cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty || line.quantity),
+                    cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
                 };
             }
 
@@ -3803,14 +4034,23 @@ router.post('/purchase-planning/auto-quote', async (req, res) => {
                 vendorCode: decision.vendorCode,
                 rate: decision.rate,
                 matchedSku: decision.matchedSku,
-                quoteMeta: decision.quoteMeta
+                quoteMeta: decision.quoteMeta,
+                cartStatus: decision.cartStatus || 'VERIFIED',
+                cartMessage: decision.cartMessage || '',
+                cartVendorUrl: decision.cartVendorUrl || '',
+                cartAllocatedQty: toNumber(decision.cartAllocatedQty),
+                cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty),
+                cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
             };
         });
 
         const summary = {
             total: results.length,
             resolved: results.filter((entry) => entry.resolved).length,
-            unresolved: results.filter((entry) => !entry.resolved).length
+            unresolved: results.filter((entry) => !entry.resolved).length,
+            cartVerified: results.filter((entry) => entry.cartStatus === 'VERIFIED').length,
+            cartPartial: results.filter((entry) => entry.cartStatus === 'PARTIAL').length,
+            cartFailed: results.filter((entry) => entry.cartStatus === 'FAILED').length
         };
 
         res.json({ batchId: batchId || null, results, summary });
@@ -3831,8 +4071,114 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             return res.status(400).json({ message: 'Purchase planning payload is required.' });
         }
 
+        const normalizedPurchaseLines = [];
+
+        items.forEach((item) => {
+            const orderQuantity = Number(item.orderQuantity || 0);
+            const rate = Number(item.rate || 0);
+            const vendorId = normalizeId(item.vendorId);
+            const resolved = Boolean(item.resolved);
+            const matchedSku = String(item.matchedSku || item.sku || '').trim();
+            const cartStatus = String(item.cartStatus || '').trim().toUpperCase();
+            const cartUnfulfilledQty = Number(item.cartUnfulfilledQty || 0);
+            const sourceEntries = Array.isArray(item.sourceLines)
+                ? item.sourceLines
+                : (item.sourceLineIds || []).map((sourceLineId) => ({ purchaseRequestLineId: sourceLineId }));
+            const cartAllocations = Array.isArray(item.cartAllocations)
+                ? item.cartAllocations.filter((allocation) => Number(allocation?.quantity || 0) > 0)
+                : [];
+
+            if (orderQuantity <= 0) throw new Error(`Order quantity must be greater than zero for ${item.itemCode || item.itemId}.`);
+            if (!resolved) throw new Error(`BOM resolution is required for ${item.itemCode || item.itemId}.`);
+            if (cartStatus && cartStatus !== 'VERIFIED') {
+                throw new Error(`Cart verification is incomplete for ${item.itemCode || item.itemId}.`);
+            }
+            if (cartUnfulfilledQty > 0) {
+                throw new Error(`Cart fulfillment is incomplete for ${item.itemCode || item.itemId}.`);
+            }
+            if (!Array.isArray(item.sourceLines) && !Array.isArray(item.sourceLineIds)) {
+                throw new Error(`Source allocation is missing for ${item.itemCode || item.itemId}.`);
+            }
+
+            if (cartAllocations.length > 0) {
+                const sourceResiduals = sourceEntries.map((entry) => ({
+                    ...entry,
+                    remainingQuantity: Number(entry.requestedQuantity || entry.pendingQuantity || 0)
+                }));
+
+                cartAllocations.forEach((allocation) => {
+                    const allocVendorId = normalizeId(allocation.vendorId);
+                    const allocRate = Number(allocation.rate || 0);
+                    const allocQty = Number(allocation.quantity || 0);
+                    const allocSku = String(allocation.matchedSku || '').trim();
+
+                    if (!allocVendorId) throw new Error(`Cart allocation vendor is missing for ${item.itemCode || item.itemId}.`);
+                    if (allocRate <= 0) throw new Error(`Cart allocation rate is invalid for ${item.itemCode || item.itemId}.`);
+                    if (allocQty <= 0) throw new Error(`Cart allocation quantity is invalid for ${item.itemCode || item.itemId}.`);
+                    if (!allocSku) throw new Error(`Cart allocation SKU is missing for ${item.itemCode || item.itemId}.`);
+
+                    let remainingAllocation = allocQty;
+                    const allocationSourceLines = [];
+
+                    for (const sourceEntry of sourceResiduals) {
+                        if (remainingAllocation <= 0.0001) break;
+                        const available = Number(sourceEntry.remainingQuantity || 0);
+                        if (available <= 0) continue;
+                        const quantity = Math.min(available, remainingAllocation);
+                        allocationSourceLines.push({
+                            purchaseRequestLineId: sourceEntry.purchaseRequestLineId,
+                            requestedQuantity: quantity
+                        });
+                        sourceEntry.remainingQuantity -= quantity;
+                        remainingAllocation -= quantity;
+                    }
+
+                    if (remainingAllocation > 0.0001) {
+                        throw new Error(`Cart allocation exceeds pending source quantities for ${item.itemCode || item.itemId}.`);
+                    }
+
+                    normalizedPurchaseLines.push({
+                        ...item,
+                        vendorId: allocVendorId,
+                        vendorName: allocation.vendorName || item.vendorName || '',
+                        orderQuantity: allocQty,
+                        requestedQuantity: allocQty,
+                        rate: allocRate,
+                        matchedSku: allocSku,
+                        sourceLines: allocationSourceLines,
+                        quoteMeta: {
+                            ...(item.quoteMeta || {}),
+                            matchedSku: allocSku,
+                            cartStatus: 'VERIFIED',
+                            cartUrl: allocation.cartUrl || item.cartVendorUrl || ''
+                        }
+                    });
+                });
+
+                const leftoverSource = sourceResiduals.reduce((sum, entry) => sum + Number(entry.remainingQuantity || 0), 0);
+                if (leftoverSource > 0.0001) {
+                    throw new Error(`Some source quantity was not allocated after cart verification for ${item.itemCode || item.itemId}.`);
+                }
+                return;
+            }
+
+            if (!vendorId) throw new Error(`Vendor selection is required for ${item.itemCode || item.itemId}.`);
+            if (rate <= 0) throw new Error(`Rate must be greater than zero for ${item.itemCode || item.itemId}.`);
+            if (!matchedSku) throw new Error(`Matched SKU is required for ${item.itemCode || item.itemId}.`);
+
+            normalizedPurchaseLines.push({
+                ...item,
+                vendorId,
+                requestedQuantity: Number(item.requestedQuantity || orderQuantity),
+                orderQuantity,
+                rate,
+                matchedSku,
+                sourceLines: sourceEntries
+            });
+        });
+
         const vendorGroups = {};
-        items.forEach(item => {
+        normalizedPurchaseLines.forEach(item => {
             const orderQuantity = Number(item.orderQuantity || 0);
             const rate = Number(item.rate || 0);
             const vendorId = normalizeId(item.vendorId);
@@ -3844,7 +4190,7 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             if (rate <= 0) throw new Error(`Rate must be greater than zero for ${item.itemCode || item.itemId}.`);
             if (!resolved) throw new Error(`BOM resolution is required for ${item.itemCode || item.itemId}.`);
             if (!matchedSku) throw new Error(`Matched SKU is required for ${item.itemCode || item.itemId}.`);
-            if (!Array.isArray(item.sourceLines) && !Array.isArray(item.sourceLineIds)) {
+            if (!Array.isArray(item.sourceLines) || item.sourceLines.length === 0) {
                 throw new Error(`Source allocation is missing for ${item.itemCode || item.itemId}.`);
             }
 
@@ -4638,52 +4984,25 @@ router.post('/store/approve-shortage-request', async (req, res) => {
             return res.status(400).json({ message: `Batch is in ${batch.status} status. Approval is only for SHORTAGE_REPORTED.` });
         }
 
-        // Find or create an active Purchase Request Batch for this MR
-        let purchaseBatch = await PurchaseRequestBatch.findOne({ 
-            materialRequestId: batch.materialRequestId, 
-            status: { $in: ACTIVE_PURCHASE_QUEUE_STATUSES }
-        });
-
-        let prLinesAdded = 0;
+        let synchronizedLines = 0;
         for (const line of batch.lines) {
             if (line.shortageQuantity > 0) {
-                if (!purchaseBatch) {
-                    purchaseBatch = new PurchaseRequestBatch({
-                        batchNumber: await createPurchaseRequestBatchNumber(),
-                        materialRequestId: batch.materialRequestId,
-                        status: 'OPEN',
-                        routedById: req.user._id,
-                        sourceRequestIds: [],
-                        lines: []
-                    });
-                }
-                
-                const existingLineIndex = purchaseBatch.lines.findIndex(l => 
-                    String(l.materialRequestLineId) === String(line.materialRequestLineId)
-                );
-                
-                if (existingLineIndex !== -1) {
-                    purchaseBatch.lines[existingLineIndex].requiredQuantity += line.shortageQuantity;
-                    purchaseBatch.lines[existingLineIndex].pendingQuantity += line.shortageQuantity;
-                } else {
-                    purchaseBatch.lines.push({
-                        materialRequestLineId: line.materialRequestLineId,
-                        itemId: line.itemId,
-                        requiredQuantity: line.shortageQuantity,
-                        pendingQuantity: line.shortageQuantity
-                    });
-                }
+                await syncPurchaseQueueForStoreShortage({
+                    materialRequestId: batch.materialRequestId,
+                    materialRequestLineId: line.materialRequestLineId,
+                    itemId: line.itemId,
+                    shortageQuantity: line.shortageQuantity,
+                    userId: req.user._id,
+                    generatedContext: 'STORE_DISCREPANCY_REVIEW',
+                    purchaseRemarks: adminRemarks || line.shortageReason || 'Approved discrepancy review.',
+                    session: null
+                });
                 line.status = 'CONFIRMED';
-                prLinesAdded++;
+                synchronizedLines++;
             }
         }
 
-        if (purchaseBatch) {
-            console.log('[DEBUG] Saving Purchase Request Batch with', prLinesAdded, 'lines');
-            await purchaseBatch.save();
-        }
-
-        // Update store request batch status to APPROVED
+        // Discrepancy reviewed. Purchase demand was already synchronized from store confirmation.
         batch.status = 'CONFIRMED';
         if (adminRemarks) {
             batch.notes = (batch.notes ? batch.notes + '\n' : '') + `Admin Remarks: ${adminRemarks}`;
@@ -4694,7 +5013,7 @@ router.post('/store/approve-shortage-request', async (req, res) => {
         
         await logInvActivity('INV_SHORTAGE_APPROVED', `Shortage for batch ${batch.batchNumber} approved.`, req.user._id, req.user.name, batch._id, batch.batchNumber);
 
-        res.json({ success: true, message: "Shortage approved and routed to Purchase Manager." });
+        res.json({ success: true, message: `Discrepancy reviewed. Purchase queue synchronized for ${synchronizedLines} line(s).` });
     } catch (err) {
         console.error('? [Approve Shortage Error]:', err);
         res.status(400).json({ 

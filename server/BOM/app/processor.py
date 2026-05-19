@@ -37,7 +37,7 @@ from automation.cart import CartAutomation
 
 # --- CONFIGURATION ---
 MAX_PRODUCTS = 10
-HEADLESS = False
+HEADLESS = str(os.getenv("BOM_HEADLESS", "true" if os.getenv("NODE_ENV") == "production" else "false")).strip().lower() in ("1", "true", "yes", "on")
 SESSION_DIR = Path(__file__).parent.parent / "session"
 
 # --- UTILITIES ---
@@ -1212,6 +1212,10 @@ class BOMProcessor:
                     p = get_smooth_progress(real_p, base1, weight1, start_time1, 5)
                     progress_callback(p, f"Fetching prices ({completed1}/{total_items}) - {comp}")
                 item_data = {"component": comp, "qty": qty}
+                for meta_key in ("lineId", "itemId", "itemCode"):
+                    meta_val = row.get(meta_key, None)
+                    if pd.notna(meta_val) and str(meta_val).strip():
+                        item_data[meta_key] = str(meta_val).strip()
                 
                 def _vendor_query(vendor):
                     col = mapping["vendor_codes"].get(vendor)

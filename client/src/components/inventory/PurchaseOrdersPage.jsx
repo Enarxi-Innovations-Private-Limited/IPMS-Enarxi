@@ -4,6 +4,8 @@ import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
 import { getCurrentUser } from '../../services/authService';
 
+const ENARXI_LOGO = '/enarxi-front-logo-black-d1m9Cf6C.png';
+
 export default function PurchaseOrdersPage() {
     const Layout = usePortalLayout();
     const user = getCurrentUser();
@@ -262,18 +264,8 @@ export default function PurchaseOrdersPage() {
                                         <div className="absolute top-0 left-0 w-full h-1 bg-[#2b45a2]"></div>
 
                                         <div className="flex justify-between items-start mb-12">
-                                            <div className="flex gap-4">
-                                                <div className="size-16 bg-[#001f3f] flex items-center justify-center rounded-sm">
-                                                    <span className="text-white font-black text-2xl">E</span>
-                                                </div>
-                                                <div>
-                                                    <h2 className="text-xl font-bold tracking-tight text-slate-900 leading-none mb-1">ENARXI INNOVATIONS PVT LTD</h2>
-                                                    <p className="text-[10px] text-slate-500 leading-relaxed max-w-[200px]">
-                                                        No. 23, Sripuram Colony, Vairalur,<br />
-                                                        St. Thomas Mount, Chennai - 600016<br />
-                                                        Ph: +91-9600676639 | info@enarxi.com
-                                                    </p>
-                                                </div>
+                                            <div className="flex gap-4 items-start">
+                                                <img src={ENARXI_LOGO} alt="Enarxi" className="h-14 w-auto object-contain" />
                                             </div>
                                             <div className="text-right">
                                                 <h1 className="text-4xl font-serif text-[#001f3f] font-light tracking-tight mb-4">PURCHASE ORDER</h1>
@@ -296,12 +288,7 @@ export default function PurchaseOrdersPage() {
                                             </div>
                                             <div className="bg-[#f8f9fa] border border-slate-200 rounded p-5">
                                                 <div className="text-[10px] font-black text-[#2b45a2] uppercase tracking-widest mb-4 border-b border-slate-200 pb-2">Ship To</div>
-                                                <div className="text-sm font-bold text-slate-900 mb-1">Enarxi Operations Hub</div>
-                                                <div className="text-[11px] text-slate-500 leading-relaxed mb-3">
-                                                    Warehouse Wing B, Sector 5, Logistics Park<br />
-                                                    Chennai - 600096
-                                                </div>
-                                                <div className="text-[10px] font-bold text-slate-400">Contact: <span className="text-slate-700 ml-1">Logistics Dept</span></div>
+                                                <div className="text-sm font-bold text-slate-900 mb-1">Enarxi Innovations Pvt Ltd</div>
                                             </div>
                                         </div>
 

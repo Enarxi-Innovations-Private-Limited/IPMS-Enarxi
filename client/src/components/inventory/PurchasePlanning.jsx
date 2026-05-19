@@ -15,7 +15,9 @@ function tabButtonClass(active) {
 const reasonLabel = {
     no_sku: 'Needs SKU mapping',
     no_quote: 'No quote returned',
-    vendor_unmapped: 'Vendor not mapped'
+    vendor_unmapped: 'Vendor not mapped',
+    cart_failed: 'Cart failed',
+    partial_fulfillment: 'Partially fulfilled'
 };
 
 function formatMappedSkus(mappings = []) {
@@ -89,7 +91,13 @@ export default function PurchasePlanning() {
                 resolved: false,
                 reason: '',
                 matchedSku: '',
-                quoteMeta: null
+                quoteMeta: null,
+                cartStatus: '',
+                cartMessage: '',
+                cartVendorUrl: '',
+                cartAllocatedQty: 0,
+                cartUnfulfilledQty: 0,
+                cartAllocations: []
             };
         });
         setLineStates(next);
@@ -109,7 +117,13 @@ export default function PurchasePlanning() {
                 resolved: false,
                 reason: '',
                 matchedSku: '',
-                quoteMeta: null
+                quoteMeta: null,
+                cartStatus: '',
+                cartMessage: '',
+                cartVendorUrl: '',
+                cartAllocatedQty: 0,
+                cartUnfulfilledQty: 0,
+                cartAllocations: []
             };
         });
         setCombinedStates(next);
@@ -134,7 +148,13 @@ export default function PurchasePlanning() {
                 }],
                 resolved: Boolean(lineStates[line.purchaseRequestLineId]?.resolved),
                 matchedSku: lineStates[line.purchaseRequestLineId]?.matchedSku || '',
-                quoteMeta: lineStates[line.purchaseRequestLineId]?.quoteMeta || null
+                quoteMeta: lineStates[line.purchaseRequestLineId]?.quoteMeta || null,
+                cartStatus: lineStates[line.purchaseRequestLineId]?.cartStatus || '',
+                cartMessage: lineStates[line.purchaseRequestLineId]?.cartMessage || '',
+                cartVendorUrl: lineStates[line.purchaseRequestLineId]?.cartVendorUrl || '',
+                cartAllocatedQty: toNumber(lineStates[line.purchaseRequestLineId]?.cartAllocatedQty),
+                cartUnfulfilledQty: toNumber(lineStates[line.purchaseRequestLineId]?.cartUnfulfilledQty),
+                cartAllocations: lineStates[line.purchaseRequestLineId]?.cartAllocations || []
             }));
     }, [selectedBatch, lineStates]);
 
@@ -156,7 +176,13 @@ export default function PurchasePlanning() {
                     })),
                     resolved: Boolean(combinedStates[row.itemId]?.resolved),
                     matchedSku: combinedStates[row.itemId]?.matchedSku || '',
-                    quoteMeta: combinedStates[row.itemId]?.quoteMeta || null
+                    quoteMeta: combinedStates[row.itemId]?.quoteMeta || null,
+                    cartStatus: combinedStates[row.itemId]?.cartStatus || '',
+                    cartMessage: combinedStates[row.itemId]?.cartMessage || '',
+                    cartVendorUrl: combinedStates[row.itemId]?.cartVendorUrl || '',
+                    cartAllocatedQty: toNumber(combinedStates[row.itemId]?.cartAllocatedQty),
+                    cartUnfulfilledQty: toNumber(combinedStates[row.itemId]?.cartUnfulfilledQty),
+                    cartAllocations: combinedStates[row.itemId]?.cartAllocations || []
                 })),
         [combinedRows, combinedStates]
     );
@@ -174,7 +200,15 @@ export default function PurchasePlanning() {
     );
 
     const unresolvedBlocking = useMemo(
-        () => activePayload.filter((line) => !line.resolved || !line.vendorId || line.rate <= 0 || !line.matchedSku),
+        () => activePayload.filter((line) => {
+            const hasCartAllocations = Array.isArray(line.cartAllocations) && line.cartAllocations.length > 0;
+            return (
+                !line.resolved ||
+                line.cartStatus !== 'VERIFIED' ||
+                line.cartUnfulfilledQty > 0 ||
+                (!hasCartAllocations && (!line.vendorId || line.rate <= 0 || !line.matchedSku))
+            );
+        }),
         [activePayload]
     );
 
@@ -230,7 +264,13 @@ export default function PurchasePlanning() {
                                 vendorName: '',
                                 rate: '',
                                 matchedSku: '',
-                                quoteMeta: null
+                                quoteMeta: null,
+                                cartStatus: 'FAILED',
+                                cartMessage: 'BOM did not return a result for this line.',
+                                cartVendorUrl: '',
+                                cartAllocatedQty: 0,
+                                cartUnfulfilledQty: toNumber(line.pendingQuantity || 0),
+                                cartAllocations: []
                             };
                             return;
                         }
@@ -243,7 +283,13 @@ export default function PurchasePlanning() {
                             vendorName: quoted.vendorName || '',
                             rate: quoted.rate ? String(quoted.rate) : '',
                             matchedSku: quoted.matchedSku || '',
-                            quoteMeta: quoted.quoteMeta || null
+                            quoteMeta: quoted.quoteMeta || null,
+                            cartStatus: quoted.cartStatus || '',
+                            cartMessage: quoted.cartMessage || '',
+                            cartVendorUrl: quoted.cartVendorUrl || '',
+                            cartAllocatedQty: toNumber(quoted.cartAllocatedQty),
+                            cartUnfulfilledQty: toNumber(quoted.cartUnfulfilledQty),
+                            cartAllocations: quoted.cartAllocations || []
                         };
                     });
                     return next;
@@ -266,6 +312,12 @@ export default function PurchasePlanning() {
                                 rate: '',
                                 matchedSku: '',
                                 quoteMeta: null,
+                                cartStatus: 'FAILED',
+                                cartMessage: 'BOM did not return a result for this line.',
+                                cartVendorUrl: '',
+                                cartAllocatedQty: 0,
+                                cartUnfulfilledQty: toNumber(row.totalRequiredQuantity || 0),
+                                cartAllocations: [],
                                 selected: true
                             };
                             return;
@@ -282,6 +334,12 @@ export default function PurchasePlanning() {
                                 rate: '',
                                 matchedSku: '',
                                 quoteMeta: null,
+                                cartStatus: unresolved?.cartStatus || 'FAILED',
+                                cartMessage: unresolved?.cartMessage || '',
+                                cartVendorUrl: unresolved?.cartVendorUrl || '',
+                                cartAllocatedQty: toNumber(unresolved?.cartAllocatedQty),
+                                cartUnfulfilledQty: toNumber(unresolved?.cartUnfulfilledQty),
+                                cartAllocations: unresolved?.cartAllocations || [],
                                 selected: true
                             };
                             return;
@@ -296,6 +354,12 @@ export default function PurchasePlanning() {
                             rate: resolved.rate ? String(resolved.rate) : '',
                             matchedSku: resolved.matchedSku || '',
                             quoteMeta: resolved.quoteMeta || null,
+                            cartStatus: resolved.cartStatus || 'VERIFIED',
+                            cartMessage: resolved.cartMessage || '',
+                            cartVendorUrl: resolved.cartVendorUrl || '',
+                            cartAllocatedQty: toNumber(resolved.cartAllocatedQty),
+                            cartUnfulfilledQty: toNumber(resolved.cartUnfulfilledQty),
+                            cartAllocations: resolved.cartAllocations || [],
                             selected: true
                         };
                     });
@@ -305,9 +369,9 @@ export default function PurchasePlanning() {
 
             const unresolvedCount = (response.data?.summary?.unresolved || 0);
             if (unresolvedCount > 0) {
-                notifyError(`BOM analysis completed with ${unresolvedCount} unresolved line(s). Fix SKU/vendor mapping and retry.`);
+                notifyError(`BOM analysis and cart automation completed with ${unresolvedCount} blocked line(s). Review cart/SKU/vendor issues and retry.`);
             } else {
-                notifySuccess('BOM analysis completed. Vendor and rate auto-filled.');
+                notifySuccess('BOM analysis and cart automation completed. Final vendor, rate, and SKU were verified.');
             }
         } catch (err) {
             const detail = err.response?.data?.detail;
@@ -324,7 +388,7 @@ export default function PurchasePlanning() {
             return;
         }
         if (unresolvedBlocking.length > 0) {
-            notifyError('All selected lines must be BOM-resolved before PO generation.');
+            notifyError('All selected lines must be BOM-resolved and cart-verified before PO generation.');
             return;
         }
 
@@ -489,10 +553,14 @@ export default function PurchasePlanning() {
                                                                     {state.matchedSku || formatMappedSkus(line.skuMappings).join(' | ') || '-'}
                                                                 </td>
                                                                 <td className="px-4 py-3">
-                                                                    {state.resolved ? (
+                                                                    {state.cartStatus === 'PARTIAL' ? (
+                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
+                                                                    ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
+                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
+                                                                    ) : state.resolved ? (
                                                                         <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                     ) : state.reason ? (
-                                                                        <span className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
+                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
                                                                     ) : (
                                                                         <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
                                                                     )}
@@ -525,7 +593,7 @@ export default function PurchasePlanning() {
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Breakdown</th>
                                                 </tr>
-                                            </thead>
+                                                </thead>
                                             <tbody className="divide-y divide-border-dark">
                                                 {combinedRows.map((row) => {
                                                     const state = combinedStates[row.itemId] || {};
@@ -566,10 +634,14 @@ export default function PurchasePlanning() {
                                                             <td className="px-4 py-3 text-right text-[#556070] font-semibold">{state.rate ? Number(state.rate).toFixed(2) : '-'}</td>
                                                             <td className="px-4 py-3 text-xs text-text-secondary">{state.matchedSku || formatMappedSkus(row.skuMappings).join(' | ') || '-'}</td>
                                                             <td className="px-4 py-3">
-                                                                {state.resolved ? (
+                                                                {state.cartStatus === 'PARTIAL' ? (
+                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
+                                                                ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
+                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
+                                                                ) : state.resolved ? (
                                                                     <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
                                                                 ) : state.reason ? (
-                                                                    <span className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
+                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
                                                                 ) : (
                                                                     <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
                                                                 )}
@@ -592,7 +664,7 @@ export default function PurchasePlanning() {
                             {(tab === 'individual' || tab === 'combined') && unresolvedBlocking.length > 0 && (
                                 <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
                                     <p className="text-sm font-semibold text-amber-800 mb-1">PO generation blocked</p>
-                                    <p className="text-xs text-amber-700">Resolve these lines via BOM/SKU mapping before generating POs:</p>
+                                    <p className="text-xs text-amber-700">Resolve these lines via BOM/cart validation before generating POs:</p>
                                     <ul className="mt-2 text-xs text-amber-800 list-disc list-inside">
                                         {unresolvedBlocking.slice(0, 8).map((line, idx) => (
                                             <li key={`${line.itemCode}-${idx}`}>
@@ -616,7 +688,6 @@ export default function PurchasePlanning() {
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Vendor</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-center">Lines</th>
                                                     <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary">Status</th>
-                                                    <th className="px-4 py-3 text-xs font-bold uppercase text-text-secondary text-right">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-border-dark">
@@ -626,14 +697,6 @@ export default function PurchasePlanning() {
                                                         <td className="px-4 py-3 text-text-secondary">{order.vendor?.name || order.vendorId?.name || 'N/A'}</td>
                                                         <td className="px-4 py-3 text-center text-[#556070] font-semibold">{(order.lines || []).length}</td>
                                                         <td className="px-4 py-3 text-text-secondary">{order.status}</td>
-                                                        <td className="px-4 py-3 text-right">
-                                                            <button
-                                                                onClick={() => handleDownloadPdf(order.id || order._id, order.poNumber)}
-                                                                className="text-xs font-semibold px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20"
-                                                            >
-                                                                View PDF
-                                                            </button>
-                                                        </td>
                                                     </tr>
                                                 ))}
                                             </tbody>

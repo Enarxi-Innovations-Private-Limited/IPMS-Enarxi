@@ -112,7 +112,7 @@ export default function StoreRequestsPage() {
                 actualQuantities: lineQuantities,
                 reasons: lineRemarks
             });
-            notifySuccess('Stock availability confirmed.');
+            notifySuccess('Stock availability confirmed. Any unfulfilled quantity has been synchronized to Purchase.');
             fetchRequests();
         } catch (err) {
             notifyError(err.response?.data?.message || 'Confirmation failed');
@@ -129,7 +129,7 @@ export default function StoreRequestsPage() {
                 batchId: getEntityId(selectedBatch),
                 adminRemarks
             });
-            notifySuccess('Shortage approved and routed to Purchase Manager.');
+            notifySuccess('Discrepancy reviewed. Purchase queue synchronized.');
             setAdminRemarks('');
             fetchRequests();
         } catch (err) {
@@ -335,7 +335,7 @@ export default function StoreRequestsPage() {
                                                         <h3 className="text-red-400 font-bold uppercase tracking-widest text-sm">Admin Shortage Approval</h3>
                                                     </div>
                                                     <p className="text-text-secondary text-xs mb-4">
-                                                        This batch has a reported shortage. Review the remarks and approve to route the shortage to the Purchase Manager.
+                                                        This batch has a reported stock discrepancy. Review the remarks and approve the discrepancy record. Purchase demand is synchronized separately from store confirmation.
                                                     </p>
                                                     <textarea
                                                         className="w-full bg-surface-dark border border-border-dark rounded-xl p-3 text-white text-sm outline-none focus:ring-1 focus:ring-red-500 h-20 transition-all mb-4"
@@ -349,7 +349,7 @@ export default function StoreRequestsPage() {
                                                         className="w-full bg-red-500 hover:bg-red-400 disabled:opacity-50 text-black font-black uppercase tracking-[0.1em] py-3 rounded-xl transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2"
                                                     >
                                                         <span className="material-symbols-outlined font-bold">verified</span>
-                                                        {processing ? 'Processing...' : 'Approve Shortage & Route to Purchase'}
+                                                        {processing ? 'Processing...' : 'Approve Discrepancy Review'}
                                                     </button>
                                                 </div>
                                             )}

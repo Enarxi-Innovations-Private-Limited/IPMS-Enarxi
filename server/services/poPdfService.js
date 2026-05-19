@@ -1,4 +1,19 @@
 const PDFDocument = require('pdfkit');
+const fs = require('fs');
+const path = require('path');
+
+const LOGO_CANDIDATES = [
+    'C:\\Users\\Hameed\\Downloads\\enarxi-front-logo-black-d1m9Cf6C.png',
+    path.join(__dirname, '..', '..', 'client', 'public', 'enarxi-front-logo-black-d1m9Cf6C.png')
+];
+
+function resolveLogoPath() {
+    return LOGO_CANDIDATES.find((candidate) => fs.existsSync(candidate)) || null;
+}
+
+function formatCurrency(amount) {
+    return `INR ${Number(amount || 0).toFixed(2)}`;
+}
 
 /**
  * Generates a professional branded Purchase Order PDF matching the premium UI
@@ -7,67 +22,61 @@ const PDFDocument = require('pdfkit');
  */
 function generatePurchaseOrderPdf(order, stream) {
     const doc = new PDFDocument({ margin: 40, size: 'A4' });
+    const logoPath = resolveLogoPath();
 
     doc.pipe(stream);
 
-    // --- HEADER SECTION ---
-    // Logo Placeholder Box (Top Left)
-    doc.rect(50, 50, 50, 50).fill('#0f172a');
-    doc.fontSize(14).fillColor('#ffffff').font('Helvetica-Bold').text('E', 68, 68);
+    doc.rect(0, 0, doc.page.width, 8).fill('#0f172a');
 
-    // Company Branding
-    doc.fontSize(16)
-       .fillColor('#0f172a')
-       .font('Helvetica-Bold')
-       .text('ENARXI INNOVATIONS PVT LTD', 115, 50);
-    
-    doc.fontSize(8)
-       .fillColor('#64748b')
-       .font('Helvetica')
-       .text('No. 23, Sripuram Colony, Vairalur,', 115, 70)
-       .text('St. Thomas Mount, Chennai - 600016', 115, 80)
-       .text('Ph: +91-9600676639 | info@enarxi.com', 115, 90);
+    if (logoPath) {
+        doc.image(logoPath, 50, 34, { fit: [180, 56], align: 'left', valign: 'center' });
+    } else {
+        doc.rect(50, 42, 54, 54).fill('#0f172a');
+        doc.fontSize(14).fillColor('#ffffff').font('Helvetica-Bold').text('E', 70, 63);
+        doc.fontSize(18).fillColor('#0f172a').font('Helvetica-Bold').text('ENARXI INNOVATIONS PVT LTD', 118, 55);
+    }
 
-    // Title and Metadata (Top Right)
     doc.fontSize(28)
-       .fillColor('#1e3a8a')
-       .font('Helvetica-Bold')
-       .text('PURCHASE ORDER', 250, 50, { align: 'right' });
+        .fillColor('#0f172a')
+        .font('Times-Bold')
+        .text('PURCHASE ORDER', 250, 42, { align: 'right' });
 
     doc.fontSize(9)
-       .fillColor('#64748b')
-       .font('Helvetica-Bold')
-       .text(`PO NUMBER: `, 380, 90, { continued: true, align: 'right' })
-       .fillColor('#0f172a').text(order.poNumber)
-       .fillColor('#64748b').text(`DATE: `, 380, 102, { continued: true, align: 'right' })
-       .fillColor('#0f172a').text(new Date(order.createdAt).toLocaleDateString())
-       .fillColor('#64748b').text(`STATUS: `, 380, 114, { continued: true, align: 'right' })
-       .fillColor('#0f172a').text((order.status || 'DRAFT').toUpperCase());
+        .fillColor('#94a3b8')
+        .font('Helvetica-Bold')
+        .text('PO NUMBER', 395, 88, { width: 70, align: 'right' })
+        .text('DATE', 395, 102, { width: 70, align: 'right' })
+        .text('STATUS', 395, 116, { width: 70, align: 'right' });
+
+    doc.fillColor('#0f172a')
+        .font('Helvetica-Bold')
+        .text(order.poNumber || '-', 470, 88, { width: 80, align: 'right' })
+        .text(new Date(order.createdAt).toLocaleDateString(), 470, 102, { width: 80, align: 'right' })
+        .text((order.status || 'DRAFT').toUpperCase(), 470, 116, { width: 80, align: 'right' });
 
     // --- VENDOR & SHIPPING CARDS ---
     const cardWidth = 245;
-    const cardHeight = 110;
-    const sectionTop = 160;
+    const cardHeight = 108;
+    const sectionTop = 156;
 
     // Vendor Card
-    doc.roundedRect(50, sectionTop, cardWidth, cardHeight, 8).fill('#f8fafc');
+    doc.roundedRect(50, sectionTop, cardWidth, cardHeight, 8).fillAndStroke('#f8fafc', '#dbe4f0');
     doc.fontSize(9).fillColor('#1e40af').font('Helvetica-Bold').text('VENDOR DETAILS', 65, sectionTop + 15);
-    
-    doc.fontSize(11).fillColor('#0f172a').font('Helvetica-Bold').text(order.vendorId?.name || 'N/A', 65, sectionTop + 35);
-    doc.fontSize(9).fillColor('#64748b').font('Helvetica')
-       .text(order.vendorId?.address || 'Address not provided', 65, sectionTop + 52, { width: cardWidth - 30 })
-       .moveDown(0.5)
-       .text(`GSTIN: `, { continued: true }).fillColor('#0f172a').font('Helvetica-Bold').text(order.vendorId?.gstin || 'N/A');
+    doc.moveTo(65, sectionTop + 34).lineTo(65 + cardWidth - 30, sectionTop + 34).strokeColor('#dbe4f0').stroke();
+
+    doc.fontSize(15).fillColor('#0f172a').font('Helvetica-Bold').text(order.vendorId?.name || 'N/A', 65, sectionTop + 58);
+    doc.fontSize(9).fillColor('#94a3b8').font('Helvetica-Bold').text('GSTIN', 65, sectionTop + 92);
+    doc.fillColor('#0f172a').font('Helvetica').text(order.vendorId?.gstin || 'N/A', 102, sectionTop + 92);
 
     // Ship To Card
-    doc.roundedRect(305, sectionTop, cardWidth, cardHeight, 8).fill('#f8fafc');
+    doc.roundedRect(305, sectionTop, cardWidth, cardHeight, 8).fillAndStroke('#f8fafc', '#dbe4f0');
     doc.fontSize(9).fillColor('#1e40af').font('Helvetica-Bold').text('SHIP TO', 320, sectionTop + 15);
-    
-    doc.fontSize(11).fillColor('#0f172a').font('Helvetica-Bold').text('Enarxi Operations Hub', 320, sectionTop + 35);
-    doc.fontSize(9).fillColor('#64748b').font('Helvetica')
-       .text('Warehouse Wing B, Sector 5, Logistics Park\nChennai - 600096', 320, sectionTop + 52, { width: cardWidth - 30 })
-       .moveDown(0.5)
-       .text(`Contact: `, { continued: true }).fillColor('#0f172a').font('Helvetica-Bold').text('Logistics Dept');
+    doc.moveTo(320, sectionTop + 34).lineTo(320 + cardWidth - 30, sectionTop + 34).strokeColor('#dbe4f0').stroke();
+
+    doc.fontSize(15)
+        .fillColor('#0f172a')
+        .font('Helvetica-Bold')
+        .text('Enarxi Innovations Pvt Ltd', 320, sectionTop + 58, { width: cardWidth - 30 });
 
     // --- ITEMS TABLE ---
     const tableTop = 300;
@@ -113,7 +122,7 @@ function generatePurchaseOrderPdf(order, stream) {
            .text(lineQty.toString(), 330, currentY, { width: 50, align: 'center' })
            .font('Helvetica').text(itemRate.toFixed(2), 380, currentY, { width: 60, align: 'right' })
            .text(`${line.gstPercent}%`, 450, currentY, { width: 40, align: 'right' })
-           .font('Helvetica-Bold').text(`INR ${itemTotal.toFixed(2)}`, 500, currentY, { width: 40, align: 'right' });
+           .font('Helvetica-Bold').text(formatCurrency(itemTotal), 470, currentY, { width: 70, align: 'right' });
 
         currentY += 40;
     });
@@ -126,17 +135,17 @@ function generatePurchaseOrderPdf(order, stream) {
     doc.fontSize(9).fillColor('#64748b').font('Helvetica');
     
     doc.text('SUBTOTAL:', summaryX, currentY);
-    doc.fillColor('#0f172a').font('Helvetica-Bold').text(`INR ${subtotal.toFixed(2)}`, summaryX + 100, currentY, { align: 'right', width: 100 });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').text(formatCurrency(subtotal), summaryX + 100, currentY, { align: 'right', width: 100 });
 
     currentY += 20;
     doc.fillColor('#64748b').font('Helvetica').text('TOTAL TAX (GST):', summaryX, currentY);
-    doc.fillColor('#0f172a').font('Helvetica-Bold').text(`INR ${totalGst.toFixed(2)}`, summaryX + 100, currentY, { align: 'right', width: 100 });
+    doc.fillColor('#0f172a').font('Helvetica-Bold').text(formatCurrency(totalGst), summaryX + 100, currentY, { align: 'right', width: 100 });
 
     currentY += 25;
     doc.rect(summaryX, currentY - 10, summaryWidth + 10, 35).fill('#f8fafc');
     doc.fontSize(11).fillColor('#0f172a').font('Helvetica-Bold');
     doc.text('GRAND TOTAL:', summaryX + 10, currentY);
-    doc.fontSize(12).text(`INR ${Number(order.totalAmount || (subtotal + totalGst)).toFixed(2)}`, summaryX + 100, currentY, { align: 'right', width: 100 });
+    doc.fontSize(12).text(formatCurrency(order.totalAmount || (subtotal + totalGst)), summaryX + 100, currentY, { align: 'right', width: 100 });
 
     // --- FOOTER ---
     doc.fontSize(8)
