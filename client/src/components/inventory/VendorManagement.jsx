@@ -6,10 +6,7 @@ import { useNotifier } from '../common/AppNotificationProvider.jsx';
 export default function VendorManagement() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
-    const [vendors, setVendors] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [formData, setFormData] = useState({
+    const emptyForm = {
         vendorCode: '',
         name: '',
         contactPerson: '',
@@ -17,7 +14,12 @@ export default function VendorManagement() {
         phone: '',
         gstin: '',
         address: ''
-    });
+    };
+    const [vendors, setVendors] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingVendorId, setEditingVendorId] = useState(null);
+    const [formData, setFormData] = useState(emptyForm);
 
     useEffect(() => {
         fetchVendors();
@@ -35,16 +37,46 @@ export default function VendorManagement() {
         }
     };
 
+    const resetModal = () => {
+        setShowModal(false);
+        setEditingVendorId(null);
+        setFormData(emptyForm);
+    };
+
+    const openCreateModal = () => {
+        setEditingVendorId(null);
+        setFormData(emptyForm);
+        setShowModal(true);
+    };
+
+    const openEditModal = (vendor) => {
+        setEditingVendorId(vendor._id || vendor.id);
+        setFormData({
+            vendorCode: vendor.vendorCode || '',
+            name: vendor.name || '',
+            contactPerson: vendor.contactPerson || '',
+            email: vendor.email || '',
+            phone: vendor.phone || '',
+            gstin: vendor.gstin || '',
+            address: vendor.address || ''
+        });
+        setShowModal(true);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await inventoryService.createVendor(formData);
-            setShowModal(false);
-            setFormData({ vendorCode: '', name: '', contactPerson: '', email: '', phone: '', gstin: '', address: '' });
+            if (editingVendorId) {
+                await inventoryService.updateVendor(editingVendorId, formData);
+                notifySuccess('Vendor updated successfully.');
+            } else {
+                await inventoryService.createVendor(formData);
+                notifySuccess('Vendor created successfully.');
+            }
+            resetModal();
             fetchVendors();
-            notifySuccess('Vendor created successfully.');
         } catch (err) {
-            notifyError(err.response?.data?.message || 'Failed to create vendor');
+            notifyError(err.response?.data?.message || `Failed to ${editingVendorId ? 'update' : 'create'} vendor`);
         }
     };
 
@@ -58,7 +90,7 @@ export default function VendorManagement() {
                             <p className="text-text-secondary text-lg">Manage suppliers and service providers.</p>
                         </div>
                         <button 
-                            onClick={() => setShowModal(true)}
+                            onClick={openCreateModal}
                             className="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
                         >
                             <span className="material-symbols-outlined">person_add</span>
@@ -72,7 +104,7 @@ export default function VendorManagement() {
                                 <div className="animate-spin size-10 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
                             </div>
                         ) : vendors.map(vendor => (
-                            <div key={vendor.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
+                            <div key={vendor._id || vendor.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xl hover:border-primary/30 transition-all group relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-24 h-24 bg-primary/5 blur-3xl -mr-12 -mt-12 group-hover:bg-primary/10 transition-all"></div>
                                 <div className="flex items-start justify-between mb-4">
                                     <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
@@ -98,7 +130,15 @@ export default function VendorManagement() {
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
                                         <span className="text-[10px] text-text-secondary font-bold uppercase">GST: {vendor.gstin || 'UNREGISTERED'}</span>
-                                        <button className="text-primary hover:underline text-xs font-bold">View Profile</button>
+                                        <div className="flex items-center gap-4">
+                                            <button
+                                                onClick={() => openEditModal(vendor)}
+                                                className="text-text-secondary hover:text-primary text-xs font-bold"
+                                            >
+                                                Edit
+                                            </button>
+                                            <button className="text-primary hover:underline text-xs font-bold">View Profile</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -110,11 +150,11 @@ export default function VendorManagement() {
             {/* Register Vendor Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={resetModal}></div>
                     <div className="relative bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                         <div className="px-6 py-4 border-b border-slate-200 bg-[#ECF1FF]/40 flex items-center justify-between">
-                            <h2 className="text-xl font-bold text-[#556070]">Register New Vendor</h2>
-                            <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-[#556070]">
+                            <h2 className="text-xl font-bold text-[#556070]">{editingVendorId ? 'Edit Vendor' : 'Register New Vendor'}</h2>
+                            <button onClick={resetModal} className="text-text-secondary hover:text-[#556070]">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
@@ -123,7 +163,7 @@ export default function VendorManagement() {
                                 <div>
                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Vendor Code</label>
                                     <input 
-                                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[#556070] focus:border-primary outline-none"
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[#556070] focus:border-primary outline-none"
                                         placeholder="e.g. VEN-001"
                                         value={formData.vendorCode}
                                         onChange={(e) => setFormData({...formData, vendorCode: e.target.value})}
@@ -187,7 +227,7 @@ export default function VendorManagement() {
                                 />
                             </div>
                             <button type="submit" className="w-full bg-primary py-3 rounded-xl text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.01] transition-all">
-                                Complete Registration
+                                {editingVendorId ? 'Save Vendor Changes' : 'Complete Registration'}
                             </button>
                         </form>
                     </div>
