@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as XLSX from 'xlsx';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout.js';
 
@@ -69,6 +70,26 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
     const totalItems = stock.length;
     const lowStockCount = stock.filter(item => item.quantityOnHand < 5).length; // Example threshold
 
+    const handleExportAuditExcel = () => {
+        const auditRows = stock.map((item) => ({
+            'Item Code': item.itemCode || '',
+            'Item Name': item.name || '',
+            'Location': item.locationId?.name || 'Main Warehouse',
+            'Qty': item.quantityOnHand ?? 0,
+            'In Hand Qty': ''
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(auditRows, {
+            header: ['Item Code', 'Item Name', 'Location', 'Qty', 'In Hand Qty']
+        });
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Current Stock Audit');
+
+        const now = new Date();
+        const fileSuffix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        XLSX.writeFile(workbook, `Current_Stock_Audit_${fileSuffix}.xlsx`);
+    };
+
     return (
         <Layout currentPage={currentPage}>
             <div className="p-4 lg:px-12 pb-24">
@@ -86,6 +107,15 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                 Approved stock on hand by item and location.
                             </p>
                         </div>
+                        <button
+                            type="button"
+                            onClick={handleExportAuditExcel}
+                            disabled={loading || stock.length === 0}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2a55] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-slate-300 transition hover:bg-[#13376c] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <span className="material-symbols-outlined text-base">download</span>
+                            Export Audit Excel
+                        </button>
                     </div>
 
                     {/* Stats Grid */}

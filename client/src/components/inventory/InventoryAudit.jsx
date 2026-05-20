@@ -154,14 +154,6 @@ export default function InventoryAudit({ currentPage: propCurrentPage }) {
                                     )}
                                 </div>
                             </div>
-
-                            <div className="bg-gradient-to-br from-primary/20 to-surface-dark border border-primary/20 rounded-2xl p-6 shadow-xl">
-                                <h3 className="text-white font-bold mb-2">Export Data</h3>
-                                <p className="text-text-secondary text-sm mb-4">Generate full audit reports for financial reconciliation.</p>
-                                <button className="w-full bg-primary text-white py-2 rounded-lg font-bold text-sm shadow-lg shadow-primary/20">
-                                    Download CSV Report
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
