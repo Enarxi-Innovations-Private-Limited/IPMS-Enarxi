@@ -76,6 +76,11 @@ const normalizeVendorKey = (value) =>
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
 
+const isBlankSkuValue = (value) => {
+    const normalized = String(value || '').trim().toUpperCase();
+    return !normalized || ['-', '_', 'N/A', 'NA', 'NULL'].includes(normalized);
+};
+
 const BOM_VENDOR_COLUMNS = ['ROBU', 'EVELTA', 'ELEVTA', 'KTRON', 'SHARVI', 'ELEMENT14'];
 
 const getCanonicalBomVendorKey = (...values) => {
@@ -1510,88 +1515,196 @@ router.post('/admin/items/bulk-import', async (req, res) => {
         const { items: rows } = req.body;
         if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: 'Items array is required.' });
 
-        const results = [];
         const errors = [];
+        const preparedRows = [];
 
-        await session.withTransaction(async () => {
-            for (let i = 0; i < rows.length; i++) {
-                const row = rows[i];
-                try {
-                    let classification;
-                    if (mongoose.Types.ObjectId.isValid(row.classificationId)) {
-                        classification = await Classification.findById(row.classificationId).session(session);
-                    } else {
-                        classification = await Classification.findOne({ name: (row.classificationId || '').toUpperCase() }).session(session);
+        const classificationIds = new Set();
+        const classificationNames = new Set();
+        const vendorRefs = new Set();
+        const explicitItemCodes = new Set();
+
+        rows.forEach((row = {}) => {
+            const classificationRef = row.classificationId;
+            if (mongoose.Types.ObjectId.isValid(classificationRef)) {
+                classificationIds.add(String(classificationRef));
+            } else if (classificationRef) {
+                classificationNames.add(String(classificationRef).trim().toUpperCase());
+            }
+
+            if (row.itemCode) {
+                explicitItemCodes.add(String(row.itemCode).trim());
+            }
+
+            const rawSkuMappings = Array.isArray(row.skuMappings) ? row.skuMappings : [];
+            rawSkuMappings.forEach((rawMapping) => {
+                const vendorRef = String(rawMapping?.vendorId || rawMapping?.vendorCode || '').trim();
+                if (vendorRef) {
+                    vendorRefs.add(vendorRef);
+                }
+            });
+        });
+
+        const classificationQuery = [
+            classificationIds.size > 0 ? { _id: { $in: Array.from(classificationIds) } } : null,
+            classificationNames.size > 0 ? { name: { $in: Array.from(classificationNames) } } : null
+        ].filter(Boolean);
+        const objectIdVendorRefs = Array.from(vendorRefs).filter((value) => mongoose.Types.ObjectId.isValid(value));
+        const vendorQuery = [
+            objectIdVendorRefs.length > 0 ? { _id: { $in: objectIdVendorRefs } } : null,
+            vendorRefs.size > 0 ? { vendorCode: { $in: Array.from(vendorRefs) } } : null
+        ].filter(Boolean);
+
+        const [classifications, vendors, existingItems] = await Promise.all([
+            classificationQuery.length > 0 ? Classification.find({ $or: classificationQuery }) : [],
+            vendorQuery.length > 0 ? Vendor.find({ $or: vendorQuery }) : [],
+            explicitItemCodes.size > 0 ? Item.find({ itemCode: { $in: Array.from(explicitItemCodes) } }).select('itemCode') : []
+        ]);
+
+        const classificationById = new Map();
+        const classificationByName = new Map();
+        classifications.forEach((classification) => {
+            classificationById.set(String(classification._id), classification);
+            classificationByName.set(String(classification.name || '').trim().toUpperCase(), classification);
+        });
+
+        const vendorById = new Map();
+        const vendorByCode = new Map();
+        const vendorByNormalizedCode = new Map();
+        vendors.forEach((vendor) => {
+            const id = String(vendor._id);
+            const code = String(vendor.vendorCode || '').trim();
+            vendorById.set(id, vendor);
+            vendorByCode.set(code, vendor);
+            vendorByNormalizedCode.set(normalizeVendorKey(code), vendor);
+        });
+
+        const existingItemCodes = new Set(existingItems.map((item) => String(item.itemCode || '').trim()));
+        const pendingItemCodes = new Set();
+        const nextSequenceByClassificationId = new Map();
+
+        rows.forEach((row, index) => {
+            try {
+                const classificationRef = String(row?.classificationId || '').trim();
+                const classification = mongoose.Types.ObjectId.isValid(classificationRef)
+                    ? classificationById.get(classificationRef)
+                    : classificationByName.get(classificationRef.toUpperCase());
+
+                if (!classification) {
+                    throw new Error(`Classification not found: ${row?.classificationId}`);
+                }
+
+                const normalizedSkuMappings = [];
+                const skuMappingMap = new Map();
+                const rawSkuMappings = Array.isArray(row?.skuMappings) ? row.skuMappings : [];
+
+                rawSkuMappings.forEach((rawMapping) => {
+                    const vendorRef = String(rawMapping?.vendorId || rawMapping?.vendorCode || '').trim();
+                    const skuValue = String(rawMapping?.sku || '').trim();
+                    if (!vendorRef || isBlankSkuValue(skuValue)) return;
+
+                    const vendor =
+                        (mongoose.Types.ObjectId.isValid(vendorRef) ? vendorById.get(vendorRef) : null) ||
+                        vendorByCode.get(vendorRef) ||
+                        vendorByNormalizedCode.get(normalizeVendorKey(vendorRef));
+
+                    if (!vendor) {
+                        throw new Error(`Vendor not found for SKU mapping: ${vendorRef}`);
                     }
-                    if (!classification) { errors.push({ row: i + 1, message: `Classification not found: ${row.classificationId}` }); continue; }
 
-                    const normalizedSkuMappings = [];
-                    const skuMappingMap = new Map();
-                    const rawSkuMappings = Array.isArray(row.skuMappings) ? row.skuMappings : [];
+                    skuMappingMap.set(String(vendor._id), {
+                        vendorId: vendor._id,
+                        sku: skuValue
+                    });
+                });
 
-                    for (const rawMapping of rawSkuMappings) {
-                        const vendorRef = String(rawMapping?.vendorId || rawMapping?.vendorCode || '').trim();
-                        const skuValue = String(rawMapping?.sku || '').trim();
-                        if (!vendorRef || !skuValue) continue;
+                normalizedSkuMappings.push(...skuMappingMap.values());
 
-                        let vendor = null;
-                        if (mongoose.Types.ObjectId.isValid(vendorRef)) {
-                            vendor = await Vendor.findById(vendorRef).session(session);
-                        }
-                        if (!vendor) {
-                            vendor = await Vendor.findOne({ vendorCode: vendorRef }).session(session);
-                        }
-                        if (!vendor) {
-                            throw new Error(`Vendor not found for SKU mapping: ${vendorRef}`);
-                        }
+                const explicitItemCode = String(row?.itemCode || '').trim();
+                let itemCode = explicitItemCode;
 
-                        skuMappingMap.set(String(vendor._id), {
-                            vendorId: vendor._id,
-                            sku: skuValue
-                        });
-                    }
+                if (!itemCode) {
+                    const classificationId = String(classification._id);
+                    const nextSequence = nextSequenceByClassificationId.has(classificationId)
+                        ? nextSequenceByClassificationId.get(classificationId)
+                        : Number(classification.nextSequenceNumber || 1);
+                    itemCode = `${classification.prefix}-${String(nextSequence).padStart(6, '0')}`;
+                    nextSequenceByClassificationId.set(classificationId, nextSequence + 1);
+                }
 
-                    normalizedSkuMappings.push(...skuMappingMap.values());
+                if (existingItemCodes.has(itemCode)) {
+                    throw new Error(`Item code already exists: ${itemCode}`);
+                }
+                if (pendingItemCodes.has(itemCode)) {
+                    throw new Error(`Duplicate item code in import file: ${itemCode}`);
+                }
+                pendingItemCodes.add(itemCode);
 
-                    const sequence = classification.nextSequenceNumber || 1;
-                    const itemCode = row.itemCode || `${classification.prefix}-${sequence.toString().padStart(6, '0')}`;
+                if (!String(row?.name || '').trim()) {
+                    throw new Error('Item name is required');
+                }
 
-                    const item = await Item.create([{
+                preparedRows.push({
+                    rowNumber: index + 1,
+                    itemDoc: {
                         itemCode,
                         classificationId: classification._id,
-                        name: row.name,
-                        uom: row.uom || 'Nos',
+                        name: String(row.name).trim(),
+                        uom: String(row.uom || 'Nos').trim() || 'Nos',
                         package: row.package,
                         description: row.description,
                         skuMappings: normalizedSkuMappings
-                    }], { session });
-
-                    if (normalizedSkuMappings.length > 0) {
-                        await ItemVendorSku.insertMany(
-                            normalizedSkuMappings.map((mapping) => ({
-                                itemId: item[0]._id,
-                                vendorId: mapping.vendorId,
-                                sku: mapping.sku
-                            })),
-                            { session }
-                        );
                     }
-
-                    if (!row.itemCode) {
-                        classification.nextSequenceNumber = sequence + 1;
-                        await classification.save({ session });
-                    }
-
-                    await logAudit('Item', item[0]._id, 'IMPORT', null, item[0].toObject(), req, { row: i + 1 });
-                    results.push(item[0]);
-                } catch (rowErr) {
-                    errors.push({ row: i + 1, message: rowErr.message });
-                }
+                });
+            } catch (rowErr) {
+                errors.push({ row: index + 1, message: rowErr.message });
             }
         });
 
-        await logInvActivity('INV_MASTER_IMPORT', `Bulk imported ${results.length} items (${errors.length} errors)`, req.user._id, req.user.name, null, 'Bulk Import');
-        res.status(201).json({ imported: results.length, errors, items: results });
+        let createdItems = [];
+
+        await session.withTransaction(async () => {
+            if (preparedRows.length === 0) {
+                return;
+            }
+
+            createdItems = await Item.insertMany(
+                preparedRows.map((entry) => entry.itemDoc),
+                { session, ordered: true }
+            );
+
+            const skuDocs = [];
+            createdItems.forEach((itemDoc, index) => {
+                const prepared = preparedRows[index];
+                (prepared.itemDoc.skuMappings || []).forEach((mapping) => {
+                    skuDocs.push({
+                        itemId: itemDoc._id,
+                        vendorId: mapping.vendorId,
+                        sku: mapping.sku
+                    });
+                });
+            });
+
+            if (skuDocs.length > 0) {
+                await ItemVendorSku.insertMany(skuDocs, { session, ordered: true });
+            }
+
+            for (const [classificationId, nextSequence] of nextSequenceByClassificationId.entries()) {
+                await Classification.updateOne(
+                    { _id: classificationId },
+                    { $set: { nextSequenceNumber: nextSequence } },
+                    { session }
+                );
+            }
+        });
+
+        await Promise.allSettled(
+            createdItems.map((itemDoc, index) =>
+                logAudit('Item', itemDoc._id, 'IMPORT', null, itemDoc.toObject(), req, { row: preparedRows[index].rowNumber })
+            )
+        );
+
+        await logInvActivity('INV_MASTER_IMPORT', `Bulk imported ${createdItems.length} items (${errors.length} errors)`, req.user._id, req.user.name, null, 'Bulk Import');
+        res.status(201).json({ imported: createdItems.length, errors, items: createdItems });
     } catch (err) {
         res.status(400).json({ message: err.message });
     } finally { await session.endSession(); }
