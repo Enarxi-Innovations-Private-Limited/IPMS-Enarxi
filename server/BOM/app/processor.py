@@ -941,7 +941,11 @@ class BOMProcessor:
                 return None
             
             # search_product itself failed — do NOT fall back to generic_site_handler
-            print(f"[ROBU] ❌ Product not found for SKU: {product}")
+            reason = search_res.get("reason")
+            if reason:
+                print(f"[ROBU] ❌ Search failed for SKU {product}: {reason}")
+            else:
+                print(f"[ROBU] ❌ Product not found for SKU: {product}")
             return None
         except Exception as e:
             print(f"[ROBU] Error in search_robu: {e}")

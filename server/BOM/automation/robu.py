@@ -9,6 +9,7 @@ import time
 import os
 from datetime import datetime
 import re
+from urllib.parse import quote_plus
 
 def log_action(message: str):
     """Log action with timestamp"""
@@ -19,24 +20,116 @@ class RobuScraper:
         self.base_url = "https://robu.in"
         self.timeout = 60000
 
+    def _dismiss_robu_popups(self, page: Page):
+        try:
+            from automation.cart import CartAutomation
+            CartAutomation()._dismiss_popups(page)
+        except Exception:
+            pass
+
+    def _goto_with_retry(self, page: Page, url: str, label: str, attempts: int = 2, timeout: Optional[int] = None) -> bool:
+        nav_timeout = timeout or self.timeout
+        last_error = None
+
+        for attempt in range(1, attempts + 1):
+            try:
+                log_action(f"Navigating to {label} (attempt {attempt}/{attempts}): {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=nav_timeout)
+                self._dismiss_robu_popups(page)
+                return True
+            except Exception as exc:
+                last_error = exc
+                log_action(f"⚠️ Navigation failed for {label} (attempt {attempt}/{attempts}): {exc}")
+                try:
+                    page.wait_for_timeout(1500 * attempt)
+                except Exception:
+                    pass
+
+        if last_error:
+            log_action(f"❌ Unable to load {label}: {last_error}")
+        return False
+
+    def _collect_product_candidates(self, page: Page) -> List[Dict[str, str]]:
+        candidates = []
+        seen_hrefs = set()
+        selectors = [
+            "a[href*='/product/']",
+            ".dgwt-wcas-suggestions-wrp a[href*='/product/']",
+            ".products a[href*='/product/']",
+            ".product a[href*='/product/']",
+            "li.product a[href*='/product/']",
+        ]
+
+        for selector in selectors:
+            try:
+                links = page.locator(selector)
+                count = links.count()
+            except Exception:
+                continue
+
+            for index in range(count):
+                try:
+                    link = links.nth(index)
+                    href = (link.get_attribute("href") or "").strip()
+                    text = link.inner_text().strip()
+                    if not href or "/product/" not in href:
+                        continue
+                    full_href = href if href.startswith("http") else f"{self.base_url}{href}"
+                    if full_href in seen_hrefs:
+                        continue
+                    seen_hrefs.add(full_href)
+                    candidates.append({"href": full_href, "text": text})
+                except Exception:
+                    continue
+
+        return candidates
+
+    def _verify_candidate_product(self, page: Page, sku: str, candidates: List[Dict[str, str]]) -> Dict:
+        sku_lower = str(sku).strip().lower()
+
+        prioritized = []
+        fallback = []
+        for candidate in candidates:
+            haystack = f"{candidate['href']} {candidate['text']}".lower()
+            if sku_lower and sku_lower in haystack:
+                prioritized.append(candidate)
+            else:
+                fallback.append(candidate)
+
+        for candidate in (prioritized + fallback)[:8]:
+            try:
+                log_action(f"Verifying candidate product: {candidate['href']}")
+                page.goto(candidate["href"], wait_until="domcontentloaded", timeout=self.timeout)
+                self._dismiss_robu_popups(page)
+                time.sleep(1.5)
+                body_text = page.evaluate("() => document.body.innerText")
+                if sku_lower and sku_lower in body_text.lower():
+                    log_action(f"✅ Verified ROBU product page for SKU {sku}: {candidate['href']}")
+                    return {"sku": sku, "product_url": page.url, "found": True}
+            except Exception as exc:
+                log_action(f"Fallback candidate failed: {exc}")
+                continue
+
+        return {"sku": sku, "found": False, "reason": f"Unable to verify any ROBU candidate page for SKU {sku}"}
+
     def search_product(self, page: Page, sku: str) -> Dict:
         try:
             log_action(f"Starting search for SKU: {sku}")
-            
-            # Navigate to base URL if not already there
-            if "robu.in" not in page.url:
-                log_action("Navigating to Robu homepage...")
-                # domcontentloaded is MUCH faster than networkidle —
-                # Robu has many 3rd-party trackers that delay networkidle by 30+ seconds.
-                page.goto(self.base_url, wait_until="domcontentloaded", timeout=self.timeout)
-            
-            # Dismiss any popups (notifications, cookies, etc.)
-            try:
-                from automation.cart import CartAutomation
-                CartAutomation()._dismiss_popups(page)
-            except:
-                pass
-            
+
+            homepage_ready = "robu.in" in page.url or self._goto_with_retry(page, self.base_url, "Robu homepage")
+            direct_search_url = f"{self.base_url}/?s={quote_plus(str(sku).strip())}&post_type=product"
+
+            if not homepage_ready:
+                log_action("⚠️ Homepage unavailable, falling back to direct ROBU search results")
+                if not self._goto_with_retry(page, direct_search_url, "Robu direct search results"):
+                    return {
+                        "sku": sku,
+                        "found": False,
+                        "reason": "ROBU homepage timed out and direct search results also failed to load",
+                    }
+
+            self._dismiss_robu_popups(page)
+
             # Scroll to top to ensure search bar is visible
             page.evaluate("window.scrollTo(0, 0)")
 
@@ -73,10 +166,24 @@ class RobuScraper:
                     except:
                         continue
 
+            if (not search_input or search_input.count() == 0) and homepage_ready:
+                log_action("⚠️ Search input not found on homepage, switching to direct ROBU search results")
+                if not self._goto_with_retry(page, direct_search_url, "Robu direct search results"):
+                    return {
+                        "sku": sku,
+                        "found": False,
+                        "reason": "ROBU search input was unavailable and direct search results failed to load",
+                    }
+                candidates = self._collect_product_candidates(page)
+                if candidates:
+                    return self._verify_candidate_product(page, sku, candidates)
+                log_action(f"❌ No product links found on direct search results for SKU {sku}")
+                return {"sku": sku, "found": False, "reason": f"No ROBU search results found for SKU {sku}"}
+
             if not search_input or search_input.count() == 0:
                 log_action("❌ Search input not found with any selector")
                 log_action(f"📍 Current URL: {page.url}")
-                return {"sku": sku, "found": False}
+                return {"sku": sku, "found": False, "reason": "ROBU search input was not available"}
 
             # STEP 1: Type SKU in search bar (AJAX dropdown will appear)
             log_action(f"📝 Typing SKU: {sku}")
@@ -95,7 +202,7 @@ class RobuScraper:
                 # STEP 3: Find product links within dropdown
                 # Target custom Robu dropdown (plain HTML list with product links)
                 product_links = page.locator("a[href*='/product/']")
-                
+
                 log_action(f"🔍 Found {product_links.count()} total links with /product/")
                 
                 target_product = None
@@ -136,49 +243,12 @@ class RobuScraper:
                     except Exception:
                         pass
 
-                    candidate_links = []
-                    seen_hrefs = set()
-                    sku_lower = str(sku).strip().lower()
-
-                    for j in range(product_links.count()):
-                        try:
-                            link = product_links.nth(j)
-                            href = (link.get_attribute("href") or "").strip()
-                            text = link.inner_text().strip()
-                            if not href or "/product/" not in href:
-                                continue
-                            full_href = href if href.startswith("http") else f"{self.base_url}{href}"
-                            if full_href in seen_hrefs:
-                                continue
-                            seen_hrefs.add(full_href)
-                            candidate_links.append({"href": full_href, "text": text})
-                        except Exception:
-                            continue
-
-                    prioritized = []
-                    fallback = []
-                    for candidate in candidate_links:
-                        haystack = f"{candidate['href']} {candidate['text']}".lower()
-                        if sku_lower and sku_lower in haystack:
-                            prioritized.append(candidate)
-                        else:
-                            fallback.append(candidate)
-
-                    for candidate in (prioritized + fallback)[:6]:
-                        try:
-                            log_action(f"Fallback candidate: {candidate['href']}")
-                            page.goto(candidate["href"], wait_until="domcontentloaded", timeout=self.timeout)
-                            time.sleep(1.5)
-                            body_text = page.evaluate("() => document.body.innerText")
-                            if sku_lower and sku_lower in body_text.lower():
-                                log_action(f"Verified fallback product page for SKU: {sku}")
-                                return {"sku": sku, "product_url": page.url, "found": True}
-                        except Exception as fallback_error:
-                            log_action(f"Fallback candidate failed: {fallback_error}")
-                            continue
+                    candidate_links = self._collect_product_candidates(page)
+                    if candidate_links:
+                        return self._verify_candidate_product(page, sku, candidate_links)
 
                     log_action("⚠️ Dropdown fallback did not yield a verified product page")
-                    return {"sku": sku, "found": False}
+                    return {"sku": sku, "found": False, "reason": f"ROBU dropdown/search results did not yield a verified match for SKU {sku}"}
                 
                 product_text = target_product.inner_text().strip()
                 log_action(f"🔗 Clicking dropdown product: {product_text[:50]}")
@@ -208,15 +278,15 @@ class RobuScraper:
                     return {"sku": sku, "product_url": page.url, "found": True}
                 else:
                     log_action(f"❌ Not on product page. Current URL: {page.url}")
-                    return {"sku": sku, "found": False}
+                    return {"sku": sku, "found": False, "reason": f"ROBU navigation ended on non-product URL: {page.url}"}
                     
             except Exception as e:
                 log_action(f"❌ Dropdown click failed: {e}")
-                return {"sku": sku, "found": False}
+                return {"sku": sku, "found": False, "reason": f"ROBU dropdown click failed: {e}"}
 
         except Exception as e:
             log_action(f"Search error: {e}")
-            return {"sku": sku, "found": False}
+            return {"sku": sku, "found": False, "reason": f"ROBU search error: {e}"}
 
     def extract_price(self, page: Page, product_url: str, quantity: int, sku: str = "") -> Dict:
         """
