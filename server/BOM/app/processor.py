@@ -1386,18 +1386,6 @@ class BOMProcessor:
                         print(f"[{opt['vendor']}] ℹ️ Increasing quantity from {take_qty} to meet MOQ {opt['moq']}")
                         take_qty = opt["moq"]
 
-                    # Apply Robu minimum ₹10 rule
-                    if opt["vendor"] == "ROBU" and opt["price"] > 0:
-                        # Step 1: minimum qty to reach ₹10
-                        min_robu_qty = math.ceil(10.0 / opt["price"])
-                        
-                        # Step 2: try to increase quantity, but only if stock is available
-                        if take_qty > 0 or (opt["available"] is not None and opt["available"] > 0):
-                            take_qty = max(take_qty, min_robu_qty)
-                        elif opt["available"] is None:
-                            # If available is unknown, attempt the minimum
-                            take_qty = max(take_qty, min_robu_qty)
-                    
                     # Cap take_qty at what's actually available (don't allocate more than stock allows)
                     if opt["available"] is not None and opt["available"] > 0:
                         take_qty = min(take_qty, opt["available"])
@@ -1544,33 +1532,6 @@ class BOMProcessor:
                     remaining = item["remaining_qty"]
                     can_take = best_opt["available"] if best_opt["available"] is not None else remaining
                     take_qty = min(can_take, remaining)
-                    
-                    # Apply Robu minimum ₹10 rule
-                    if best_opt["vendor"] == "ROBU" and best_opt["price"] > 0:
-                        available = best_opt["available"] if best_opt["available"] is not None else remaining
-                        
-                        # Step 1: minimum qty to reach ₹10
-                        min_robu_qty = math.ceil(10.0 / best_opt["price"])
-                        
-                        # Step 2: try to increase quantity, but only if stock exists
-                        if take_qty > 0 or (best_opt["available"] is not None and best_opt["available"] > 0):
-                            required_qty = max(take_qty, min_robu_qty)
-                        elif best_opt["available"] is None:
-                            # If available is unknown, attempt the minimum
-                            required_qty = max(take_qty, min_robu_qty)
-                        else:
-                            # No stock available, skip Robu
-                            required_qty = take_qty
-                        
-                        # Step 3: check stock feasibility
-                        if required_qty > 0 and best_opt["available"] is not None and best_opt["available"] < required_qty:
-                            print(f"[RE-ALLOCATE] [ROBU] ❌ Cannot meet ₹10 (need {required_qty}, have {best_opt['available']}) → skipping")
-                            # Add a dummy allocation so current_vendors skips this next time
-                            item["allocations"].append({"vendor": "ROBU", "qty": 0, "unit_price": best_opt["price"], "total": 0})
-                            continue
-                            
-                        # Step 4: valid → assign
-                        take_qty = required_qty
                     
                     if take_qty > 0:
                         new_alloc = {"vendor": best_opt["vendor"], "qty": take_qty, "unit_price": best_opt["price"], "total": take_qty * best_opt["price"]}

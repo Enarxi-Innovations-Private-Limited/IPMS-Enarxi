@@ -803,28 +803,26 @@ class CartAutomation:
         item_name: used to find the correct cart row when multiple items exist.
 
         ₹10 MINIMUM ORDER RULE (Robu):
-        Robu enforces a ₹10 minimum per order.  If the line total (qty × price)
-        would be below ₹10, we increase qty automatically.  If stock prevents us
-        from reaching ₹10, we remove the item and signal fallback.
+        Robu enforces a ₹10 minimum per order. Quantity must remain controlled by
+        Purchase Manager, so we never auto-increase it here. If the requested line
+        total is below ₹10, we fail verification and return a clear message.
         """
-        import math
 
         try:
-            # ── ₹10 MINIMUM QTY ADJUSTMENT ───────────────────────────────────────
-            original_qty   = quantity
-            min_qty_for_10 = quantity           # default: no change
+            original_qty = quantity
 
             if unit_price > 0:
-                if unit_price >= 10:
-                    min_qty_for_10 = 1          # single unit already clears ₹10
-                else:
-                    min_qty_for_10 = math.ceil(10.0 / unit_price)
-
-            # Use whichever is larger: BOM requirement OR ₹10-minimum quantity
-            quantity = max(original_qty, min_qty_for_10)
-            if quantity != original_qty:
-                print(f"[ROBU] ₹10 rule: qty adjusted {original_qty} → {quantity} "
-                      f"(need ₹10 min at ₹{unit_price}/unit)")
+                requested_total = original_qty * unit_price
+                if requested_total < 9.99:
+                    print(f"[ROBU] ❌ Requested total ₹{requested_total:.2f} ({original_qty} × ₹{unit_price}) is below Robu's ₹10 minimum")
+                    return {
+                        "success": False,
+                        "needs_fallback": True,
+                        "insufficient_stock": False,
+                        "available": original_qty,
+                        "message": f"Requested quantity {original_qty} totals ₹{requested_total:.2f}, below Robu's ₹10 minimum. Increase quantity manually if Robu must be used.",
+                        "cart_url": product_url,
+                    }
 
             # ── NAVIGATE DIRECTLY TO PRODUCT PAGE ──
             print(f"[*] Navigating to product page: {product_url}")
