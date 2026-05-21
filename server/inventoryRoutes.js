@@ -4332,6 +4332,8 @@ router.post('/generatePurchaseOrders', async (req, res) => {
             const cartAllocations = Array.isArray(item.cartAllocations)
                 ? item.cartAllocations.filter((allocation) => Number(allocation?.quantity || 0) > 0)
                 : [];
+            const cartAllocatedQty = cartAllocations.reduce((sum, allocation) => sum + Number(allocation?.quantity || 0), 0);
+            const useCartAllocations = cartAllocations.length > 0 && Math.abs(cartAllocatedQty - orderQuantity) <= 0.0001;
 
             if (orderQuantity <= 0) throw new Error(`Order quantity must be greater than zero for ${item.itemCode || item.itemId}.`);
             if (!resolved && !manualReady) throw new Error(`BOM resolution or manual vendor/rate/SKU entry is required for ${item.itemCode || item.itemId}.`);
@@ -4345,7 +4347,7 @@ router.post('/generatePurchaseOrders', async (req, res) => {
                 throw new Error(`Source allocation is missing for ${item.itemCode || item.itemId}.`);
             }
 
-            if (cartAllocations.length > 0) {
+            if (useCartAllocations) {
                 const sourceResiduals = sourceEntries.map((entry) => ({
                     ...entry,
                     remainingQuantity: Number(entry.requestedQuantity || entry.pendingQuantity || 0)

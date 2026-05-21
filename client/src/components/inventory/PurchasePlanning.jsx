@@ -29,6 +29,7 @@ function formatMappedSkus(mappings = []) {
 }
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const AUTO_QUOTE_STORAGE_KEY = 'purchase-planning-auto-quote-job';
 
 function normalizeVendorDisplayName(value = '') {
     const normalized = String(value || '').trim().toUpperCase();
@@ -78,6 +79,33 @@ export default function PurchasePlanning() {
     const [analysisJobId, setAnalysisJobId] = useState('');
     const [analysisProgress, setAnalysisProgress] = useState(0);
     const [analysisProgressStatus, setAnalysisProgressStatus] = useState('');
+    const restoreJobRef = useRef(false);
+    const pendingRestoreRef = useRef(null);
+
+    const persistAutoQuoteJob = (payload) => {
+        try {
+            window.localStorage.setItem(AUTO_QUOTE_STORAGE_KEY, JSON.stringify(payload));
+        } catch (_) {
+            // Ignore localStorage failures in private / restricted contexts.
+        }
+    };
+
+    const clearPersistedAutoQuoteJob = () => {
+        try {
+            window.localStorage.removeItem(AUTO_QUOTE_STORAGE_KEY);
+        } catch (_) {
+            // Ignore localStorage failures.
+        }
+    };
+
+    const readPersistedAutoQuoteJob = () => {
+        try {
+            const raw = window.localStorage.getItem(AUTO_QUOTE_STORAGE_KEY);
+            return raw ? JSON.parse(raw) : null;
+        } catch (_) {
+            return null;
+        }
+    };
 
     const fetchData = async () => {
         try {
@@ -284,7 +312,10 @@ export default function PurchasePlanning() {
             resolved: false,
             reason: '',
             cartStatus: '',
-            cartMessage: ''
+            cartMessage: '',
+            cartAllocatedQty: 0,
+            cartUnfulfilledQty: 0,
+            cartAllocations: []
         };
         if (mode === 'individual') {
             updateIndividualState(key, patch);
@@ -506,6 +537,140 @@ export default function PurchasePlanning() {
         });
     };
 
+    const applyAutoQuoteResults = (mode, resultRows = [], summary = null, selectedLineIds = []) => {
+        setAnalysisSummary(summary || null);
+        const selectedIdSet = new Set((selectedLineIds || []).map(String));
+
+        if (mode === 'individual') {
+            const byLine = new Map((resultRows || []).map((entry) => [String(entry.lineId), entry]));
+            setLineStates((prev) => {
+                const next = { ...prev };
+                Object.keys(next).forEach((lineId) => {
+                    if (selectedIdSet.has(String(lineId))) {
+                        next[lineId] = {
+                            ...next[lineId],
+                            selected: true
+                        };
+                    }
+                });
+                byLine.forEach((quoted, lineId) => {
+                    next[lineId] = {
+                        ...(next[lineId] || {}),
+                        selected: true,
+                        resolved: Boolean(quoted.resolved),
+                        reason: quoted.reason || '',
+                        vendorId: quoted.vendorId || '',
+                        vendorName: quoted.vendorName || '',
+                        rate: quoted.rate ? String(quoted.rate) : '',
+                        matchedSku: quoted.matchedSku || '',
+                        quoteMeta: quoted.quoteMeta || null,
+                        cartStatus: quoted.cartStatus || '',
+                        cartMessage: quoted.cartMessage || '',
+                        cartVendorUrl: quoted.cartVendorUrl || '',
+                        cartAllocatedQty: toNumber(quoted.cartAllocatedQty),
+                        cartUnfulfilledQty: toNumber(quoted.cartUnfulfilledQty),
+                        cartAllocations: quoted.cartAllocations || []
+                    };
+                });
+                return next;
+            });
+            return;
+        }
+
+        const byLine = new Map((resultRows || []).map((entry) => [String(entry.lineId), entry]));
+        setCombinedStates((prev) => {
+            const next = { ...prev };
+            (combinedRows || []).forEach((row) => {
+                const rowResults = (row.requestLines || [])
+                    .filter((entry) => selectedIdSet.has(String(entry.purchaseRequestLineId)))
+                    .map((entry) => byLine.get(String(entry.purchaseRequestLineId)))
+                    .filter(Boolean);
+                if (!rowResults.length) return;
+
+                const unresolved = rowResults.find((entry) => !entry.resolved);
+                const resolved = rowResults.find((entry) => entry.resolved);
+
+                if (unresolved || !resolved) {
+                    next[row.itemId] = {
+                        ...(next[row.itemId] || {}),
+                        selected: true,
+                        resolved: false,
+                        reason: unresolved?.reason || 'no_quote',
+                        vendorId: '',
+                        vendorName: '',
+                        rate: '',
+                        matchedSku: '',
+                        quoteMeta: null,
+                        cartStatus: unresolved?.cartStatus || 'FAILED',
+                        cartMessage: unresolved?.cartMessage || '',
+                        cartVendorUrl: unresolved?.cartVendorUrl || '',
+                        cartAllocatedQty: toNumber(unresolved?.cartAllocatedQty),
+                        cartUnfulfilledQty: toNumber(unresolved?.cartUnfulfilledQty),
+                        cartAllocations: unresolved?.cartAllocations || []
+                    };
+                    return;
+                }
+
+                next[row.itemId] = {
+                    ...(next[row.itemId] || {}),
+                    selected: true,
+                    resolved: true,
+                    reason: '',
+                    vendorId: resolved.vendorId || '',
+                    vendorName: resolved.vendorName || '',
+                    rate: resolved.rate ? String(resolved.rate) : '',
+                    matchedSku: resolved.matchedSku || '',
+                    quoteMeta: resolved.quoteMeta || null,
+                    cartStatus: resolved.cartStatus || 'VERIFIED',
+                    cartMessage: resolved.cartMessage || '',
+                    cartVendorUrl: resolved.cartVendorUrl || '',
+                    cartAllocatedQty: toNumber(resolved.cartAllocatedQty),
+                    cartUnfulfilledQty: toNumber(resolved.cartUnfulfilledQty),
+                    cartAllocations: resolved.cartAllocations || []
+                };
+            });
+            return next;
+        });
+    };
+
+    const monitorAutoQuoteJob = async (jobId, mode, selectedLineIds = [], { keepCompletedState = true } = {}) => {
+        setAnalyzing(true);
+        setAnalysisJobId(jobId);
+
+        while (true) {
+            await sleep(1500);
+            const statusResponse = await inventoryService.getAutoQuotePurchasePlanningStatus(jobId);
+            const job = statusResponse.data || {};
+
+            setAnalysisProgress(toNumber(job.progress));
+            setAnalysisProgressStatus(job.progressStatus || 'Processing BOM...');
+            applyPartialProgress(job.partialItems || []);
+
+            if (job.status === 'FAILED') {
+                clearPersistedAutoQuoteJob();
+                const error = new Error(job.error?.message || 'Failed to analyze selected lines with BOM.');
+                error.detail = job.error?.detail || '';
+                throw error;
+            }
+
+            if (job.status === 'COMPLETED') {
+                const finalPayload = job.result || {};
+                applyAutoQuoteResults(mode, finalPayload.results || [], finalPayload.summary || null, selectedLineIds);
+                if (keepCompletedState) {
+                    persistAutoQuoteJob({
+                        jobId,
+                        tab: mode,
+                        batchId: mode === 'individual' ? selectedBatchId : null,
+                        lineIds: selectedLineIds
+                    });
+                }
+                setAnalyzing(false);
+                setAnalysisJobId('');
+                return finalPayload;
+            }
+        }
+    };
+
     const handleAnalyzeWithBom = async () => {
         const lineIds = tab === 'individual'
             ? selectedIndividualLines.map((line) => line.purchaseRequestLineId)
@@ -531,152 +696,15 @@ export default function PurchasePlanning() {
                 throw new Error('BOM analysis job could not be started.');
             }
 
-            setAnalysisJobId(jobId);
+            persistAutoQuoteJob({
+                jobId,
+                tab,
+                batchId: tab === 'individual' ? selectedBatchId : null,
+                lineIds
+            });
 
-            let finalPayload = null;
-            while (!finalPayload) {
-                await sleep(1500);
-                const statusResponse = await inventoryService.getAutoQuotePurchasePlanningStatus(jobId);
-                const job = statusResponse.data || {};
-                setAnalysisProgress(toNumber(job.progress));
-                setAnalysisProgressStatus(job.progressStatus || 'Processing BOM...');
-                applyPartialProgress(job.partialItems || []);
-
-                if (job.status === 'FAILED') {
-                    const error = new Error(job.error?.message || 'Failed to analyze selected lines with BOM.');
-                    error.detail = job.error?.detail || '';
-                    throw error;
-                }
-
-                if (job.status === 'COMPLETED') {
-                    finalPayload = job.result || {};
-                }
-            }
-
-            const resultRows = finalPayload.results || [];
-            setAnalysisSummary(finalPayload.summary || null);
-
-            if (tab === 'individual') {
-                const byLine = new Map(resultRows.map((entry) => [entry.lineId, entry]));
-                setLineStates((prev) => {
-                    const next = { ...prev };
-                    selectedIndividualLines.forEach((line) => {
-                        const lineId = line.purchaseRequestLineId;
-                        const quoted = byLine.get(lineId);
-                        if (!quoted) {
-                            next[lineId] = {
-                                ...next[lineId],
-                                selected: true,
-                                resolved: false,
-                                reason: 'no_quote',
-                                vendorId: '',
-                                vendorName: '',
-                                rate: '',
-                                matchedSku: '',
-                                quoteMeta: null,
-                                cartStatus: 'FAILED',
-                                cartMessage: 'BOM did not return a result for this line.',
-                                cartVendorUrl: '',
-                                cartAllocatedQty: 0,
-                                cartUnfulfilledQty: toNumber(line.pendingQuantity || 0),
-                                cartAllocations: []
-                            };
-                            return;
-                        }
-                        next[lineId] = {
-                            ...next[lineId],
-                            selected: true,
-                            resolved: Boolean(quoted.resolved),
-                            reason: quoted.reason || '',
-                            vendorId: quoted.vendorId || '',
-                            vendorName: quoted.vendorName || '',
-                            rate: quoted.rate ? String(quoted.rate) : '',
-                            matchedSku: quoted.matchedSku || '',
-                            quoteMeta: quoted.quoteMeta || null,
-                            cartStatus: quoted.cartStatus || '',
-                            cartMessage: quoted.cartMessage || '',
-                            cartVendorUrl: quoted.cartVendorUrl || '',
-                            cartAllocatedQty: toNumber(quoted.cartAllocatedQty),
-                            cartUnfulfilledQty: toNumber(quoted.cartUnfulfilledQty),
-                            cartAllocations: quoted.cartAllocations || []
-                        };
-                    });
-                    return next;
-                });
-            } else {
-                const byLine = new Map(resultRows.map((entry) => [entry.lineId, entry]));
-                setCombinedStates((prev) => {
-                    const next = { ...prev };
-                    selectedCombinedRows.forEach((row) => {
-                        const rowResults = (row.requestLines || [])
-                            .map((entry) => byLine.get(entry.purchaseRequestLineId))
-                            .filter(Boolean);
-                        if (!rowResults.length) {
-                            next[row.itemId] = {
-                                ...next[row.itemId],
-                                resolved: false,
-                                reason: 'no_quote',
-                                vendorId: '',
-                                vendorName: '',
-                                rate: '',
-                                matchedSku: '',
-                                quoteMeta: null,
-                                cartStatus: 'FAILED',
-                                cartMessage: 'BOM did not return a result for this line.',
-                                cartVendorUrl: '',
-                                cartAllocatedQty: 0,
-                                cartUnfulfilledQty: toNumber(row.totalRequiredQuantity || 0),
-                                cartAllocations: [],
-                                selected: true
-                            };
-                            return;
-                        }
-                        const unresolved = rowResults.find((entry) => !entry.resolved);
-                        const resolved = rowResults.find((entry) => entry.resolved);
-                        if (unresolved || !resolved) {
-                            next[row.itemId] = {
-                                ...next[row.itemId],
-                                resolved: false,
-                                reason: unresolved?.reason || 'no_quote',
-                                vendorId: '',
-                                vendorName: '',
-                                rate: '',
-                                matchedSku: '',
-                                quoteMeta: null,
-                                cartStatus: unresolved?.cartStatus || 'FAILED',
-                                cartMessage: unresolved?.cartMessage || '',
-                                cartVendorUrl: unresolved?.cartVendorUrl || '',
-                                cartAllocatedQty: toNumber(unresolved?.cartAllocatedQty),
-                                cartUnfulfilledQty: toNumber(unresolved?.cartUnfulfilledQty),
-                                cartAllocations: unresolved?.cartAllocations || [],
-                                selected: true
-                            };
-                            return;
-                        }
-
-                        next[row.itemId] = {
-                            ...next[row.itemId],
-                            resolved: true,
-                            reason: '',
-                            vendorId: resolved.vendorId || '',
-                            vendorName: resolved.vendorName || '',
-                            rate: resolved.rate ? String(resolved.rate) : '',
-                            matchedSku: resolved.matchedSku || '',
-                            quoteMeta: resolved.quoteMeta || null,
-                            cartStatus: resolved.cartStatus || 'VERIFIED',
-                            cartMessage: resolved.cartMessage || '',
-                            cartVendorUrl: resolved.cartVendorUrl || '',
-                            cartAllocatedQty: toNumber(resolved.cartAllocatedQty),
-                            cartUnfulfilledQty: toNumber(resolved.cartUnfulfilledQty),
-                            cartAllocations: resolved.cartAllocations || [],
-                            selected: true
-                        };
-                    });
-                    return next;
-                });
-            }
-
-            const unresolvedCount = (finalPayload.summary?.unresolved || 0);
+            const finalPayload = await monitorAutoQuoteJob(jobId, tab, lineIds);
+            const unresolvedCount = toNumber(finalPayload?.summary?.unresolved || 0);
             if (unresolvedCount > 0) {
                 notifyError(`BOM analysis and cart automation completed with ${unresolvedCount} blocked line(s). Review cart/SKU/vendor issues and retry.`);
             } else {
@@ -692,6 +720,90 @@ export default function PurchasePlanning() {
         }
     };
 
+    useEffect(() => {
+        if (loading || restoreJobRef.current) return;
+        const saved = readPersistedAutoQuoteJob();
+        if (!saved?.jobId || !Array.isArray(saved.lineIds) || saved.lineIds.length === 0) {
+            restoreJobRef.current = true;
+            return;
+        }
+
+        restoreJobRef.current = true;
+        pendingRestoreRef.current = saved;
+
+        if (saved.tab === 'individual' && saved.batchId) {
+            setTab('individual');
+            setSelectedBatchId(saved.batchId);
+            return;
+        }
+
+        if (saved.tab === 'combined') {
+            setTab('combined');
+        }
+    }, [loading]);
+
+    useEffect(() => {
+        const saved = pendingRestoreRef.current;
+        if (!saved) return;
+
+        const applyRestore = async () => {
+            try {
+                const statusResponse = await inventoryService.getAutoQuotePurchasePlanningStatus(saved.jobId);
+                const job = statusResponse.data || {};
+                setAnalysisProgress(toNumber(job.progress));
+                setAnalysisProgressStatus(job.progressStatus || 'Processing BOM...');
+
+                if (saved.tab === 'individual') {
+                    if (!selectedBatch || selectedBatch.id !== saved.batchId) return;
+                    setLineStates((prev) => {
+                        const next = { ...prev };
+                        saved.lineIds.forEach((lineId) => {
+                            next[lineId] = {
+                                ...(next[lineId] || {}),
+                                selected: true
+                            };
+                        });
+                        return next;
+                    });
+                } else {
+                    setCombinedStates((prev) => {
+                        const next = { ...prev };
+                        (combinedRows || []).forEach((row) => {
+                            const matches = (row.requestLines || []).some((entry) => saved.lineIds.includes(entry.purchaseRequestLineId));
+                            if (matches) {
+                                next[row.itemId] = {
+                                    ...(next[row.itemId] || {}),
+                                    selected: true
+                                };
+                            }
+                        });
+                        return next;
+                    });
+                }
+
+                applyPartialProgress(job.partialItems || []);
+
+                if (job.status === 'COMPLETED') {
+                    applyAutoQuoteResults(saved.tab, job.result?.results || [], job.result?.summary || null, saved.lineIds);
+                } else if (job.status === 'RUNNING') {
+                    await monitorAutoQuoteJob(saved.jobId, saved.tab, saved.lineIds, { keepCompletedState: true });
+                } else if (job.status === 'FAILED') {
+                    clearPersistedAutoQuoteJob();
+                } else if (job.status === 'NOT_FOUND' || job.message === 'BOM analysis job not found.') {
+                    clearPersistedAutoQuoteJob();
+                }
+            } catch (err) {
+                if (err.response?.status === 404) {
+                    clearPersistedAutoQuoteJob();
+                }
+            } finally {
+                pendingRestoreRef.current = null;
+            }
+        };
+
+        applyRestore();
+    }, [selectedBatch?.id, combinedRows]);
+
     const handleGenerate = async () => {
         if (!activePayload.length) {
             notifyError('Select at least one line to generate purchase orders.');
@@ -705,6 +817,7 @@ export default function PurchasePlanning() {
         try {
             setGenerating(true);
             await inventoryService.generatePurchaseOrders({ payload: activePayload, notes });
+            clearPersistedAutoQuoteJob();
             notifySuccess('Vendor purchase orders generated successfully.');
             setNotes('');
             await fetchData();
@@ -887,7 +1000,14 @@ export default function PurchasePlanning() {
                                                                         type="number"
                                                                         min="0"
                                                                         value={state.orderQuantity || ''}
-                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, { orderQuantity: e.target.value })}
+                                                                        onChange={(e) => updateIndividualState(line.purchaseRequestLineId, {
+                                                                            orderQuantity: e.target.value,
+                                                                            cartStatus: '',
+                                                                            cartMessage: '',
+                                                                            cartAllocatedQty: 0,
+                                                                            cartUnfulfilledQty: 0,
+                                                                            cartAllocations: []
+                                                                        })}
                                                                         className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
                                                                     />
                                                                 </td>
@@ -998,13 +1118,20 @@ export default function PurchasePlanning() {
                                                                 )}
                                                             </td>
                                                             <td className="px-4 py-3 text-center">
-                                                                <input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    value={state.orderQuantity || ''}
-                                                                    onChange={(e) => updateCombinedState(row.itemId, { orderQuantity: e.target.value })}
-                                                                    className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
-                                                                />
+                                                                    <input
+                                                                        type="number"
+                                                                        min="0"
+                                                                        value={state.orderQuantity || ''}
+                                                                        onChange={(e) => updateCombinedState(row.itemId, {
+                                                                            orderQuantity: e.target.value,
+                                                                            cartStatus: '',
+                                                                            cartMessage: '',
+                                                                            cartAllocatedQty: 0,
+                                                                            cartUnfulfilledQty: 0,
+                                                                            cartAllocations: []
+                                                                        })}
+                                                                        className="w-20 text-center bg-slate-50 border border-slate-200 rounded px-1 py-1 font-semibold text-[#556070] focus:border-primary outline-none"
+                                                                    />
                                                             </td>
                                                             <td className="px-4 py-3 text-[#556070] text-sm">
                                                                 <select
@@ -1071,21 +1198,7 @@ export default function PurchasePlanning() {
                                 </div>
                             )}
 
-                            {(tab === 'individual' || tab === 'combined') && unresolvedBlocking.length > 0 && (
-                                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
-                                    <p className="text-sm font-semibold text-amber-800 mb-1">PO generation blocked</p>
-                                    <p className="text-xs text-amber-700">Resolve these lines via BOM/cart validation before generating POs:</p>
-                                    <ul className="mt-2 text-xs text-amber-800 list-disc list-inside">
-                                        {unresolvedBlocking.slice(0, 8).map((line, idx) => (
-                                            <li key={`${line.itemCode}-${idx}`}>
-                                                {line.itemCode || line.itemId} — {!line.resolved && !(line.vendorId && line.rate > 0 && line.matchedSku) ? 'Not resolved or manually completed' : !line.matchedSku ? 'Missing matched SKU' : 'Missing vendor/rate'}
-                                            </li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            )}
-
-                            {tab === 'generated' && (
+                    {tab === 'generated' && (
                                 <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
                                     <div className="px-6 py-4 border-b border-slate-200 bg-[#ECF1FF]/40 text-[#556070] font-semibold">
                                         Generated Purchase Orders
