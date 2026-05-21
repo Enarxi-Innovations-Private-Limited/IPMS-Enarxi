@@ -152,3 +152,4 @@ credentials/
 # ==================== Keep These Folders ====================
 # Create .gitkeep to keep empty folders
 !.gitkeep
+.env
