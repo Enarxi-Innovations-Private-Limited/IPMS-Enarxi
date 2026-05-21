@@ -236,6 +236,35 @@ function verifyMicrosoftState(state) {
     return payload;
 }
 
+async function ensureMaterialRequestIndexes() {
+    try {
+        const collections = await mongoose.connection.db
+            .listCollections({ name: 'materialrequests' }, { nameOnly: true })
+            .toArray();
+
+        if (collections.length === 0) {
+            return;
+        }
+
+        const materialRequests = mongoose.connection.collection('materialrequests');
+        const indexes = await materialRequests.indexes();
+        const hasLegacyMrNumberIndex = indexes.some((index) => index.name === 'mrNumber_1');
+        const hasRequestNumberIndex = indexes.some((index) => index.name === 'requestNumber_1');
+
+        if (hasLegacyMrNumberIndex) {
+            await materialRequests.dropIndex('mrNumber_1');
+            console.log('✅ [Migration] Dropped legacy materialrequests.mrNumber_1 index');
+        }
+
+        if (!hasRequestNumberIndex) {
+            await materialRequests.createIndex({ requestNumber: 1 }, { unique: true, name: 'requestNumber_1' });
+            console.log('✅ [Migration] Created materialrequests.requestNumber_1 index');
+        }
+    } catch (error) {
+        console.error('⚠️ [Migration] Material request index check failed (non-fatal):', error.message);
+    }
+}
+
 async function exchangeMicrosoftCodeForTokens({ code, redirectUri }) {
     const tokenEndpoint = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`;
     const body = new URLSearchParams({
@@ -3394,6 +3423,7 @@ app.post('/api/bom/upload', authMiddleware, upload.single('file'), async (req, r
 const startServer = async () => {
     try {
         await connectDB();
+        await ensureMaterialRequestIndexes();
 
         try {
             const usersCollection = mongoose.connection.collection('users');
