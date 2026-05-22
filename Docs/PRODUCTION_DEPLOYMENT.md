@@ -1,62 +1,135 @@
-# Production Deployment
+# IPMS-Enarxi Production Deployment
 
-## PM2
+This file describes how to deploy changes to the current production VPS.
+
+For the full command reference with use cases, read:
+
+- `PRODUCTION_OPERATIONS.md`
+
+## Current Live Deployment Design
+
+- Process manager: `systemd`
+- Backend service: `ipms-backend`
+- BOM service: `ipms-preview-bom`
+- Web server: `nginx`
+- Live code path: `/home/enarxi-staging/IPMS-Enarxi`
+- Static frontend path: `/var/www/tracker.enarxi.com`
+
+## Deployment Rules
+
+- Frontend changed:
+  - rebuild frontend
+  - copy `client/dist` to `/var/www/tracker.enarxi.com`
+  - no backend restart needed
+
+- Backend changed:
+  - update code
+  - install backend dependencies if needed
+  - restart `ipms-backend`
+
+- BOM changed:
+  - update code
+  - install Python requirements if needed
+  - restart `ipms-preview-bom`
+
+- nginx changed:
+  - run `nginx -t`
+  - reload nginx
+
+## Frontend Deployment
 
 ```bash
-pm2 start ecosystem.config.js
+cd /home/enarxi-staging/IPMS-Enarxi
+git pull
+cd client
+npm install
+npm run build
+rm -rf /var/www/tracker.enarxi.com/*
+cp -r /home/enarxi-staging/IPMS-Enarxi/client/dist/* /var/www/tracker.enarxi.com/
+```
+
+Use case:
+Deploy React frontend changes to the public site.
+
+## Backend Deployment
+
+```bash
+cd /home/enarxi-staging/IPMS-Enarxi
+git pull
+cd server
+npm install
+systemctl restart ipms-backend
+```
+
+Use case:
+Deploy Node backend changes.
+
+## BOM Deployment
+
+```bash
+cd /home/enarxi-staging/IPMS-Enarxi
+git pull
+cd server/BOM
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+systemctl restart ipms-preview-bom
+```
+
+Use case:
+Deploy Python BOM service changes.
+
+## Full Deployment
+
+```bash
+cd /home/enarxi-staging/IPMS-Enarxi
+git pull
+cd client
+npm install
+npm run build
+rm -rf /var/www/tracker.enarxi.com/*
+cp -r /home/enarxi-staging/IPMS-Enarxi/client/dist/* /var/www/tracker.enarxi.com/
+cd /home/enarxi-staging/IPMS-Enarxi/server
+npm install
+cd /home/enarxi-staging/IPMS-Enarxi/server/BOM
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+systemctl restart ipms-backend ipms-preview-bom
+```
+
+Use case:
+Deploy combined frontend, backend, and BOM updates.
+
+## Post-Deploy Verification
+
+```bash
+systemctl status ipms-backend ipms-preview-bom
+curl -I https://tracker.enarxi.com
+curl -I https://tracker.enarxi.com/api/
+ss -ltnp | grep 127.0.0.1:5000
+ss -ltnp | grep 127.0.0.1:8100
+```
+
+Use case:
+Confirm services are up, nginx is serving traffic, and the internal listeners are healthy.
+
+## nginx Deploy Verification
+
+```bash
+nginx -t
+systemctl reload nginx
+```
+
+Use case:
+Safely apply nginx config changes.
+
+## Do Not Use
+
+```bash
 pm2 restart ipms-backend
 pm2 restart ipms-bom
-pm2 logs ipms-backend
-pm2 logs ipms-bom
-pm2 save
-pm2 startup
 ```
 
-## NGINX
-
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    root /var/www/IPMS-Enarxi/client/dist;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    location /api/ {
-        proxy_pass http://127.0.0.1:5000/api/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    client_max_body_size 50M;
-}
-```
-
-## Deployment Steps
-
-1. Back up current NGINX config, PM2 process list, and deployed app directory.
-2. Pull the latest repo code on the VPS.
-3. Copy `.env.example` to `.env` and fill production values.
-4. Install server dependencies: `npm install --omit=dev` in the project root.
-5. Install client dependencies and build: `cd client && npm install && npm run build`.
-6. Create Python virtual environment under `server/BOM/venv`.
-7. Install BOM requirements and Playwright browser dependencies.
-8. Start PM2 services with `ecosystem.config.js`.
-9. Verify:
-   - `curl http://127.0.0.1:5000/api/test`
-   - `curl http://127.0.0.1:8000/health`
-10. Point NGINX to `client/dist` and proxy `/api`, then reload NGINX.
-
-## Rollback
-
-1. Restore previous NGINX config and reload.
-2. Restart the previous PM2 app.
-3. Stop `ipms-backend` and `ipms-bom` if needed.
-4. Keep the current deployment directory until rollback is confirmed stable.
+Use case:
+Do not use these for live production. Production is no longer managed by PM2.

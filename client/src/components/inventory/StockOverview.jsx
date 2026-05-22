@@ -15,6 +15,12 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
     const [historyLoading, setHistoryLoading] = useState(false);
     const [locations, setLocations] = useState([]);
 
+    // Filter states
+    const [classifications, setClassifications] = useState([]);
+    const [selectedClass, setSelectedClass] = useState('');
+    const [selectedLocation, setSelectedLocation] = useState('');
+    const [stockStatus, setStockStatus] = useState('all');
+
     useEffect(() => {
         if (selectedItem) {
             fetchItemHistory(selectedItem.itemId || selectedItem._id || selectedItem.id);
@@ -57,15 +63,41 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
             }
         };
 
+        const fetchClassifications = async () => {
+            try {
+                const res = await inventoryService.getClassifications();
+                setClassifications(res.data || []);
+            } catch (err) {
+                console.error('Failed to fetch classifications:', err);
+            }
+        };
+
         fetchStock();
         fetchLocations();
+        fetchClassifications();
     }, []);
 
-    const filteredStock = stock.filter(item =>
-        item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.itemCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.locationId?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filteredStock = stock.filter(item => {
+        const matchesSearch = !searchTerm ||
+            item.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.itemCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.locationId?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+
+        const matchesClass = !selectedClass || 
+            String(item.classificationId?._id || item.classificationId) === selectedClass ||
+            String(item.classification?._id || item.classificationId) === selectedClass;
+
+        const matchesLocation = !selectedLocation || 
+            String(item.locationId?._id || item.locationId) === selectedLocation;
+
+        const available = item.availableQuantity ?? ((item.quantityOnHand ?? 0) - (item.reservedQuantity ?? 0));
+        const matchesStatus = stockStatus === 'all' ||
+            (stockStatus === 'low' && (item.quantityOnHand ?? 0) < 5) ||
+            (stockStatus === 'out' && available <= 0) ||
+            (stockStatus === 'in' && available > 0);
+
+        return matchesSearch && matchesClass && matchesLocation && matchesStatus;
+    });
 
     const totalItems = stock.length;
     const lowStockCount = stock.filter(item => item.quantityOnHand < 5).length; // Example threshold
@@ -150,7 +182,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
 
                     {/* Table Section */}
                     <div className="bg-white border border-slate-200 shadow-sm rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="px-6 py-5 border-b border-border-dark bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="px-6 py-5 border-b border-slate-200 bg-slate-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
                                 <div className="size-10 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-500 border border-amber-500/20">
                                     <span className="material-symbols-outlined">format_list_bulleted</span>
@@ -165,10 +197,57 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                 <input
                                     type="text"
                                     placeholder="Search by ID, name or location..."
-                                    className="w-full bg-background-dark/50 border border-border-dark rounded-xl py-3 pl-12 pr-4 text-[#556070] placeholder-text-secondary/30 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-12 pr-4 text-[#556070] placeholder-text-secondary/30 focus:ring-2 focus:ring-amber-500 focus:border-transparent outline-none transition-all shadow-sm"
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
+                            </div>
+                        </div>
+
+                        {/* Advanced Filters Row */}
+                        <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row items-center gap-4">
+                            <div className="flex-1 w-full">
+                                <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Classification</label>
+                                <select
+                                    value={selectedClass}
+                                    onChange={(e) => setSelectedClass(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-[#556070] outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm shadow-sm"
+                                >
+                                    <option value="">All Classifications</option>
+                                    {classifications.map((cls) => (
+                                        <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                                            {cls.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex-1 w-full">
+                                <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Location / Warehouse</label>
+                                <select
+                                    value={selectedLocation}
+                                    onChange={(e) => setSelectedLocation(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-[#556070] outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm shadow-sm"
+                                >
+                                    <option value="">All Locations</option>
+                                    {locations.map((loc) => (
+                                        <option key={loc._id || loc.id} value={loc._id || loc.id}>
+                                            {loc.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="w-full sm:w-56">
+                                <label className="block text-[9px] font-bold text-text-secondary uppercase mb-1 tracking-wider">Stock Availability</label>
+                                <select
+                                    value={stockStatus}
+                                    onChange={(e) => setStockStatus(e.target.value)}
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 text-[#556070] outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm shadow-sm"
+                                >
+                                    <option value="all">All Levels</option>
+                                    <option value="low">Low Stock (&lt; 5)</option>
+                                    <option value="out">Out of Stock / Shortage</option>
+                                    <option value="in">In Stock (Available)</option>
+                                </select>
                             </div>
                         </div>
 
@@ -216,7 +295,7 @@ export default function StockOverview({ currentPage: propCurrentPage }) {
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <span className="text-[10px] font-black uppercase tracking-widest text-text-secondary bg-surface-dark px-2 py-1 rounded border border-border-dark/50 group-hover:border-amber-500/20 group-hover:text-[#556070] transition-all">
-                                                            {item.classificationId?.name || 'GENERIC'}
+                                                            {item.classificationId?.name || item.classification?.name || 'GENERIC'}
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4 text-text-secondary text-sm font-medium">{item.package || '-'}</td>

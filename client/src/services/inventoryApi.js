@@ -25,7 +25,10 @@ inventoryApi.interceptors.request.use((config) => {
 inventoryApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Inventory API Error:', error.response?.data?.message || error.message);
+    const suppressNotFoundLog = error.config?.suppressNotFoundLog === true && error.response?.status === 404;
+    if (!suppressNotFoundLog) {
+      console.error('Inventory API Error:', error.response?.data?.message || error.message);
+    }
     if (error.response?.status === 401) {
       clearAuth();
       window.location.replace('/login');

@@ -319,6 +319,13 @@ export default function MasterDataManagement() {
     const [editingItem, setEditingItem] = useState(null);
     const [submitting, setSubmitting] = useState(false);
 
+    // Filter states
+    const [itemSearch, setItemSearch] = useState('');
+    const [itemClassFilter, setItemClassFilter] = useState('');
+    const [itemStatusFilter, setItemStatusFilter] = useState('all');
+    const [classSearch, setClassSearch] = useState('');
+    const [locationSearch, setLocationSearch] = useState('');
+
     const [itemForm, setItemForm] = useState({
         name: '',
         classificationId: '',
@@ -561,6 +568,39 @@ export default function MasterDataManagement() {
         </div>
     );
 
+    const filteredItems = items.filter((item) => {
+        const matchesSearch =
+            !itemSearch ||
+            item.name?.toLowerCase().includes(itemSearch.toLowerCase()) ||
+            item.itemCode?.toLowerCase().includes(itemSearch.toLowerCase());
+
+        const matchesClass = !itemClassFilter || String(item.classification?._id || item.classificationId) === itemClassFilter;
+
+        const matchesStatus =
+            itemStatusFilter === 'all' ||
+            (itemStatusFilter === 'active' && item.isActive !== false) ||
+            (itemStatusFilter === 'inactive' && item.isActive === false);
+
+        return matchesSearch && matchesClass && matchesStatus;
+    });
+
+    const filteredClassifications = classifications.filter((cls) => {
+        const matchesSearch =
+            !classSearch ||
+            cls.name?.toLowerCase().includes(classSearch.toLowerCase()) ||
+            cls.prefix?.toLowerCase().includes(classSearch.toLowerCase());
+        return matchesSearch;
+    });
+
+    const filteredLocations = locations.filter((loc) => {
+        const matchesSearch =
+            !locationSearch ||
+            loc.name?.toLowerCase().includes(locationSearch.toLowerCase()) ||
+            loc.locationCode?.toLowerCase().includes(locationSearch.toLowerCase()) ||
+            loc.label?.toLowerCase().includes(locationSearch.toLowerCase());
+        return matchesSearch;
+    });
+
     return (
         <Layout currentPage="purchase-items">
             <div className="p-4 lg:px-12 pb-24">
@@ -608,100 +648,191 @@ export default function MasterDataManagement() {
                                 <div className="animate-spin size-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
                             </div>
                         ) : activeTab === 'items' ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-background-dark/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Item</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Class</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Package</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">UOM</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Vendor SKUs</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Status</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border-dark text-sm">
-                                        {items.map((item) => (
-                                            <tr key={item._id || item.id} className="hover:bg-primary/5">
-                                                <td className="px-6 py-4">
-                                                    <div className="text-white font-medium">{item.name}</div>
-                                                    <div className="text-primary font-mono text-xs">{item.itemCode}</div>
-                                                </td>
-                                                <td className="px-6 py-4 text-text-secondary">{item.classification?.name}</td>
-                                                <td className="px-6 py-4 text-text-secondary">{item.package || 'N/A'}</td>
-                                                <td className="px-6 py-4 text-text-secondary">{item.uom}</td>
-                                                <td className="px-6 py-4 text-text-secondary max-w-sm">{formatSkuMappings(item)}</td>
-                                                <td className="px-6 py-4 text-text-secondary">
-                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
-                                                        {item.isActive ? 'Active' : 'Inactive'}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openEditModal(item)}
-                                                        className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                </td>
+                            <div>
+                                {/* Advanced Items Filters */}
+                                <div className="p-4 border-b border-border-dark bg-background-dark/30 flex flex-col sm:flex-row items-center gap-4">
+                                    <div className="relative flex-1 w-full">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name or code..."
+                                            value={itemSearch}
+                                            onChange={(e) => setItemSearch(e.target.value)}
+                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                        />
+                                    </div>
+                                    <div className="w-full sm:w-48">
+                                        <select
+                                            value={itemClassFilter}
+                                            onChange={(e) => setItemClassFilter(e.target.value)}
+                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 px-3 text-white outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
+                                        >
+                                            <option value="">All Classifications</option>
+                                            {classifications.map((cls) => (
+                                                <option key={cls._id || cls.id} value={cls._id || cls.id}>
+                                                    {cls.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="w-full sm:w-40">
+                                        <select
+                                            value={itemStatusFilter}
+                                            onChange={(e) => setItemStatusFilter(e.target.value)}
+                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 px-3 text-white outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
+                                        >
+                                            <option value="all">All Status</option>
+                                            <option value="active">Active</option>
+                                            <option value="inactive">Inactive</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-background-dark/50">
+                                            <tr>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Item</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Class</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Package</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">UOM</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Vendor SKUs</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Status</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Action</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-border-dark text-sm">
+                                            {filteredItems.map((item) => (
+                                                <tr key={item._id || item.id} className="hover:bg-primary/5">
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-white font-medium">{item.name}</div>
+                                                        <div className="text-primary font-mono text-xs">{item.itemCode}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-text-secondary">{item.classification?.name}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">{item.package || 'N/A'}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">{item.uom}</td>
+                                                    <td className="px-6 py-4 text-text-secondary max-w-sm">{formatSkuMappings(item)}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                            {item.isActive ? 'Active' : 'Inactive'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditModal(item)}
+                                                            className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {filteredItems.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="7" className="px-6 py-12 text-center text-text-secondary italic">
+                                                        No items match the filters.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         ) : activeTab === 'classifications' ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-background-dark/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Prefix</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Next Seq</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Serial Tracking</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border-dark text-sm">
-                                        {classifications.map((cls) => (
-                                            <tr key={cls._id} className="hover:bg-primary/5">
-                                                <td className="px-6 py-4 text-white font-medium">{cls.name}</td>
-                                                <td className="px-6 py-4 text-primary font-bold">{cls.prefix}</td>
-                                                <td className="px-6 py-4 text-text-secondary">{cls.nextSequenceNumber}</td>
-                                                <td className="px-6 py-4 text-text-secondary">
-                                                    <span className={`material-symbols-outlined text-sm ${cls.tracksSerial ? 'text-emerald-400' : 'text-slate-600'}`}>
-                                                        {cls.tracksSerial ? 'check_circle' : 'cancel'}
-                                                    </span>
-                                                </td>
+                            <div>
+                                {/* Classifications Filter */}
+                                <div className="p-4 border-b border-border-dark bg-background-dark/30 flex items-center gap-4">
+                                    <div className="relative flex-1 max-w-md">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name or prefix..."
+                                            value={classSearch}
+                                            onChange={(e) => setClassSearch(e.target.value)}
+                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-background-dark/50">
+                                            <tr>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Prefix</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Next Seq</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Serial Tracking</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-border-dark text-sm">
+                                            {filteredClassifications.map((cls) => (
+                                                <tr key={cls._id} className="hover:bg-primary/5">
+                                                    <td className="px-6 py-4 text-white font-medium">{cls.name}</td>
+                                                    <td className="px-6 py-4 text-primary font-bold">{cls.prefix}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">{cls.nextSequenceNumber}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">
+                                                        <span className={`material-symbols-outlined text-sm ${cls.tracksSerial ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                                            {cls.tracksSerial ? 'check_circle' : 'cancel'}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {filteredClassifications.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="4" className="px-6 py-12 text-center text-text-secondary italic">
+                                                        No classifications match the filter.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                    <thead className="bg-background-dark/50">
-                                        <tr>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Location Code</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Label</th>
-                                            <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Is Default</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-border-dark text-sm">
-                                        {locations.map((loc) => (
-                                            <tr key={loc._id} className="hover:bg-primary/5">
-                                                <td className="px-6 py-4 text-primary font-bold">{loc.locationCode}</td>
-                                                <td className="px-6 py-4 text-white font-medium">{loc.name}</td>
-                                                <td className="px-6 py-4 text-text-secondary">{loc.label || 'N/A'}</td>
-                                                <td className="px-6 py-4 text-text-secondary">
-                                                    {loc.isDefault && <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">Primary</span>}
-                                                </td>
+                            <div>
+                                {/* Locations Filter */}
+                                <div className="p-4 border-b border-border-dark bg-background-dark/30 flex items-center gap-4">
+                                    <div className="relative flex-1 max-w-md">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name, code or label..."
+                                            value={locationSearch}
+                                            onChange={(e) => setLocationSearch(e.target.value)}
+                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-background-dark/50">
+                                            <tr>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Location Code</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Label</th>
+                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Is Default</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-border-dark text-sm">
+                                            {filteredLocations.map((loc) => (
+                                                <tr key={loc._id} className="hover:bg-primary/5">
+                                                    <td className="px-6 py-4 text-primary font-bold">{loc.locationCode}</td>
+                                                    <td className="px-6 py-4 text-white font-medium">{loc.name}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">{loc.label || 'N/A'}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">
+                                                        {loc.isDefault && <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">Primary</span>}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                            {filteredLocations.length === 0 && (
+                                                <tr>
+                                                    <td colSpan="4" className="px-6 py-12 text-center text-text-secondary italic">
+                                                        No locations match the filter.
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         )}
                     </div>

@@ -30,6 +30,7 @@ function formatMappedSkus(mappings = []) {
 
 const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const AUTO_QUOTE_STORAGE_KEY = 'purchase-planning-auto-quote-job';
+const AUTO_QUOTE_STORAGE_TTL_MS = 6 * 60 * 60 * 1000;
 
 function normalizeVendorDisplayName(value = '') {
     const normalized = String(value || '').trim().toUpperCase();
@@ -84,7 +85,10 @@ export default function PurchasePlanning() {
 
     const persistAutoQuoteJob = (payload) => {
         try {
-            window.localStorage.setItem(AUTO_QUOTE_STORAGE_KEY, JSON.stringify(payload));
+            window.localStorage.setItem(AUTO_QUOTE_STORAGE_KEY, JSON.stringify({
+                savedAt: Date.now(),
+                ...payload
+            }));
         } catch (_) {
             // Ignore localStorage failures in private / restricted contexts.
         }
@@ -101,7 +105,14 @@ export default function PurchasePlanning() {
     const readPersistedAutoQuoteJob = () => {
         try {
             const raw = window.localStorage.getItem(AUTO_QUOTE_STORAGE_KEY);
-            return raw ? JSON.parse(raw) : null;
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const savedAt = toNumber(parsed?.savedAt);
+            if (!savedAt || (Date.now() - savedAt) > AUTO_QUOTE_STORAGE_TTL_MS) {
+                clearPersistedAutoQuoteJob();
+                return null;
+            }
+            return parsed;
         } catch (_) {
             return null;
         }
@@ -659,9 +670,11 @@ export default function PurchasePlanning() {
                 if (keepCompletedState) {
                     persistAutoQuoteJob({
                         jobId,
+                        status: 'COMPLETED',
                         tab: mode,
                         batchId: mode === 'individual' ? selectedBatchId : null,
-                        lineIds: selectedLineIds
+                        lineIds: selectedLineIds,
+                        result: finalPayload
                     });
                 }
                 setAnalyzing(false);
@@ -748,6 +761,42 @@ export default function PurchasePlanning() {
 
         const applyRestore = async () => {
             try {
+                if (saved.status === 'COMPLETED' && saved.result) {
+                    setAnalysisProgress(100);
+                    setAnalysisProgressStatus('Restored previous BOM analysis results.');
+
+                    if (saved.tab === 'individual') {
+                        if (!selectedBatch || selectedBatch.id !== saved.batchId) return;
+                        setLineStates((prev) => {
+                            const next = { ...prev };
+                            saved.lineIds.forEach((lineId) => {
+                                next[lineId] = {
+                                    ...(next[lineId] || {}),
+                                    selected: true
+                                };
+                            });
+                            return next;
+                        });
+                    } else {
+                        setCombinedStates((prev) => {
+                            const next = { ...prev };
+                            (combinedRows || []).forEach((row) => {
+                                const matches = (row.requestLines || []).some((entry) => saved.lineIds.includes(entry.purchaseRequestLineId));
+                                if (matches) {
+                                    next[row.itemId] = {
+                                        ...(next[row.itemId] || {}),
+                                        selected: true
+                                    };
+                                }
+                            });
+                            return next;
+                        });
+                    }
+
+                    applyAutoQuoteResults(saved.tab, saved.result?.results || [], saved.result?.summary || null, saved.lineIds);
+                    return;
+                }
+
                 const statusResponse = await inventoryService.getAutoQuotePurchasePlanningStatus(saved.jobId);
                 const job = statusResponse.data || {};
                 setAnalysisProgress(toNumber(job.progress));
@@ -785,6 +834,11 @@ export default function PurchasePlanning() {
 
                 if (job.status === 'COMPLETED') {
                     applyAutoQuoteResults(saved.tab, job.result?.results || [], job.result?.summary || null, saved.lineIds);
+                    persistAutoQuoteJob({
+                        ...saved,
+                        status: 'COMPLETED',
+                        result: job.result || null
+                    });
                 } else if (job.status === 'RUNNING') {
                     await monitorAutoQuoteJob(saved.jobId, saved.tab, saved.lineIds, { keepCompletedState: true });
                 } else if (job.status === 'FAILED') {

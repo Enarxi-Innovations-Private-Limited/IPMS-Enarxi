@@ -1,85 +1,39 @@
-# IPMS-Enarxi Deployment Guide
+# IPMS-Enarxi Production Docs
 
-## Frontend Deployment (What Actually Works)
+This folder contains the current production-facing documentation for the IPMS-Enarxi VPS.
 
-The tracker frontend is a **static React build** served by **Nginx**.
+## Read This First
 
-Nginx for `tracker.enarxi.com` serves files from:
+- `PRODUCTION_OPERATIONS.md`
+  Use this for day-to-day VPS work.
+  It contains the actual live service model, exact paths, restart commands, deploy commands, log commands, security commands, and what each command is for.
 
-```
-/var/www/tracker.enarxi.com
-```
+- `PRODUCTION_DEPLOYMENT.md`
+  Use this when deploying frontend, backend, or BOM changes to production.
 
-Any frontend changes **must** be deployed to this directory.
-Updating any other path will have **no effect**.
+- `Production.md`
+  Use this as the high-level production architecture summary.
 
----
+- `IPMS_VPS_Security_Hardening_Report_2026-05-22.pdf`
+  Formal record of the VPS hardening work completed on May 22, 2026.
 
-## Correct Frontend Redeployment Steps
+## Important Current State
 
-After pulling new frontend code:
+- Production is no longer managed by PM2.
+- Live application services are managed by `systemd`.
+- Active services:
+  - `ipms-backend`
+  - `ipms-preview-bom`
+- Public web is served by `nginx`.
+- Frontend static files are served from:
+  - `/var/www/tracker.enarxi.com`
+- Live app code runs from:
+  - `/home/enarxi-staging/IPMS-Enarxi`
 
-```bash
-cd client
-npm install        # only if dependencies changed
-npm run build
-```
+## Do Not Use
 
-This generates the production build in:
+- `pm2 restart ipms-backend`
+- `pm2 restart ipms-bom`
+- old docs that assume `/root/IPMS-Enarxi` is the active runtime path
 
-```
-client/dist/
-```
-
-### Deploy the build (critical step)
-
-```bash
-rm -rf /var/www/tracker.enarxi.com/*
-cp -r /root/IPMS-Enarxi/client/dist/* /var/www/tracker.enarxi.com/
-```
-
-This:
-
-* Removes the old UI
-* Replaces it with the new build
-* Immediately updates the site
-
-No PM2 restart required.
-
----
-
-## Why This Is Required
-
-* Nginx serves **only** what exists in `/var/www/tracker.enarxi.com`
-* `npm run build` does **not** update production automatically
-* PM2 manages **backend only**, not static files
-* DNS routes `tracker.enarxi.com` to this droplet and this directory
-
----
-
-## Backend Redeployment (for reference)
-
-Only required when backend code changes:
-
-```bash
-pm2 restart ipms-backend
-```
-
-If environment variables changed:
-
-```bash
-pm2 restart ipms-backend --update-env
-```
-
----
-
-## Deployment Rule (memorize this)
-
-> **Frontend changed → rebuild + copy `dist` → Nginx root**
-> **Backend changed → PM2 restart**
-> **Domain decides which folder matters**
-
----
-
-This is the exact, minimal, correct method.
-Nothing else is needed.
+Use `systemctl` commands from `PRODUCTION_OPERATIONS.md` instead.
