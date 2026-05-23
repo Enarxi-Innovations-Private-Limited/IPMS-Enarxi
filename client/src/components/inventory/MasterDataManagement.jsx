@@ -20,6 +20,15 @@ function formatSkuMappings(item) {
     return values.length ? values.join(' | ') : '-';
 }
 
+function getItemClassificationId(item) {
+    if (!item) return '';
+    return String(item.classification?._id || item.classificationId?._id || item.classificationId || '');
+}
+
+function getItemClassificationName(item) {
+    return item?.classification?.name || item?.classificationId?.name || '-';
+}
+
 function downloadWorkbook(workbook, filename) {
     const output = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -464,7 +473,7 @@ export default function MasterDataManagement() {
             setEditItemForm({
                 itemCode: item.itemCode || '',
                 name: item.name || '',
-                classificationId: item.classification?._id || item.classificationId || '',
+                classificationId: getItemClassificationId(item),
                 uom: item.uom || 'Nos',
                 package: item.package || '',
                 description: item.description || '',
@@ -574,7 +583,7 @@ export default function MasterDataManagement() {
             item.name?.toLowerCase().includes(itemSearch.toLowerCase()) ||
             item.itemCode?.toLowerCase().includes(itemSearch.toLowerCase());
 
-        const matchesClass = !itemClassFilter || String(item.classification?._id || item.classificationId) === itemClassFilter;
+        const matchesClass = !itemClassFilter || getItemClassificationId(item) === itemClassFilter;
 
         const matchesStatus =
             itemStatusFilter === 'all' ||
@@ -707,7 +716,7 @@ export default function MasterDataManagement() {
                                                         <div className="text-white font-medium">{item.name}</div>
                                                         <div className="text-primary font-mono text-xs">{item.itemCode}</div>
                                                     </td>
-                                                    <td className="px-6 py-4 text-text-secondary">{item.classification?.name}</td>
+                                                    <td className="px-6 py-4 text-text-secondary">{getItemClassificationName(item)}</td>
                                                     <td className="px-6 py-4 text-text-secondary">{item.package || 'N/A'}</td>
                                                     <td className="px-6 py-4 text-text-secondary">{item.uom}</td>
                                                     <td className="px-6 py-4 text-text-secondary max-w-sm">{formatSkuMappings(item)}</td>

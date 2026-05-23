@@ -1406,7 +1406,31 @@ router.put('/items/:id', async (req, res) => {
             if (description !== undefined) item.description = description;
             if (isActive !== undefined) item.isActive = isActive;
             if (itemCode !== undefined) item.itemCode = itemCode;
-            if (classificationId !== undefined) item.classificationId = classificationId;
+            if (classificationId !== undefined) {
+                let resolvedClassificationId = classificationId;
+
+                if (classificationId && typeof classificationId === 'object') {
+                    resolvedClassificationId = classificationId._id || classificationId.id || '';
+                }
+
+                if (resolvedClassificationId) {
+                    let classification = null;
+
+                    if (mongoose.Types.ObjectId.isValid(resolvedClassificationId)) {
+                        classification = await Classification.findById(resolvedClassificationId).session(session);
+                    }
+
+                    if (!classification && typeof resolvedClassificationId === 'string') {
+                        classification = await Classification.findOne({ name: resolvedClassificationId }).session(session);
+                    }
+
+                    if (!classification) {
+                        throw new Error('Classification not found');
+                    }
+
+                    item.classificationId = classification._id;
+                }
+            }
             await item.save({ session });
             await logAudit('Item', item._id, 'UPDATE', beforeObj, item.toObject(), req);
             await logInvActivity('INV_MASTER_UPDATE', `Item ${item.itemCode} updated`, req.user._id, req.user.name, item._id, item.name);
@@ -2997,9 +3021,12 @@ router.get('/inventory', async (req, res) => {
         const balances = await StockBalance.find();
         
         const data = items.map(item => {
+            const obj = item.toObject();
             const itemBalances = balances.filter(b => b.itemId && b.itemId.toString() === item._id.toString());
             return {
-                ...item.toObject(),
+                ...obj,
+                id: obj._id,
+                classification: obj.classificationId,
                 stockBalances: itemBalances
             };
         });
