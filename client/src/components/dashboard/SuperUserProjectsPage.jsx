@@ -15,6 +15,11 @@ export default function SuperUserProjectsPage() {
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterDepartment, setFilterDepartment] = useState('ALL');
 
+    const isProjectDelayed = (project) => {
+        if (!project || project.status === 'COMPLETED' || !project.deadline) return false;
+        return new Date(project.deadline) < new Date();
+    };
+
     useEffect(() => {
         const params = new URLSearchParams(location.search);
         const filterParam = params.get('filter');
@@ -399,7 +404,8 @@ export default function SuperUserProjectsPage() {
         const matchesSearch = searchQuery === '' ||
             p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesStatus = filterStatus === 'ALL' || p.status === filterStatus;
+        const matchesStatus = filterStatus === 'ALL' ||
+            (filterStatus === 'DELAYED' ? isProjectDelayed(p) : p.status === filterStatus);
         const matchesDepartment = filterDepartment === 'ALL' || p.department === filterDepartment;
         return matchesSearch && matchesStatus && matchesDepartment;
     });
@@ -485,6 +491,7 @@ export default function SuperUserProjectsPage() {
                             <option value="ALL">All Status</option>
                             <option value="PLANNING">Planning</option>
                             <option value="ACTIVE">Active</option>
+                            <option value="DELAYED">Delayed</option>
                             <option value="ON_HOLD">On Hold</option>
                             <option value="WAITING_APPROVAL">⏳ Awaiting Approval</option>
                             <option value="COMPLETED">Completed</option>
@@ -513,14 +520,15 @@ export default function SuperUserProjectsPage() {
                             {filteredProjects.map((project) => {
                                 const stats = getTaskStats(project);
                                 const team = getTeamMembers(project);
+                                const isDelayed = isProjectDelayed(project);
                                 return (
                                     <div key={project.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden hover:border-primary/30 transition-all group">
                                         {/* Header */}
                                         <div className="p-5 border-b border-border-dark">
                                             <div className="flex items-start justify-between mb-1">
                                                 <h3 className="text-[#556070] font-semibold text-lg line-clamp-1">{project.name}</h3>
-                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getStatusColor(project.status)}`}>
-                                                    {project.status.replace('_', ' ')}
+                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${isDelayed ? 'bg-red-500/20 text-red-400' : getStatusColor(project.status)}`}>
+                                                    {isDelayed ? 'DELAYED' : project.status.replace('_', ' ')}
                                                 </span>
                                             </div>
                                             {project.projectCode && (

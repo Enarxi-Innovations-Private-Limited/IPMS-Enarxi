@@ -1,14 +1,31 @@
-# Session: Master Data Management Fix (2026-05-22)
+# Session Log
+_Max 60 lines. Archive completed sessions to SESSION_ARCHIVE.md_
 
-## Objective
-Identify and resolve the syntax warning/error in the frontend client application (`MasterDataManagement.jsx`) preventing clean development hot-reloading and static compilation.
+## Last Updated
+2026-06-03T17:36:00.1860503+05:30
 
-## Completed Tasks
-1. **Fixed JSX Syntax Error in MasterDataManagement.jsx**:
-   - Located the typo on line 837 where double closing curly braces `}}` were used instead of `)}`.
-   - Replaced `}}` with `)}` at the end of the location list rendering block to properly close the main ternary evaluation.
-2. **Verified Client Build**:
-   - Ran `npm run build` inside the `/client` directory and verified successful compile and chunk production without any compilation warnings or failures.
+## Goal
+Fix the super-admin delayed-project navigation so the dashboard card opens a correctly filtered projects list.
+
+## Status
+DONE
+
+## Done This Session
+- Traced the super-admin dashboard delayed card route from `/super` to `/super/projects?filter=DELAYED`.
+- Confirmed the projects page was reading the URL filter but only matching literal `project.status`, which excluded overdue active/planning projects.
+- Updated [SuperUserProjectsPage.jsx](D:/users/hameed/Desktop/Enarxi/Project%20Management/client/src/components/dashboard/SuperUserProjectsPage.jsx) to treat `DELAYED` as an overdue-project filter based on `deadline < now` and `status !== COMPLETED`.
+- Added `Delayed` to the status dropdown so the UI reflects the same filter state as the dashboard deep link.
+- Updated project cards to show a delayed badge when a project is overdue.
+- Verified the client build with `pnpm --filter client build`.
+- Started the local client and server with PNPM and confirmed listeners on `127.0.0.1:5173` and `0.0.0.0:5000`.
+
+## Decisions Made
+- Kept the fix frontend-scoped because the backend summary logic for delayed projects was already correct.
+- Reused the existing dashboard overdue rule: overdue deadline and not completed.
+
+## Blockers
+- Local browser verification reached the login page at `http://127.0.0.1:5173/login`, so authenticated route behavior still needs a logged-in session to be visually confirmed.
+- `QUARANTINE.md` and `PROGRESS.md` do not exist yet in the project root.
 
 ## Next Step
-Instruct the user on how they can run both the frontend and backend servers cleanly and test the updated Master Data Management interface.
+Log in locally and click the dashboard Delayed card to confirm the filtered projects list now shows overdue projects instead of an empty state.
