@@ -10,8 +10,14 @@ export default function StockUploadsPage() {
     const user = getCurrentUser();
     const { error: notifyError, success: notifySuccess } = useNotifier();
     
-    const [file, setFile] = useState(null);
-    const [previewData, setPreviewData] = useState([]);
+    const [file, setFile] = useState(() => {
+        const storedName = sessionStorage.getItem('stock_upload_fileName');
+        return storedName ? { name: storedName } : null;
+    });
+    const [previewData, setPreviewData] = useState(() => {
+        const storedData = sessionStorage.getItem('stock_upload_previewData');
+        return storedData ? JSON.parse(storedData) : [];
+    });
     const [loading, setLoading] = useState(false);
     const [items, setItems] = useState([]);
     const [locations, setLocations] = useState([]);
@@ -29,6 +35,37 @@ export default function StockUploadsPage() {
     useEffect(() => {
         fetchMasterData();
     }, []);
+
+    useEffect(() => {
+        if (previewData.length > 0) {
+            sessionStorage.setItem('stock_upload_previewData', JSON.stringify(previewData));
+        } else {
+            sessionStorage.removeItem('stock_upload_previewData');
+        }
+    }, [previewData]);
+
+    useEffect(() => {
+        if (file) {
+            sessionStorage.setItem('stock_upload_fileName', file.name);
+        } else {
+            sessionStorage.removeItem('stock_upload_fileName');
+        }
+    }, [file]);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e) => {
+            if (previewData.length > 0) {
+                const message = 'You have unsaved stock adjustment data. Are you sure you want to leave?';
+                e.returnValue = message;
+                return message;
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, [previewData]);
 
     const fetchMasterData = async () => {
         try {
@@ -227,13 +264,25 @@ export default function StockUploadsPage() {
                                 </div>
 
                                 {previewData.length > 0 && (
-                                    <button 
-                                        onClick={handleUpload}
-                                        disabled={loading}
-                                        className="w-full mt-6 bg-primary py-4 rounded-xl text-white font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
-                                    >
-                                        {loading ? 'Processing...' : 'Apply Stock Adjustment'}
-                                    </button>
+                                    <div className="space-y-3 mt-6">
+                                        <button 
+                                            onClick={handleUpload}
+                                            disabled={loading}
+                                            className="w-full bg-primary py-4 rounded-xl text-white font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50"
+                                        >
+                                            {loading ? 'Processing...' : 'Apply Stock Adjustment'}
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                setFile(null);
+                                                setPreviewData([]);
+                                            }}
+                                            disabled={loading}
+                                            className="w-full bg-slate-100 hover:bg-slate-200 py-3 rounded-xl text-slate-700 font-bold transition-all disabled:opacity-50"
+                                        >
+                                            Clear Preview
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </div>

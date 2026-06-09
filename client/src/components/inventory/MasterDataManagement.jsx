@@ -325,6 +325,8 @@ export default function MasterDataManagement() {
     const [showModal, setShowModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState(null);
     const [editingItem, setEditingItem] = useState(null);
     const [submitting, setSubmitting] = useState(false);
 
@@ -336,6 +338,7 @@ export default function MasterDataManagement() {
     const [locationSearch, setLocationSearch] = useState('');
 
     const [itemForm, setItemForm] = useState({
+        itemCode: '',
         name: '',
         classificationId: '',
         uom: 'Nos',
@@ -388,6 +391,7 @@ export default function MasterDataManagement() {
 
     const resetItemForm = () => {
         setItemForm({
+            itemCode: '',
             name: '',
             classificationId: '',
             uom: 'Nos',
@@ -511,6 +515,28 @@ export default function MasterDataManagement() {
             notifySuccess('Item and SKU mappings updated successfully.');
         } catch (err) {
             notifyError(err.response?.data?.message || 'Failed to update item');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const initiateDeleteItem = (item) => {
+        setItemToDelete(item);
+        setShowDeleteModal(true);
+    };
+
+    const handleDeleteItem = async () => {
+        if (!itemToDelete) return;
+        try {
+            setSubmitting(true);
+            const itemId = itemToDelete._id || itemToDelete.id;
+            await inventoryService.deleteItem(itemId);
+            setShowDeleteModal(false);
+            setItemToDelete(null);
+            await fetchData();
+            notifySuccess('Item deleted successfully.');
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to delete item');
         } finally {
             setSubmitting(false);
         }
@@ -726,13 +752,22 @@ export default function MasterDataManagement() {
                                                         </span>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openEditModal(item)}
-                                                            className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
-                                                        >
-                                                            Edit
-                                                        </button>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditModal(item)}
+                                                                className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => initiateDeleteItem(item)}
+                                                                className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-xs font-bold"
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -883,6 +918,17 @@ export default function MasterDataManagement() {
                                             <option value="">Select Category...</option>
                                             {classifications.map((cls) => <option key={cls._id} value={cls._id}>{cls.name}</option>)}
                                         </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Code</label>
+                                        <input
+                                            type="text"
+                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            placeholder="e.g. CAP-0001"
+                                            value={itemForm.itemCode}
+                                            onChange={(e) => setItemForm({ ...itemForm, itemCode: e.target.value })}
+                                            required
+                                        />
                                     </div>
                                     <div>
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Name</label>
@@ -1071,6 +1117,40 @@ export default function MasterDataManagement() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {showDeleteModal && itemToDelete && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-950/45 backdrop-blur-sm" onClick={() => setShowDeleteModal(false)}></div>
+                    <div className="relative w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 text-center">
+                            <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-red-50 text-red-600 mb-4">
+                                <span className="material-symbols-outlined text-3xl">delete_forever</span>
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-900 mb-2">Delete Item</h3>
+                            <p className="text-slate-600 text-sm mb-6">
+                                Are you sure you want to delete <span className="text-slate-900 font-semibold">{itemToDelete.name}</span> (<span className="text-[#16325c] font-mono">{itemToDelete.itemCode}</span>)? This action cannot be undone.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeleteModal(false)}
+                                    className="flex-1 bg-slate-100 border border-slate-200 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={submitting}
+                                    onClick={handleDeleteItem}
+                                    className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-600/20 transition-all"
+                                >
+                                    {submitting ? 'Deleting...' : 'Delete'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

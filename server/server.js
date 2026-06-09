@@ -19,7 +19,7 @@ const inventoryRoutes = require('./inventoryRoutes');
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const PORT = Number(process.env.PORT || 5000);
 const CLIENT_URL = (process.env.CLIENT_URL || '').trim();
-const BOM_URL = (process.env.BOM_URL || 'http://127.0.0.1:8000').trim();
+const BOM_URL = (process.env.BOM_URL || 'http://127.0.0.1:8100').trim();
 const INVENTORY_API_URL = (process.env.INVENTORY_API_URL || (NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5001')).trim();
 const ADDITIONAL_ALLOWED_ORIGINS = (process.env.ADDITIONAL_ALLOWED_ORIGINS || '')
     .split(',')

@@ -2,30 +2,27 @@
 _Max 60 lines. Archive completed sessions to SESSION_ARCHIVE.md_
 
 ## Last Updated
-2026-06-03T17:36:00.1860503+05:30
+2026-06-09T11:25:00+05:30
 
 ## Goal
-Fix the super-admin delayed-project navigation so the dashboard card opens a correctly filtered projects list.
+Support manual Item Code input during item creation instead of strictly forcing auto-generation.
 
 ## Status
 DONE
 
 ## Done This Session
-- Traced the super-admin dashboard delayed card route from `/super` to `/super/projects?filter=DELAYED`.
-- Confirmed the projects page was reading the URL filter but only matching literal `project.status`, which excluded overdue active/planning projects.
-- Updated [SuperUserProjectsPage.jsx](D:/users/hameed/Desktop/Enarxi/Project%20Management/client/src/components/dashboard/SuperUserProjectsPage.jsx) to treat `DELAYED` as an overdue-project filter based on `deadline < now` and `status !== COMPLETED`.
-- Added `Delayed` to the status dropdown so the UI reflects the same filter state as the dashboard deep link.
-- Updated project cards to show a delayed badge when a project is overdue.
-- Verified the client build with `pnpm --filter client build`.
-- Started the local client and server with PNPM and confirmed listeners on `127.0.0.1:5173` and `0.0.0.0:5000`.
+- Added `itemCode` field to `itemForm` state and the reset logic in [MasterDataManagement.jsx](file:///d:/users/hameed/Desktop/Enarxi/Project%20Management/client/src/components/inventory/MasterDataManagement.jsx).
+- Rendered an input field for "Item Code" in the "Add New Item" modal form.
+- Updated the backend `/admin/items` route in [inventoryRoutes.js](file:///d:/users/hameed/Desktop/Enarxi/Project%20Management/server/inventoryRoutes.js) to accept `itemCode` from the request body.
+- Implemented backend verification to check uniqueness for manually entered item codes and only auto-generate (using sequence prefix) if no item code is provided.
+- Skip nextSequenceNumber increment when the item code is manually supplied.
+- Verified client build with `pnpm --filter client build`.
 
 ## Decisions Made
-- Kept the fix frontend-scoped because the backend summary logic for delayed projects was already correct.
-- Reused the existing dashboard overdue rule: overdue deadline and not completed.
+- Kept the auto-generation logic as a fallback if the user or bulk import does not provide an item code, ensuring full backward compatibility.
 
 ## Blockers
-- Local browser verification reached the login page at `http://127.0.0.1:5173/login`, so authenticated route behavior still needs a logged-in session to be visually confirmed.
-- `QUARANTINE.md` and `PROGRESS.md` do not exist yet in the project root.
+- None.
 
 ## Next Step
-Log in locally and click the dashboard Delayed card to confirm the filtered projects list now shows overdue projects instead of an empty state.
+Test the "Add New Item" modal in the browser, fill out a manual Item Code, and confirm the item is created successfully with the exact item code specified.

@@ -35,7 +35,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(() => {
     const saved = localStorage.getItem('inventory_menu_expanded');
     if (saved !== null) return saved === 'true';
-        return currentPage.startsWith('inv-') || currentPage.startsWith('inventory') || currentPage.includes('material-requests');
+    return currentPage.startsWith('inv-') || currentPage.startsWith('inventory') || currentPage.includes('material-requests');
   });
 
   const toggleInventory = () => {
@@ -91,7 +91,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/super' },
     { id: 'projects', label: 'Projects', icon: 'folder', path: '/super/projects' },
     { id: 'teams', label: 'Team Members', icon: 'group', path: '/super/teams' },
-        { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
+    { id: 'backups', label: 'Backups', icon: 'backup', path: '/super/backups' },
   ];
 
   const inventoryMenu = [
@@ -118,7 +118,6 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
         { id: 'inv-store-fulfillment', label: 'Store Requests', icon: 'assignment_turned_in', path: '/super/inventory/fulfillment' },
         { id: 'inv-inward', label: 'Store Inward', icon: 'input', path: '/super/inventory/inward' },
         { id: 'inv-dispatches', label: 'Store Dispatches', icon: 'local_shipping', path: '/super/inventory/dispatches' },
-        { id: 'inv-project-returns', label: 'Project Returns', icon: 'keyboard_return', path: '/super/inventory/project-returns' },
         { id: 'inv-uploads', label: 'Stock Uploads', icon: 'upload', path: '/super/inventory/uploads' },
         { id: 'inv-approvals', label: 'Stock Approvals', icon: 'check_circle', path: '/super/inventory/adjustments' },
       ]
@@ -155,7 +154,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
               <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Internal Project Manager</p>
             </div>
           </div>
-          <nav 
+          <nav
             ref={sidebarRef}
             className="flex-1 flex flex-col gap-2 overflow-y-auto pb-6 custom-scrollbar pr-2"
           >
@@ -187,11 +186,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             <div className="flex flex-col mt-2">
               <button
                 onClick={toggleInventory}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
-                  currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
                     ? 'bg-primary/10 text-[#556070] border-l-4 border-primary shadow-sm'
                     : 'text-text-secondary hover:bg-surface-dark hover:text-[#556070]'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className={`material-symbols-outlined transition-colors ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory') ? 'text-primary' : 'group-hover:text-primary'}`}>
@@ -203,7 +201,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                   expand_more
                 </span>
               </button>
-              
+
               {isInventoryExpanded && (
                 <div className="flex flex-col gap-4 mt-2 ml-4 pl-4 border-l border-border-dark">
                   {inventoryMenu.map((category, idx) => (
@@ -219,11 +217,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                             e.preventDefault();
                             navigate(subItem.path);
                           }}
-                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${
-                            currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
+                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
                               ? 'text-primary font-medium'
                               : 'text-text-secondary hover:text-[#556070]'
-                          }`}
+                            }`}
                         >
                           <span className={`material-symbols-outlined text-[18px] ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '') ? 'text-primary' : 'text-text-secondary/70 group-hover:text-[#556070]'}`}>
                             {subItem.icon}
@@ -296,11 +293,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
             <div className="flex flex-col mt-2">
               <button
                 onClick={toggleInventory}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${
-                  currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors group ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory')
                     ? 'bg-primary/10 text-[#556070] border-l-4 border-primary shadow-sm'
                     : 'text-text-secondary hover:bg-surface-dark hover:text-[#556070]'
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3">
                   <span className={`material-symbols-outlined transition-colors ${currentPage.startsWith('inv-') || currentPage.startsWith('inventory') ? 'text-primary' : 'group-hover:text-primary'}`}>
@@ -312,7 +308,7 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                   expand_more
                 </span>
               </button>
-              
+
               {isInventoryExpanded && (
                 <div className="flex flex-col gap-4 mt-2 ml-4 pl-4 border-l border-border-dark">
                   {inventoryMenu.map((category, idx) => (
@@ -329,11 +325,10 @@ export default function SuperUserLayout({ children, currentPage = 'dashboard' })
                             navigate(subItem.path);
                             setShowMobileSidebar(false);
                           }}
-                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${
-                            currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
+                          className={`flex items-center gap-3 py-1.5 rounded-lg transition-colors group ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '')
                               ? 'text-primary font-medium'
                               : 'text-text-secondary hover:text-[#556070]'
-                          }`}
+                            }`}
                         >
                           <span className={`material-symbols-outlined text-[18px] ${currentPage === subItem.id || currentPage === subItem.id.replace('inv-', '') ? 'text-primary' : 'text-text-secondary/70 group-hover:text-[#556070]'}`}>
                             {subItem.icon}

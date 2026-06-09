@@ -3050,7 +3050,7 @@ router.post('/admin/classifications', async (req, res) => {
 
 router.post('/admin/items', async (req, res) => {
     try {
-        let { classificationId, name, uom, package, description } = req.body;
+        let { itemCode, classificationId, name, uom, package, description } = req.body;
         
         // 1. Resolve Classification (handle name or ID safely)
         let classification;
@@ -3064,13 +3064,25 @@ router.post('/admin/items', async (req, res) => {
         
         if (!classification) return res.status(400).json({ message: 'Invalid Classification: ' + classificationId });
 
-        // 2. Auto-generate Item Code (Prefix + Sequence)
-        const sequence = classification.nextSequenceNumber;
-        const itemCode = `${classification.prefix}-${sequence.toString().padStart(6, '0')}`;
+        let finalItemCode = itemCode ? String(itemCode).trim() : '';
+        let generated = false;
+
+        // 2. Validate manual itemCode or auto-generate if missing
+        if (!finalItemCode) {
+            const sequence = classification.nextSequenceNumber;
+            finalItemCode = `${classification.prefix}-${sequence.toString().padStart(6, '0')}`;
+            generated = true;
+        } else {
+            // Check for uniqueness if manually provided
+            const existing = await Item.findOne({ itemCode: finalItemCode });
+            if (existing) {
+                return res.status(400).json({ message: `Item code already exists: ${finalItemCode}` });
+            }
+        }
         
         // 3. Create Item
         const item = await Item.create({
-            itemCode,
+            itemCode: finalItemCode,
             classificationId: classification._id,
             name,
             uom,
@@ -3078,11 +3090,13 @@ router.post('/admin/items', async (req, res) => {
             description
         });
 
-        // 4. Increment Classification Sequence
-        classification.nextSequenceNumber += 1;
-        await classification.save();
+        // 4. Increment Classification Sequence if auto-generated
+        if (generated) {
+            classification.nextSequenceNumber += 1;
+            await classification.save();
+        }
 
-        await logInvActivity('INV_MASTER_CREATE', `Item ${item.name} (${itemCode}) created`, req.user._id, req.user.name, item._id, item.name);
+        await logInvActivity('INV_MASTER_CREATE', `Item ${item.name} (${finalItemCode}) created`, req.user._id, req.user.name, item._id, item.name);
         res.status(201).json(item);
     } catch (err) {
         console.error('Item Create Error:', err);

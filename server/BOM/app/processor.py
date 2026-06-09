@@ -11,7 +11,7 @@ from typing import Dict, Any, List
 from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait, TimeoutError
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -1252,17 +1252,17 @@ class BOMProcessor:
                     if code and code.lower() not in ["nan", "none", ""]: return code, True
                     return None, False
 
-                print(f"\n⚡ [{comp}] Launching parallel vendor searches...")
-                with ThreadPoolExecutor(max_workers=max(1, len(parallel_vendors))) as executor:
-                    futures = {}
-                    for vendor in parallel_vendors:
-                        sq, use_sku = _vendor_query(vendor)
-                        if not use_sku:
-                            print(f"[{vendor}] ⏭️ No SKU ID given — skipping search")
-                            item_data[vendor] = "No SKU ID given"
-                            continue
-                        print(f"[{vendor}] 🔍 Scouting for: {sq} (Using SKU: {use_sku})")
-                        futures[vendor] = executor.submit(_run_vendor_in_thread, vendor, vendor_urls.get(vendor, ""), sq, use_sku, qty, comp)
+                print(f"\n[{comp}] Launching parallel vendor searches...")
+                executor = ThreadPoolExecutor(max_workers=max(1, len(parallel_vendors)))
+                futures = {}
+                for vendor in parallel_vendors:
+                    sq, use_sku = _vendor_query(vendor)
+                    if not use_sku:
+                        print(f"[{vendor}] No SKU ID given - skipping search")
+                        item_data[vendor] = "No SKU ID given"
+                        continue
+                    print(f"[{vendor}] Scouting for: {sq} (Using SKU: {use_sku})")
+                    futures[vendor] = executor.submit(_run_vendor_in_thread, vendor, vendor_urls.get(vendor, ""), sq, use_sku, qty, comp)
                 
                 item_data["links"] = {}
                 item_data["available_stock"] = {} # Store for allocation logic
@@ -1270,11 +1270,19 @@ class BOMProcessor:
                 future_done = 0
                 VENDOR_THREAD_TIMEOUT = 120  # 2 minutes max per vendor thread
                 future_to_vendor = {future: vendor for vendor, future in futures.items()}
-                try:
-                    completed_futures = as_completed(future_to_vendor, timeout=VENDOR_THREAD_TIMEOUT * max(1, len(future_to_vendor)))
-                except TimeoutError:
-                    completed_futures = iter([])  # All remaining futures timed out
-                    print(f"⚠️ as_completed global timeout — some vendor threads hung")
+                pending_futures = set(future_to_vendor.keys())
+                completed_futures = []
+                deadline = time.monotonic() + VENDOR_THREAD_TIMEOUT
+                while pending_futures and time.monotonic() < deadline:
+                    remaining = max(0.1, deadline - time.monotonic())
+                    done, pending_futures = wait(pending_futures, timeout=remaining, return_when=FIRST_COMPLETED)
+                    completed_futures.extend(done)
+                for future in pending_futures:
+                    vendor = future_to_vendor[future]
+                    future.cancel()
+                    item_data[vendor] = None
+                    print(f"[{vendor}] Vendor search abandoned after {VENDOR_THREAD_TIMEOUT}s")
+                executor.shutdown(wait=False, cancel_futures=True)
                 for future in completed_futures:
                     vendor = future_to_vendor[future]
                     try:
