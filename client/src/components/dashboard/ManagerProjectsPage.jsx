@@ -5,6 +5,7 @@ import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
 import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
+import ProductionDashboard from './ProductionDashboard.jsx';
 
 // Draggable Task Component
 
@@ -69,6 +70,11 @@ export default function ManagerProjectsPage() {
     const [showMemberDetailsModal, setShowMemberDetailsModal] = useState(false);
     const [selectedTeamMember, setSelectedTeamMember] = useState(null);
     const [memberPerformance, setMemberPerformance] = useState(null);
+
+    const isProductionProjectView = (project, tasksForProject = []) => {
+        if (!project) return false;
+        return project.projectType === 'PRODUCTION' || tasksForProject.some((task) => task.isProductionTask);
+    };
 
     useEffect(() => {
         if (notification) {
@@ -683,7 +689,7 @@ export default function ManagerProjectsPage() {
             {showDetailsModal && selectedProject && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div
-                        className="bg-[#0a0f1d] border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[85vh] max-h-[90vh]"
+                        className="bg-[#0a0f1d] border border-slate-800 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[94vh]"
                         onClick={() => setShowUserPicker(null)}
                     >
                         {/* Header */}
@@ -707,397 +713,416 @@ export default function ManagerProjectsPage() {
                             </div>
                         </div>
 
-                        {/* Controls: Filter & Search */}
-                        <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
-                            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
-                                {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => { setTaskFilter(f); setCurrentPage(1); }}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-all whitespace-nowrap ${taskFilter === f
-                                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                            : 'text-slate-500 hover:text-white'
-                                            }`}
-                                    >
-                                        {f.replace('_', ' ')}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="relative w-full md:w-80">
-                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
-                                <input
-                                    type="text"
-                                    value={taskSearchQuery}
-                                    onChange={(e) => { setTaskSearchQuery(e.target.value); setCurrentPage(1); }}
-                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder-slate-600"
-                                    placeholder="Filter tasks..."
+                        {isProductionProjectView(
+                            selectedProject,
+                            tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))
+                        ) ? (
+                            <div className="flex-1 overflow-auto custom-scrollbar p-4 md:p-8">
+                                <ProductionDashboard
+                                    project={selectedProject}
+                                    tasks={tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))}
+                                    users={users}
+                                    showManagerActions={true}
+                                    onRefresh={async () => {
+                                        await loadData();
+                                    }}
                                 />
                             </div>
-                        </div>
-
-                        {/* Add Task Bar */}
-                        <div className="px-4 pb-4 md:px-8 md:pb-6 shrink-0">
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    handleAddTask(e);
-                                }}
-                                className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
-                            >
-                                <div className="flex-1 flex flex-col md:flex-row gap-3">
-                                    <div className="flex-[1.5] relative">
+                        ) : (
+                            <>
+                                {/* Controls: Filter & Search */}
+                                <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+                                    <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
+                                        {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((f) => (
+                                            <button
+                                                key={f}
+                                                onClick={() => { setTaskFilter(f); setCurrentPage(1); }}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-all whitespace-nowrap ${taskFilter === f
+                                                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                    : 'text-slate-500 hover:text-white'
+                                                    }`}
+                                            >
+                                                {f.replace('_', ' ')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="relative w-full md:w-80">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                                         <input
                                             type="text"
-                                            value={newTaskTitle}
-                                            onChange={(e) => setNewTaskTitle(e.target.value)}
-                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
-                                            placeholder="Task Title..."
+                                            value={taskSearchQuery}
+                                            onChange={(e) => { setTaskSearchQuery(e.target.value); setCurrentPage(1); }}
+                                            className="w-full bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder-slate-600"
+                                            placeholder="Filter tasks..."
                                         />
                                     </div>
-                                    <div className="flex-[2] relative">
-                                        <input
-                                            type="text"
-                                            value={newTaskDescription}
-                                            onChange={(e) => setNewTaskDescription(e.target.value)}
-                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
-                                            placeholder="Description (optional)..."
-                                        />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                                            <div className="relative">
-                                                <div className={`flex items-center gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border transition-colors ${newTaskDeadline ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-400 hover:bg-slate-800'}`}>
-                                                    <span className="material-symbols-outlined text-lg">calendar_today</span>
-                                                    <span className={`text-xs font-medium whitespace-nowrap hidden md:inline ${!newTaskDeadline && 'hidden'}`}>
-                                                        {newTaskDeadline ? new Date(newTaskDeadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
-                                                    </span>
-                                                </div>
+                                </div>
+
+                                {/* Add Task Bar */}
+                                <div className="px-4 pb-4 md:px-8 md:pb-6 shrink-0">
+                                    <form
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            handleAddTask(e);
+                                        }}
+                                        className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
+                                    >
+                                        <div className="flex-1 flex flex-col md:flex-row gap-3">
+                                            <div className="flex-[1.5] relative">
                                                 <input
-                                                    type="date"
-                                                    value={newTaskDeadline}
-                                                    onChange={(e) => setNewTaskDeadline(e.target.value)}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                    title="Set Deadline"
+                                                    type="text"
+                                                    value={newTaskTitle}
+                                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                                    className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                                    placeholder="Task Title..."
                                                 />
                                             </div>
+                                            <div className="flex-[2] relative">
+                                                <input
+                                                    type="text"
+                                                    value={newTaskDescription}
+                                                    onChange={(e) => setNewTaskDescription(e.target.value)}
+                                                    className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                                    placeholder="Description (optional)..."
+                                                />
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                    <div className="relative">
+                                                        <div className={`flex items-center gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border transition-colors ${newTaskDeadline ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-400 hover:bg-slate-800'}`}>
+                                                            <span className="material-symbols-outlined text-lg">calendar_today</span>
+                                                            <span className={`text-xs font-medium whitespace-nowrap hidden md:inline ${!newTaskDeadline && 'hidden'}`}>
+                                                                {newTaskDeadline ? new Date(newTaskDeadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+                                                            </span>
+                                                        </div>
+                                                        <input
+                                                            type="date"
+                                                            value={newTaskDeadline}
+                                                            onChange={(e) => setNewTaskDeadline(e.target.value)}
+                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                            title="Set Deadline"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!newTaskTitle || !newTaskDeadline}
+                                            className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">add</span>
+                                            <span>Add Task</span>
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {/* Table Content */}
+                                <div className="flex-1 overflow-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
+                                    <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
+                                        <table className="w-full text-left border-collapse hidden lg:table">
+                                            <thead className="sticky top-0 bg-[#0a0f1d] z-10">
+                                                <tr className="bg-slate-900/50 border-b border-slate-800">
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-800">
+                                                {paginatedTasks.length > 0 ? (
+                                                    paginatedTasks.map((task) => {
+                                                        const currentUser = getCurrentUser();
+                                                        const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
+                                                        const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
+                                                        const deadline = task.deadline ? new Date(task.deadline) : null;
+                                                        const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+
+                                                        return (
+                                                            <tr key={task.id} className="hover:bg-slate-800/20 transition-colors group">
+                                                                <td className="px-6 py-5">
+                                                                    <div className={`font-bold text-sm ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                                        {task.title}
+                                                                    </div>
+                                                                    <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]">
+                                                                        {task.description || 'No description provided'}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    {assignee ? (
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
+                                                                                {assignee.name.charAt(0)}
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-300">{assignee.name}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400">?</div>
+                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    <div className="flex justify-center flex-col items-center">
+                                                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border} border uppercase whitespace-nowrap`}>
+                                                                            {task.status === 'WAITING_APPROVAL' ? 'WAITING APPROVAL' : badgeStyle.label}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    {deadline ? (
+                                                                        <div className={`flex items-center space-x-2 ${isOverdue ? 'text-rose-400' : task.status === 'COMPLETED' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                                            <span className="material-symbols-outlined text-base">
+                                                                                {task.status === 'COMPLETED' ? 'check_circle' : isOverdue ? 'event_busy' : 'calendar_today'}
+                                                                            </span>
+                                                                            <span className="text-xs">{deadline.toLocaleDateString()}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-slate-600">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    <div className="flex items-center justify-center space-x-2 relative">
+                                                                        {!task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => handleAssignClick(e, task)}
+                                                                                className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold transition-all shadow-lg shadow-emerald-900/20"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-sm">person_add</span>
+                                                                                <span>Assign</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Mark as Completed Button for Self-Assigned Tasks */}
+                                                                        {task.assigneeId === currentUser?.id && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (true) {
+                                                                                        setConfirmModal({
+                                                                                            show: true,
+                                                                                            title: 'Complete Task?',
+                                                                                            message: 'Mark this task as completed?',
+                                                                                            type: 'primary',
+                                                                                            onConfirm: () => {
+                                                                                                handleTaskApproval(task.id, 'COMPLETED');
+                                                                                                setConfirmModal({ ...confirmModal, show: false });
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
+                                                                                title="Mark as Completed"
+                                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">check_circle</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Re-assign or Change Status button for assigned tasks */}
+                                                                        {task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => handleAssignClick(e, task)}
+                                                                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                                title="Reassign"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">person_add</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Reopen Completed Task */}
+                                                                        {task.status === 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (true) {
+                                                                                        setConfirmModal({
+                                                                                            show: true,
+                                                                                            title: 'Reopen Task?',
+                                                                                            message: 'Reopen this task? Status will be set to IN PROGRESS.',
+                                                                                            type: 'primary',
+                                                                                            onConfirm: () => {
+                                                                                                handleTaskApproval(task.id, 'IN_PROGRESS');
+                                                                                                setConfirmModal({ ...confirmModal, show: false });
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                                title="Reopen Task"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">undo</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Approve/Reject for Waiting Approval */}
+                                                                        {task.status === 'WAITING_APPROVAL' && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        if (true) {
+                                                                                            setConfirmModal({
+                                                                                                show: true,
+                                                                                                title: 'Approve Task?',
+                                                                                                message: 'Approve this task as COMPLETED?',
+                                                                                                type: 'primary',
+                                                                                                onConfirm: () => {
+                                                                                                    handleTaskApproval(task.id, 'COMPLETED');
+                                                                                                    setConfirmModal({ ...confirmModal, show: false });
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    }}
+                                                                                    className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
+                                                                                    title="Approve Task"
+                                                                                >
+                                                                                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleRejectClick(task);
+                                                                                    }}
+                                                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all"
+                                                                                    title="Reject Task"
+                                                                                >
+                                                                                    <span className="material-symbols-outlined text-lg">cancel</span>
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+
+                                                                        {/* Delete Task Button */}
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                handleDeleteTask(task.id);
+                                                                            }}
+                                                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all ml-1"
+                                                                            title="Delete Task"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-lg">delete</span>
+                                                                        </button>
+
+                                                                        <button
+                                                                            onClick={() => openTaskDetail(task)}
+                                                                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                            title="View Details"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-lg">visibility</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan="5" className="px-6 py-10 text-center text-slate-500 text-sm">
+                                                            No tasks found matching current filters.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+
+                                        {/* Mobile Card View */}
+                                        <div className="lg:hidden divide-y divide-white/5">
+                                            {paginatedTasks.length > 0 ? (
+                                                paginatedTasks.map((task) => {
+                                                    const currentUser = getCurrentUser();
+                                                    const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
+                                                    const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
+                                                    const deadline = task.deadline ? new Date(task.deadline) : null;
+                                                    const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+
+                                                    return (
+                                                        <div key={task.id} className="p-4 space-y-3">
+                                                            <div className="flex justify-between items-start gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className={`font-bold text-sm truncate ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                                        {task.title}
+                                                                    </div>
+                                                                    <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description || 'No description'}</div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                                                                    {badgeStyle.label}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between pt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    {assignee ? (
+                                                                        <>
+                                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
+                                                                                {assignee.name.charAt(0)}
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-300 font-medium truncate max-w-[100px]">{assignee.name}</span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400">?</div>
+                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                {deadline && (
+                                                                    <div className={`text-[10px] font-mono border px-2 py-0.5 rounded ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                                                        {deadline.toLocaleDateString()}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Mobile Actions */}
+                                                            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5 mt-2">
+                                                                {/* Assign Button */}
+                                                                {!task.assigneeId && (
+                                                                    <button
+                                                                        onClick={(e) => handleAssignClick(e, task)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase hover:bg-emerald-500 hover:text-white transition-colors"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">person_add</span> Assign
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Unassign Button */}
+                                                                {task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                    <button
+                                                                        onClick={() => handleUnassignTask(task.id)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase hover:bg-amber-500 hover:text-white transition-colors"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">person_remove</span> Unassign
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Delete Button */}
+                                                                <button
+                                                                    onClick={() => handleDeleteTask(task.id)}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                                                </button>
+
+                                                                {/* View Button */}
+                                                                <button
+                                                                    onClick={() => openTaskDetail(task)}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 text-[10px] font-bold uppercase hover:bg-slate-700 hover:text-white transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <div className="p-8 text-center text-slate-500 italic">
+                                                    No tasks found matching current filters.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                                <button
-                                    type="submit"
-                                    disabled={!newTaskTitle || !newTaskDeadline}
-                                    className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap"
-                                >
-                                    <span className="material-symbols-outlined text-lg">add</span>
-                                    <span>Add Task</span>
-                                </button>
-                            </form>
-                        </div>
-
-                        {/* Table Content */}
-                        <div className="flex-1 overflow-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
-                            <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
-                                <table className="w-full text-left border-collapse hidden lg:table">
-                                    <thead className="sticky top-0 bg-[#0a0f1d] z-10">
-                                        <tr className="bg-slate-900/50 border-b border-slate-800">
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-800">
-                                        {paginatedTasks.length > 0 ? (
-                                            paginatedTasks.map((task) => {
-                                                const currentUser = getCurrentUser();
-                                                const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
-                                                const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
-                                                const deadline = task.deadline ? new Date(task.deadline) : null;
-                                                const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
-
-                                                return (
-                                                    <tr key={task.id} className="hover:bg-slate-800/20 transition-colors group">
-                                                        <td className="px-6 py-5">
-                                                            <div className={`font-bold text-sm ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                                                {task.title}
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]">
-                                                                {task.description || 'No description provided'}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            {assignee ? (
-                                                                <div className="flex items-center space-x-2">
-                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
-                                                                        {assignee.name.charAt(0)}
-                                                                    </div>
-                                                                    <span className="text-xs text-slate-300">{assignee.name}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center space-x-2">
-                                                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400">?</div>
-                                                                    <span className="text-xs text-slate-500 italic">Unassigned</span>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <div className="flex justify-center flex-col items-center">
-                                                                <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border} border uppercase whitespace-nowrap`}>
-                                                                    {task.status === 'WAITING_APPROVAL' ? 'WAITING APPROVAL' : badgeStyle.label}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            {deadline ? (
-                                                                <div className={`flex items-center space-x-2 ${isOverdue ? 'text-rose-400' : task.status === 'COMPLETED' ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                                                    <span className="material-symbols-outlined text-base">
-                                                                        {task.status === 'COMPLETED' ? 'check_circle' : isOverdue ? 'event_busy' : 'calendar_today'}
-                                                                    </span>
-                                                                    <span className="text-xs">{deadline.toLocaleDateString()}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-xs text-slate-600">-</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <div className="flex items-center justify-center space-x-2 relative">
-                                                                {!task.assigneeId && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => handleAssignClick(e, task)}
-                                                                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold transition-all shadow-lg shadow-emerald-900/20"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">person_add</span>
-                                                                        <span>Assign</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Mark as Completed Button for Self-Assigned Tasks */}
-                                                                {task.assigneeId === currentUser?.id && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (true) {
-                                                                                setConfirmModal({
-                                                                                    show: true,
-                                                                                    title: 'Complete Task?',
-                                                                                    message: 'Mark this task as completed?',
-                                                                                    type: 'primary',
-                                                                                    onConfirm: () => {
-                                                                                        handleTaskApproval(task.id, 'COMPLETED');
-                                                                                        setConfirmModal({ ...confirmModal, show: false });
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                        className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
-                                                                        title="Mark as Completed"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">check_circle</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Re-assign or Change Status button for assigned tasks */}
-                                                                {task.assigneeId && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => handleAssignClick(e, task)}
-                                                                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                        title="Reassign"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">person_add</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Reopen Completed Task */}
-                                                                {task.status === 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (true) {
-                                                                                setConfirmModal({
-                                                                                    show: true,
-                                                                                    title: 'Reopen Task?',
-                                                                                    message: 'Reopen this task? Status will be set to IN PROGRESS.',
-                                                                                    type: 'primary',
-                                                                                    onConfirm: () => {
-                                                                                        handleTaskApproval(task.id, 'IN_PROGRESS');
-                                                                                        setConfirmModal({ ...confirmModal, show: false });
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                        title="Reopen Task"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">undo</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Approve/Reject for Waiting Approval */}
-                                                                {task.status === 'WAITING_APPROVAL' && (
-                                                                    <>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                if (true) {
-                                                                                    setConfirmModal({
-                                                                                        show: true,
-                                                                                        title: 'Approve Task?',
-                                                                                        message: 'Approve this task as COMPLETED?',
-                                                                                        type: 'primary',
-                                                                                        onConfirm: () => {
-                                                                                            handleTaskApproval(task.id, 'COMPLETED');
-                                                                                            setConfirmModal({ ...confirmModal, show: false });
-                                                                                        }
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                            className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
-                                                                            title="Approve Task"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-lg">check_circle</span>
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleRejectClick(task);
-                                                                            }}
-                                                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all"
-                                                                            title="Reject Task"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-lg">cancel</span>
-                                                                        </button>
-                                                                    </>
-                                                                )}
-
-                                                                {/* Delete Task Button */}
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDeleteTask(task.id);
-                                                                    }}
-                                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all ml-1"
-                                                                    title="Delete Task"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-lg">delete</span>
-                                                                </button>
-
-                                                                <button
-                                                                    onClick={() => openTaskDetail(task)}
-                                                                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                    title="View Details"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-lg">visibility</span>
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        ) : (
-                                            <tr>
-                                                <td colSpan="5" className="px-6 py-10 text-center text-slate-500 text-sm">
-                                                    No tasks found matching current filters.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-
-                                {/* Mobile Card View */}
-                                <div className="lg:hidden divide-y divide-white/5">
-                                    {paginatedTasks.length > 0 ? (
-                                        paginatedTasks.map((task) => {
-                                            const currentUser = getCurrentUser();
-                                            const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
-                                            const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
-                                            const deadline = task.deadline ? new Date(task.deadline) : null;
-                                            const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
-
-                                            return (
-                                                <div key={task.id} className="p-4 space-y-3">
-                                                    <div className="flex justify-between items-start gap-3">
-                                                        <div className="min-w-0">
-                                                            <div className={`font-bold text-sm truncate ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                                                {task.title}
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description || 'No description'}</div>
-                                                        </div>
-                                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
-                                                            {badgeStyle.label}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex items-center justify-between pt-2">
-                                                        <div className="flex items-center gap-2">
-                                                            {assignee ? (
-                                                                <>
-                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
-                                                                        {assignee.name.charAt(0)}
-                                                                    </div>
-                                                                    <span className="text-xs text-slate-300 font-medium truncate max-w-[100px]">{assignee.name}</span>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400">?</div>
-                                                                    <span className="text-xs text-slate-500 italic">Unassigned</span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        {deadline && (
-                                                            <div className={`text-[10px] font-mono border px-2 py-0.5 rounded ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                                                                {deadline.toLocaleDateString()}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Mobile Actions */}
-                                                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5 mt-2">
-                                                        {/* Assign Button */}
-                                                        {!task.assigneeId && (
-                                                            <button
-                                                                onClick={(e) => handleAssignClick(e, task)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase hover:bg-emerald-500 hover:text-white transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">person_add</span> Assign
-                                                            </button>
-                                                        )}
-
-                                                        {/* Unassign Button */}
-                                                        {task.assigneeId && task.status !== 'COMPLETED' && (
-                                                            <button
-                                                                onClick={() => handleUnassignTask(task.id)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase hover:bg-amber-500 hover:text-white transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">person_remove</span> Unassign
-                                                            </button>
-                                                        )}
-
-                                                        {/* Delete Button */}
-                                                        <button
-                                                            onClick={() => handleDeleteTask(task.id)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">delete</span>
-                                                        </button>
-
-                                                        {/* View Button */}
-                                                        <button
-                                                            onClick={() => openTaskDetail(task)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 text-[10px] font-bold uppercase hover:bg-slate-700 hover:text-white transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">visibility</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="p-8 text-center text-slate-500 italic">
-                                            No tasks found matching current filters.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                            </>
+                        )}
 
                         {/* Footer */}
                         <div className="px-4 py-4 md:px-8 md:py-6 border-t border-slate-800 bg-slate-900/30 flex flex-col md:flex-row items-center justify-between mt-auto shrink-0 gap-4">
@@ -1118,27 +1143,29 @@ export default function ManagerProjectsPage() {
                                     <span className="text-[10px] font-bold uppercase tracking-widest group-hover:underline decoration-blue-500/50 underline-offset-4">{getTeamMembers(selectedProject).length} Members</span>
                                 </button>
                             </div>
-                            <div className="flex items-center space-x-4">
-                                <span className="text-[11px] text-slate-500 font-medium">
-                                    Showing {Math.min((currentPage - 1) * itemsPerPage + 1, projectTasks.length)} - {Math.min(currentPage * itemsPerPage, projectTasks.length)} of {projectTasks.length} tasks
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages || totalPages === 0}
-                                        className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
-                                    </button>
+                            {selectedProject.projectType !== 'PRODUCTION' && (
+                                <div className="flex items-center space-x-4">
+                                    <span className="text-[11px] text-slate-500 font-medium">
+                                        Showing {Math.min((currentPage - 1) * itemsPerPage + 1, projectTasks.length)} - {Math.min(currentPage * itemsPerPage, projectTasks.length)} of {projectTasks.length} tasks
+                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages || totalPages === 0}
+                                            className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* User Picker Popover/Dropdown */}

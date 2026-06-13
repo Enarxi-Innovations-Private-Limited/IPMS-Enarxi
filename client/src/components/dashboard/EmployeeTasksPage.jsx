@@ -10,9 +10,12 @@ export default function EmployeeTasksPage() {
     const user = getCurrentUser();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
+    const [productionAssignments, setProductionAssignments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [statusUpdate, setStatusUpdate] = useState({});
+    const [productionDrafts, setProductionDrafts] = useState({});
+    const [productionSaving, setProductionSaving] = useState({});
 
     // Work updates state
     const [commentText, setCommentText] = useState({});
@@ -53,6 +56,17 @@ export default function EmployeeTasksPage() {
             ]);
             setProjects(projRes.data);
             setTasks(taskRes.data);
+            const productionRes = await api.get('/my/production-assignments');
+            setProductionAssignments(productionRes.data || []);
+            setProductionDrafts(
+                (productionRes.data || []).reduce((acc, item) => {
+                    acc[item.id] = {
+                        boardsCompletedDraft: String(item.boardsCompletedDraft ?? item.boardsCompletedApproved ?? 0),
+                        delayReason: item.delayReason || ''
+                    };
+                    return acc;
+                }, {})
+            );
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load tasks');
         } finally {
@@ -108,6 +122,7 @@ export default function EmployeeTasksPage() {
     };
 
     const myTasks = tasks.filter((t) => t.assigneeId === user.id);
+    const myProductionAssignments = productionAssignments;
 
     // Apply filters
     const filteredTasks = myTasks.filter((t) => {
@@ -132,6 +147,31 @@ export default function EmployeeTasksPage() {
         inProgress: myTasks.filter((t) => t.status === 'IN_PROGRESS').length,
         completed: myTasks.filter((t) => t.status === 'COMPLETED').length,
         waitingApproval: myTasks.filter((t) => t.status === 'WAITING_APPROVAL').length,
+    };
+
+    const submitProductionProgress = async (assignment) => {
+        const assignmentId = assignment.id;
+        const draft = productionDrafts[assignmentId] || {};
+        const boardsCompletedDraft = Number(draft.boardsCompletedDraft);
+        const delayReason = draft.delayReason || '';
+
+        if (!Number.isInteger(boardsCompletedDraft) || boardsCompletedDraft < 0) {
+            setError('Completed boards must be a whole number 0 or greater.');
+            return;
+        }
+
+        try {
+            setProductionSaving((prev) => ({ ...prev, [assignmentId]: true }));
+            await api.put(`/production/assignments/${assignmentId}/progress`, {
+                boardsCompletedDraft,
+                delayReason
+            });
+            await loadData();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to submit production progress');
+        } finally {
+            setProductionSaving((prev) => ({ ...prev, [assignmentId]: false }));
+        }
     };
 
     return (
@@ -201,6 +241,72 @@ export default function EmployeeTasksPage() {
                             <p className="text-2xl font-bold text-white">{stats.completed}</p>
                         </div>
                     </div>
+
+                    {myProductionAssignments.length > 0 && (
+                        <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-8">
+                            <div className="flex items-center justify-between mb-4">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white">My Production Allocations</h2>
+                                    <p className="text-text-secondary text-sm">Submit completed boards for manager approval.</p>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                {myProductionAssignments.map((assignment) => {
+                                    const draft = productionDrafts[assignment.id] || {
+                                        boardsCompletedDraft: String(assignment.boardsCompletedDraft ?? assignment.boardsCompletedApproved ?? 0),
+                                        delayReason: assignment.delayReason || ''
+                                    };
+                                    const isOverdue = assignment.deadline && new Date() > new Date(assignment.deadline);
+
+                                    return (
+                                        <div key={assignment.id} className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
+                                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                <div>
+                                                    <p className="text-white font-bold">{assignment.productionPhase}</p>
+                                                    <p className="text-text-secondary text-sm">{assignment.projectCode} · {assignment.projectName}</p>
+                                                    <p className="text-text-secondary text-xs mt-2">
+                                                        Assigned: <span className="text-white">{assignment.boardsAssigned}</span> · Approved: <span className="text-white">{assignment.boardsCompletedApproved}</span> · Status: <span className="text-white">{assignment.status}</span>
+                                                    </p>
+                                                    <p className="text-text-secondary text-xs mt-1">
+                                                        Deadline: <span className={isOverdue ? 'text-red-400' : 'text-white'}>{assignment.deadline ? new Date(assignment.deadline).toLocaleDateString() : 'Not set'}</span>
+                                                    </p>
+                                                </div>
+                                                <div className="grid gap-3 md:min-w-[360px]">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        value={draft.boardsCompletedDraft}
+                                                        onChange={(e) => setProductionDrafts((prev) => ({ ...prev, [assignment.id]: { ...draft, boardsCompletedDraft: e.target.value } }))}
+                                                        className="w-full rounded-lg bg-background-dark border border-border-dark px-4 py-2 text-white"
+                                                        placeholder="Completed boards"
+                                                    />
+                                                    <textarea
+                                                        value={draft.delayReason}
+                                                        onChange={(e) => setProductionDrafts((prev) => ({ ...prev, [assignment.id]: { ...draft, delayReason: e.target.value } }))}
+                                                        className="w-full rounded-lg bg-background-dark border border-border-dark px-4 py-2 text-white text-sm"
+                                                        placeholder={isOverdue ? 'Delay reason is required if overdue' : 'Optional delay reason'}
+                                                        rows={2}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => submitProductionProgress(assignment)}
+                                                        disabled={productionSaving[assignment.id]}
+                                                        className="rounded-lg bg-primary px-4 py-2 text-white font-semibold disabled:opacity-60"
+                                                    >
+                                                        {productionSaving[assignment.id] ? 'Submitting...' : 'Submit for Approval'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            {assignment.rejectionReason && (
+                                                <p className="mt-3 text-xs text-red-400">Last rejection: {assignment.rejectionReason}</p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Search & Filters */}
                     <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-6">

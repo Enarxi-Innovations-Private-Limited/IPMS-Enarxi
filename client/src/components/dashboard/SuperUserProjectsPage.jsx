@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import SuperUserLayout from '../common/SuperUserLayout.jsx';
 import BulkProjectUploadModal from './BulkProjectUploadModal.jsx';
+import ProductionDashboard from './ProductionDashboard.jsx';
 
 export default function SuperUserProjectsPage() {
     const navigate = useNavigate();
@@ -75,6 +76,8 @@ export default function SuperUserProjectsPage() {
         endDate: '',
         budget: '',
         templateName: '',
+        projectType: 'GENERAL',
+        totalBatchSize: 100,
     });
     const [editForm, setEditForm] = useState({
         name: '',
@@ -83,6 +86,11 @@ export default function SuperUserProjectsPage() {
         managerId: '',
         budget: '',
     });
+
+    const isProductionProjectView = (project, tasksForProject = []) => {
+        if (!project) return false;
+        return project.projectType === 'PRODUCTION' || tasksForProject.some((task) => task.isProductionTask);
+    };
 
     const formatBudgetDisplay = (val) => {
         if (!val) return '';
@@ -646,15 +654,50 @@ export default function SuperUserProjectsPage() {
                                 <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Description</label>
                                 <textarea className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none" rows={2} placeholder="Enter project description" value={createForm.description} onChange={(e) => setCreateForm({ ...createForm, description: e.target.value })}></textarea>
                             </div>
+                            {/* Project Type & Batch Size */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Project Type *</label>
+                                    <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.projectType} onChange={(e) => {
+                                        const val = e.target.value;
+                                        setCreateForm(prev => ({
+                                            ...prev,
+                                            projectType: val,
+                                            department: val === 'PRODUCTION' ? 'HARDWARE' : prev.department,
+                                            templateName: ''
+                                        }));
+                                    }}>
+                                        <option value="GENERAL">General Project</option>
+                                        <option value="PRODUCTION">PCB Production Run</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Total Batch Size (Boards)</label>
+                                    <input
+                                        type="number"
+                                        disabled={createForm.projectType !== 'PRODUCTION'}
+                                        required={createForm.projectType === 'PRODUCTION'}
+                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:opacity-50"
+                                        placeholder="e.g. 100"
+                                        value={createForm.projectType === 'PRODUCTION' ? createForm.totalBatchSize : ''}
+                                        onChange={(e) => setCreateForm({ ...createForm, totalBatchSize: parseInt(e.target.value) || 0 })}
+                                    />
+                                </div>
+                            </div>
 
                             {/* Manager & Department */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
-                                    <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.department} onChange={(e) => {
-                                        setCreateForm({ ...createForm, department: e.target.value, templateName: '', managerId: '' });
-                                        loadTemplates(e.target.value);
-                                    }}>
+                                    <select 
+                                        disabled={createForm.projectType === 'PRODUCTION'}
+                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer disabled:opacity-70" 
+                                        value={createForm.projectType === 'PRODUCTION' ? 'HARDWARE' : createForm.department} 
+                                        onChange={(e) => {
+                                            setCreateForm({ ...createForm, department: e.target.value, templateName: '', managerId: '' });
+                                            loadTemplates(e.target.value);
+                                        }}
+                                    >
                                         <option value="SOFTWARE">Software (IT)</option>
                                         <option value="HARDWARE">Hardware</option>
                                     </select>
@@ -663,7 +706,10 @@ export default function SuperUserProjectsPage() {
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Assign Manager</label>
                                     <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.managerId} onChange={(e) => setCreateForm({ ...createForm, managerId: e.target.value })}>
                                         <option value="">Select Manager</option>
-                                        {managers.filter(m => !createForm.department || m.department === createForm.department || m.department === 'ALL').map(m => (
+                                        {managers.filter(m => {
+                                            const dept = createForm.projectType === 'PRODUCTION' ? 'HARDWARE' : createForm.department;
+                                            return !dept || m.department === dept || m.department === 'ALL';
+                                        }).map(m => (
                                             <option key={m.id} value={m.id}>{m.name} ({m.department})</option>
                                         ))}
                                     </select>
@@ -671,15 +717,17 @@ export default function SuperUserProjectsPage() {
                             </div>
 
                             {/* Task Template */}
-                            <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Task Template</label>
-                                <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.templateName} onChange={(e) => setCreateForm({ ...createForm, templateName: e.target.value })}>
-                                    <option value="">No Template (Create tasks manually)</option>
-                                    {templates.map(t => (
-                                        <option key={t.name} value={t.name}>{t.name} ({t.taskCount} tasks)</option>
-                                    ))}
-                                </select>
-                            </div>
+                            {createForm.projectType !== 'PRODUCTION' && (
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Task Template</label>
+                                    <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.templateName} onChange={(e) => setCreateForm({ ...createForm, templateName: e.target.value })}>
+                                        <option value="">No Template (Create tasks manually)</option>
+                                        {templates.map(t => (
+                                            <option key={t.name} value={t.name}>{t.name} ({t.taskCount} tasks)</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             {/* Template Preview */}
                             {createForm.templateName && templates.find(t => t.name === createForm.templateName) && (
@@ -815,7 +863,7 @@ export default function SuperUserProjectsPage() {
                     </div>
 
                     {/* Modal Container */}
-                    <div className="relative bg-[#11141D] border border-white/10 w-full max-w-7xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] z-10">
+                    <div className="relative bg-[#11141D] border border-white/10 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] z-10">
                         {/* Hero Header */}
                         <div className="relative pt-8 pb-10 px-10 border-b border-white/5" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(10, 12, 18, 0) 100%)' }}>
                             <div className="flex items-start justify-between">
@@ -871,208 +919,221 @@ export default function SuperUserProjectsPage() {
 
                         {/* Content Area */}
                         <div className="flex-1 overflow-auto custom-scrollbar p-8">
-                            <div className="flex flex-col-reverse lg:flex-row gap-8">
-                                {/* Left Column: Task Management */}
-                                <div className="flex-1 space-y-6 min-w-0">
-                                    <div className="flex items-center justify-between">
-                                        <h3 className="text-lg font-bold text-[#556070] flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-blue-400">format_list_bulleted</span>
-                                            Task Management
-                                        </h3>
-                                    </div>
+                            {isProductionProjectView(selectedProject, projectTasks) ? (
+                                <ProductionDashboard
+                                    project={selectedProject}
+                                    tasks={projectTasks}
+                                    users={users}
+                                    showManagerActions={false}
+                                    onRefresh={() => {
+                                        loadProjects();
+                                        loadProjectTasks(selectedProject.id || selectedProject._id);
+                                    }}
+                                />
+                            ) : (
+                                <div className="flex flex-col-reverse lg:flex-row gap-8">
+                                    {/* Left Column: Task Management */}
+                                    <div className="flex-1 space-y-6 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <h3 className="text-lg font-bold text-[#556070] flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-blue-400">format_list_bulleted</span>
+                                                Task Management
+                                            </h3>
+                                        </div>
 
-                                    {loadingTasks ? (
-                                        <div className="text-center py-12 text-slate-500">Loading tasks...</div>
-                                    ) : projectTasks.length > 0 ? (
-                                        <>
-                                            <div className="md:hidden space-y-4">
-                                                {projectTasks.map((task) => {
-                                                    const assignee = users.find(u => u.id === task.assigneeId);
-                                                    return (
-                                                        <div key={task.id} className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                            <div className="flex items-start justify-between gap-3">
-                                                                <div>
-                                                                    <div className="font-semibold text-[#556070] text-sm leading-tight">{task.title}</div>
-                                                                    {task.description && <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{task.description}</div>}
+                                        {loadingTasks ? (
+                                            <div className="text-center py-12 text-slate-500">Loading tasks...</div>
+                                        ) : projectTasks.length > 0 ? (
+                                            <>
+                                                <div className="md:hidden space-y-4">
+                                                    {projectTasks.map((task) => {
+                                                        const assignee = users.find(u => u.id === task.assigneeId);
+                                                        return (
+                                                            <div key={task.id} className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                                <div className="flex items-start justify-between gap-3">
+                                                                    <div>
+                                                                        <div className="font-semibold text-[#556070] text-sm leading-tight">{task.title}</div>
+                                                                        {task.description && <div className="text-[11px] text-slate-500 mt-1 line-clamp-2">{task.description}</div>}
+                                                                    </div>
+                                                                    <span className={`shrink-0 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                                                        task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                                                            task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                                                                'bg-slate-800 text-slate-400 border border-white/10'
+                                                                        }`}>
+                                                                        {task.status === 'NOT_STARTED' ? 'N/S' : task.status.replace('_', ' ')}
+                                                                    </span>
                                                                 </div>
-                                                                <span className={`shrink-0 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                                                    task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                                                                        task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                                                                            'bg-slate-800 text-slate-400 border border-white/10'
-                                                                    }`}>
-                                                                    {task.status === 'NOT_STARTED' ? 'N/S' : task.status.replace('_', ' ')}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center justify-between pt-2 border-t border-white/5">
-                                                                <div className="flex items-center gap-2">
-                                                                    {assignee ? (
-                                                                        <>
-                                                                            <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-[#556070] ring-1 ring-white/5">{assignee.name.charAt(0)}</div>
-                                                                            <span className="text-xs text-slate-300">{assignee.name}</span>
-                                                                        </>
-                                                                    ) : (
-                                                                        <>
-                                                                            <div className="w-5 h-5 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[8px] text-slate-500">?</div>
-                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
-                                                                        </>
-                                                                    )}
-                                                                </div>
-                                                                <div className="text-[10px] text-slate-400 font-mono">
-                                                                    {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No Date'}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                            <div className="hidden md:block bg-white/5 border border-white/5 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                <table className="w-full text-left border-collapse">
-                                                    <thead>
-                                                        <tr className="bg-white/5 border-b border-white/5">
-                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
-                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
-                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
-                                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-white/5">
-                                                        {projectTasks.map((task) => {
-                                                            const assignee = users.find(u => u.id === task.assigneeId);
-                                                            return (
-                                                                <tr key={task.id} className="group hover:bg-white/[0.02] transition-colors">
-                                                                    <td className="px-6 py-5">
-                                                                        <div className="font-semibold text-[#556070] text-sm">{task.title}</div>
-                                                                        {task.description && <div className="text-[11px] text-slate-500 mt-1">{task.description.substring(0, 50)}</div>}
-                                                                    </td>
-                                                                    <td className="px-6 py-5">
+                                                                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                                                    <div className="flex items-center gap-2">
                                                                         {assignee ? (
-                                                                            <div className="flex items-center space-x-2">
-                                                                                <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-[#556070] ring-2 ring-white/5">
-                                                                                    {assignee.name.charAt(0)}
-                                                                                </div>
-                                                                                <div className="flex flex-col">
-                                                                                    <span className="text-xs text-slate-300 font-medium">{assignee.name}</span>
-                                                                                    <span className="text-[9px] text-emerald-500 font-bold uppercase">Assigned</span>
-                                                                                </div>
-                                                                            </div>
+                                                                            <>
+                                                                                <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-[8px] font-bold text-[#556070] ring-1 ring-white/5">{assignee.name.charAt(0)}</div>
+                                                                                <span className="text-xs text-slate-300">{assignee.name}</span>
+                                                                            </>
                                                                         ) : (
-                                                                            <div className="flex items-center space-x-2">
-                                                                                <div className="w-7 h-7 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[10px] font-bold text-slate-500">?</div>
-                                                                                <div className="flex flex-col">
-                                                                                    <span className="text-xs text-slate-500 italic">No Assignee</span>
-                                                                                    <span className="text-[9px] text-slate-500 font-bold uppercase">Unassigned</span>
-                                                                                </div>
-                                                                            </div>
+                                                                            <>
+                                                                                <div className="w-5 h-5 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[8px] text-slate-500">?</div>
+                                                                                <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                            </>
                                                                         )}
-                                                                    </td>
-                                                                    <td className="px-6 py-5">
-                                                                        <div className="flex justify-center items-center gap-2">
-                                                                            <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                                                                task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
-                                                                                    task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
-                                                                                        'bg-slate-800 text-slate-400 border border-white/10'
-                                                                                }`}>
-                                                                                {task.status === 'NOT_STARTED' ? 'Not Started' : task.status.replace('_', ' ')}
-                                                                            </span>
-
-
-                                                                        </div>
-                                                                    </td>
-                                                                    <td className="px-6 py-5 font-mono text-[11px] text-slate-400">
-                                                                        {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No deadline'}
-                                                                    </td>
-                                                                </tr>
-                                                            );
-                                                        })}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <div className="text-center py-12 text-slate-500">
-                                            <span className="material-symbols-outlined text-5xl opacity-50">task_alt</span>
-                                            <p className="mt-2">No tasks created yet.</p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Right Column: Sidebar */}
-                                <div className="w-full lg:w-96 space-y-6 shrink-0 mt-1">
-                                    {/* Stats */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Project Stats</h4>
-                                        <div className="flex gap-4">
-                                            <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Tasks</p>
-                                                <p className="text-2xl font-bold text-[#556070]">{projectTasks.length}</p>
-                                            </div>
-                                            <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</p>
-                                                <p className="text-2xl font-bold text-emerald-500">{projectTasks.filter(t => t.status === 'COMPLETED').length.toString().padStart(2, '0')}</p>
-                                            </div>
-                                        </div>
-                                        <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl w-full" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                            <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">In Progress</p>
-                                            <div className="flex items-end justify-between">
-                                                <p className="text-2xl font-bold text-[#556070]">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
-                                                {projectTasks.length > 0 && (
-                                                    <span className="text-xs text-blue-400 font-bold">
-                                                        {Math.round((projectTasks.filter(t => t.status === 'IN_PROGRESS').length / projectTasks.length) * 100)}% Active
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Assigned Manager */}
-                                    <div className="space-y-4">
-                                        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Assigned Manager</h4>
-                                        {selectedProject.managerName ? (
-                                            <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-4" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                                                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-bold text-[#556070] shadow-lg shadow-blue-900/40">
-                                                    {selectedProject.managerName.charAt(0)}
+                                                                    </div>
+                                                                    <div className="text-[10px] text-slate-400 font-mono">
+                                                                        {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'No Date'}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                                <div>
-                                                    <h5 className="text-[#556070] font-bold leading-tight">{selectedProject.managerName}</h5>
-                                                    <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Project Manager</p>
+                                                <div className="hidden md:block bg-white/5 border border-white/5 rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                    <table className="w-full text-left border-collapse">
+                                                        <thead>
+                                                            <tr className="bg-white/5 border-b border-white/5">
+                                                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
+                                                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
+                                                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
+                                                                <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-white/5">
+                                                            {projectTasks.map((task) => {
+                                                                const assignee = users.find(u => u.id === task.assigneeId);
+                                                                return (
+                                                                    <tr key={task.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                                        <td className="px-6 py-5">
+                                                                            <div className="font-semibold text-[#556070] text-sm">{task.title}</div>
+                                                                            {task.description && <div className="text-[11px] text-slate-500 mt-1">{task.description.substring(0, 50)}</div>}
+                                                                        </td>
+                                                                        <td className="px-6 py-5">
+                                                                            {assignee ? (
+                                                                                <div className="flex items-center space-x-2">
+                                                                                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-[10px] font-bold text-[#556070] ring-2 ring-white/5">
+                                                                                        {assignee.name.charAt(0)}
+                                                                                    </div>
+                                                                                    <div className="flex flex-col">
+                                                                                        <span className="text-xs text-slate-300 font-medium">{assignee.name}</span>
+                                                                                        <span className="text-[9px] text-emerald-500 font-bold uppercase">Assigned</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex items-center space-x-2">
+                                                                                    <div className="w-7 h-7 rounded-full border border-dashed border-white/20 flex items-center justify-center text-[10px] font-bold text-slate-500">?</div>
+                                                                                    <div className="flex flex-col">
+                                                                                        <span className="text-xs text-slate-500 italic">No Assignee</span>
+                                                                                        <span className="text-[9px] text-slate-500 font-bold uppercase">Unassigned</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-6 py-5">
+                                                                            <div className="flex justify-center items-center gap-2">
+                                                                                <span className={`px-2.5 py-1 text-[10px] font-bold rounded-full uppercase tracking-wider ${task.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                                                                                    task.status === 'IN_PROGRESS' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                                                                                        task.status === 'WAITING_APPROVAL' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                                                                                            'bg-slate-800 text-slate-400 border border-white/10'
+                                                                                    }`}>
+                                                                                    {task.status === 'NOT_STARTED' ? 'Not Started' : task.status.replace('_', ' ')}
+                                                                                </span>
+
+
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-6 py-5 font-mono text-[11px] text-slate-400">
+                                                                            {(task.deadline || task.dueDate) ? new Date((task.deadline || task.dueDate)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'No deadline'}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
                                                 </div>
-                                            </div>
+                                            </>
                                         ) : (
-                                            <div className="bg-slate-800/30 border border-slate-700/50 border-dashed p-4 rounded-2xl text-center text-slate-500 italic text-sm">
-                                                No manager assigned
+                                            <div className="text-center py-12 text-slate-500">
+                                                <span className="material-symbols-outlined text-5xl opacity-50">task_alt</span>
+                                                <p className="mt-2">No tasks created yet.</p>
                                             </div>
                                         )}
                                     </div>
 
-                                    {/* Team Members */}
-                                    <div className="space-y-4">
-                                        <div className="flex items-center justify-between">
-                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Team Members ({getTeamMembers(selectedProject).length})</h4>
-                                            <button
-                                                onClick={() => { setShowDetailsModal(false); setShowTeamModal(true); }}
-                                                className="text-[10px] font-bold text-blue-400 hover:underline uppercase"
-                                            >
-                                                View All
-                                            </button>
-                                        </div>
-                                        <div className="space-y-3">
-                                            {getTeamMembers(selectedProject).length > 0 ? getTeamMembers(selectedProject).slice(0, 3).map((member) => (
-                                                <div key={member.id} className="flex items-center justify-between group">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/5 overflow-hidden flex items-center justify-center">
-                                                            <div className="text-[10px] text-slate-400">{member.name.substring(0, 2).toUpperCase()}</div>
-                                                        </div>
-                                                        <span className="text-sm text-slate-300">{member.name}</span>
-                                                    </div>
-                                                    <span className="text-[9px] font-bold text-slate-600 group-hover:text-blue-400 uppercase transition-colors">{member.role}</span>
+                                    {/* Right Column: Sidebar */}
+                                    <div className="w-full lg:w-96 space-y-6 shrink-0 mt-1">
+                                        {/* Stats */}
+                                        <div className="space-y-4">
+                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Project Stats</h4>
+                                            <div className="flex gap-4">
+                                                <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Tasks</p>
+                                                    <p className="text-2xl font-bold text-[#556070]">{projectTasks.length}</p>
                                                 </div>
-                                            )) : (
-                                                <p className="text-slate-500 text-sm">No team members</p>
+                                                <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</p>
+                                                    <p className="text-2xl font-bold text-emerald-500">{projectTasks.filter(t => t.status === 'COMPLETED').length.toString().padStart(2, '0')}</p>
+                                                </div>
+                                            </div>
+                                            <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl w-full" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">In Progress</p>
+                                                <div className="flex items-end justify-between">
+                                                    <p className="text-2xl font-bold text-[#556070]">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
+                                                    {projectTasks.length > 0 && (
+                                                        <span className="text-xs text-blue-400 font-bold">
+                                                            {Math.round((projectTasks.filter(t => t.status === 'IN_PROGRESS').length / projectTasks.length) * 100)}% Active
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Assigned Manager */}
+                                        <div className="space-y-4">
+                                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Assigned Manager</h4>
+                                            {selectedProject.managerName ? (
+                                                <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-4" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                                                    <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-xl font-bold text-[#556070] shadow-lg shadow-blue-900/40">
+                                                        {selectedProject.managerName.charAt(0)}
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="text-[#556070] font-bold leading-tight">{selectedProject.managerName}</h5>
+                                                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-wider">Project Manager</p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="bg-slate-800/30 border border-slate-700/50 border-dashed p-4 rounded-2xl text-center text-slate-500 italic text-sm">
+                                                    No manager assigned
+                                                </div>
                                             )}
+                                        </div>
+
+                                        {/* Team Members */}
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between">
+                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Team Members ({getTeamMembers(selectedProject).length})</h4>
+                                                <button
+                                                    onClick={() => { setShowDetailsModal(false); setShowTeamModal(true); }}
+                                                    className="text-[10px] font-bold text-blue-400 hover:underline uppercase"
+                                                >
+                                                    View All
+                                                </button>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {getTeamMembers(selectedProject).length > 0 ? getTeamMembers(selectedProject).slice(0, 3).map((member) => (
+                                                    <div key={member.id} className="flex items-center justify-between group">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-slate-800 border border-white/5 overflow-hidden flex items-center justify-center">
+                                                                <div className="text-[10px] text-slate-400">{member.name.substring(0, 2).toUpperCase()}</div>
+                                                            </div>
+                                                            <span className="text-sm text-slate-300">{member.name}</span>
+                                                        </div>
+                                                        <span className="text-[9px] font-bold text-slate-600 group-hover:text-blue-400 uppercase transition-colors">{member.role}</span>
+                                                    </div>
+                                                )) : (
+                                                    <p className="text-slate-500 text-sm">No team members</p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* Footer */}

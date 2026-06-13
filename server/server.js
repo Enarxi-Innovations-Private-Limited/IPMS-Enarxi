@@ -13,7 +13,7 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const connectDB = require('./db');
-const { User, Project, Task, Activity, Notification } = require('./models');
+const { User, Project, Task, ProductionAssignment, ProductionDispatch, Activity, Notification } = require('./models');
 const inventoryRoutes = require('./inventoryRoutes');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -21,6 +21,20 @@ const PORT = Number(process.env.PORT || 5000);
 const CLIENT_URL = (process.env.CLIENT_URL || '').trim();
 const BOM_URL = (process.env.BOM_URL || 'http://127.0.0.1:8100').trim();
 const INVENTORY_API_URL = (process.env.INVENTORY_API_URL || (NODE_ENV === 'production' ? '' : 'http://127.0.0.1:5001')).trim();
+const PCB_PRODUCTION_PHASES = [
+    'Procurement',
+    'Component delivery',
+    'Smd soldering',
+    'Smd rework',
+    'Controller soldering',
+    'Dip soldering',
+    'Board cleaning',
+    'Electrical testing',
+    'Peripheral testing',
+    'Functionality testing',
+    'Conformal coating',
+    'Final qc'
+];
 const ADDITIONAL_ALLOWED_ORIGINS = (process.env.ADDITIONAL_ALLOWED_ORIGINS || '')
     .split(',')
     .map((origin) => origin.trim())
@@ -305,6 +319,129 @@ async function fetchMicrosoftProfile(accessToken) {
 // Helper to validate ObjectId
 const isValidObjectId = (id) => {
     return mongoose.Types.ObjectId.isValid(id);
+};
+
+const deriveProductionTaskStatus = (task, allowedCompleted) => {
+    const current = Number(task.unitsCurrentlyHere || 0);
+    const completed = Number(task.unitsCompleted || 0);
+    const allowed = Math.max(0, Number(allowedCompleted || 0));
+
+    if (completed === 0 && current === 0) return 'NOT_STARTED';
+    if (allowed > 0 && completed >= allowed && current === 0) return 'COMPLETED';
+    return 'IN_PROGRESS';
+};
+
+const deriveProductionAssignmentStatus = (assignment) => {
+    const assigned = Number(assignment.boardsAssigned || 0);
+    const completed = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+
+    if (assigned === 0 && completed === 0) return 'NOT_STARTED';
+    if (assignment.delayStatus === 'REJECTED') return 'REJECTED';
+    if (Number(assignment.boardsCompletedDraft || 0) > completed) return 'WAITING_APPROVAL';
+    if (assigned > 0 && completed >= assigned) return 'COMPLETED';
+    return 'IN_PROGRESS';
+};
+
+const calculateAllocatedMinutes = (assignedAt, deadline) => {
+    if (!assignedAt || !deadline) return null;
+    const minutes = Math.round((new Date(deadline).getTime() - new Date(assignedAt).getTime()) / (1000 * 60));
+    return minutes > 0 ? minutes : 0;
+};
+
+const calculateActualMinutes = (assignedAt, completedAt) => {
+    if (!assignedAt || !completedAt) return null;
+    const minutes = Math.round((new Date(completedAt).getTime() - new Date(assignedAt).getTime()) / (1000 * 60));
+    return minutes > 0 ? minutes : 1;
+};
+
+const syncProductionProjectState = async (projectId) => {
+    const project = await Project.findById(projectId);
+    if (!project || project.projectType !== 'PRODUCTION') {
+        return { project: null, tasks: [] };
+    }
+
+    const tasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
+    const assignments = await ProductionAssignment.find({ projectId }).sort({ createdAt: 1 });
+    const assignmentsByTaskId = assignments.reduce((acc, assignment) => {
+        const key = assignment.taskId.toString();
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(assignment);
+        return acc;
+    }, {});
+    const now = new Date();
+
+    for (const assignment of assignments) {
+        assignment.boardsCompleted = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+        assignment.allocatedMinutes = calculateAllocatedMinutes(assignment.assignedAt, assignment.deadline);
+        assignment.actualMinutes = assignment.status === 'COMPLETED'
+            ? calculateActualMinutes(assignment.assignedAt, assignment.completedAt)
+            : assignment.actualMinutes;
+        assignment.status = deriveProductionAssignmentStatus(assignment);
+        assignment.completedAt = assignment.status === 'COMPLETED' ? (assignment.completedAt || now) : null;
+        if (assignment.status !== 'COMPLETED') {
+            assignment.actualMinutes = null;
+            assignment.performanceScore = null;
+        } else if (assignment.allocatedMinutes && assignment.actualMinutes) {
+            if (assignment.delayStatus === 'APPROVED') {
+                assignment.actualMinutes = assignment.allocatedMinutes;
+                assignment.performanceScore = 100;
+            } else {
+                assignment.performanceScore = Math.min(100, Math.round((assignment.allocatedMinutes / assignment.actualMinutes) * 100));
+            }
+        }
+        await assignment.save();
+    }
+
+    for (let index = 0; index < tasks.length; index += 1) {
+        const task = tasks[index];
+        const allowedCompleted = index === 0
+            ? Number(project.totalBatchSize || 0)
+            : Number(tasks[index - 1]?.unitsCompleted || 0);
+        const taskAssignments = assignmentsByTaskId[task._id.toString()] || [];
+
+        if (taskAssignments.length > 0) {
+            task.unitsCompleted = taskAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0), 0);
+            task.assigneeId = taskAssignments.length === 1 ? taskAssignments[0].userId : null;
+            task.assignedAt = taskAssignments[0]?.assignedAt || task.assignedAt || now;
+        }
+
+        task.unitsCurrentlyHere = Math.max(0, allowedCompleted - Number(task.unitsCompleted || 0));
+
+        const nextStatus = deriveProductionTaskStatus(task, allowedCompleted);
+        task.status = nextStatus;
+
+        if (nextStatus === 'COMPLETED') {
+            if (!task.completedAt) task.completedAt = now;
+        } else {
+            task.completedAt = null;
+        }
+
+        if (task.assigneeId && !task.assignedAt) {
+            task.assignedAt = now;
+        }
+    }
+
+    if (tasks.length > 0) {
+        await Promise.all(tasks.map((task) => task.save()));
+    }
+
+    const finalTask = tasks[tasks.length - 1];
+    const hasMeaningfulProgress = tasks.some((task) => Number(task.unitsCompleted || 0) > 0);
+
+    if (
+        finalTask &&
+        Number(finalTask.unitsCompleted || 0) >= Number(project.totalBatchSize || 0) &&
+        Number(finalTask.unitsCurrentlyHere || 0) === 0
+    ) {
+        project.status = 'COMPLETED';
+    } else if (hasMeaningfulProgress) {
+        project.status = 'ACTIVE';
+    } else {
+        project.status = 'PLANNING';
+    }
+
+    await project.save();
+    return { project, tasks };
 };
 
 // Configure multer for file uploads
@@ -1168,6 +1305,8 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
                 teamIds: Array.isArray(p.teamIds) ? p.teamIds : [],
                 templateUsed: p.templateUsed,
                 attachments: Array.isArray(p.attachments) ? p.attachments : [],
+                projectType: p.projectType || 'GENERAL',
+                totalBatchSize: Number(p.totalBatchSize || 0),
                 taskCount,
                 completedTaskCount,
             };
@@ -1282,6 +1421,8 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
             teamIds: project.teamIds.map(id => id.toString()),
             templateUsed: project.templateUsed,
             attachments: project.attachments,
+            projectType: project.projectType || 'GENERAL',
+            totalBatchSize: Number(project.totalBatchSize || 0),
         });
     } catch (err) {
         res.status(500).json({ message: err.message });
@@ -1290,8 +1431,8 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
 
 app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
     try {
-        const { name, description, department, managerId, startDate, deadline, endDate, budget, templateName, teamIds } = req.body;
-        console.log('Creating project:', { name, department, managerId, startDate, deadline, endDate });
+        const { name, description, department, managerId, startDate, deadline, endDate, budget, templateName, teamIds, projectType, totalBatchSize } = req.body;
+        console.log('Creating project:', { name, department, managerId, startDate, deadline, endDate, projectType, totalBatchSize });
 
         if (!name) return res.status(400).json({ message: 'Project name is required' });
 
@@ -1304,7 +1445,7 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
         const project = await Project.create({
             name,
             description: description || '',
-            department: department || 'SOFTWARE',
+            department: projectType === 'PRODUCTION' ? 'HARDWARE' : (department || 'SOFTWARE'),
             status: 'PLANNING',
             managerId: managerId || null,
             startDate: startDate || new Date(),
@@ -1313,6 +1454,8 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
             templateUsed: templateName || '',
             teamIds: teamIds || [],
             createdBy: req.user._id,
+            projectType: projectType || 'GENERAL',
+            totalBatchSize: projectType === 'PRODUCTION' ? (Number(totalBatchSize) || 100) : 0,
         });
 
         // Notify Manager
@@ -1325,8 +1468,29 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
             });
         }
 
-        // Auto-create tasks from template if template is selected
-        if (templateName && department) {
+        // Seeding production tasks or template tasks
+        if (projectType === 'PRODUCTION') {
+            const batchSize = Number(totalBatchSize) || 100;
+            for (let i = 0; i < PCB_PRODUCTION_PHASES.length; i++) {
+                const phaseName = PCB_PRODUCTION_PHASES[i];
+                await Task.create({
+                    title: phaseName,
+                    description: `Production phase: ${phaseName}`,
+                    status: i === 0 ? 'IN_PROGRESS' : 'NOT_STARTED',
+                    projectId: project._id,
+                    assigneeId: managerId || null,
+                    assignedAt: managerId ? new Date() : null,
+                    createdBy: req.user._id,
+                    isProductionTask: true,
+                    productionPhase: phaseName,
+                    sequence: i + 1,
+                    unitsCompleted: 0,
+                    unitsCurrentlyHere: i === 0 ? batchSize : 0
+                });
+            }
+            await syncProductionProjectState(project._id);
+            console.log(`Created ${PCB_PRODUCTION_PHASES.length} production tasks for project ${project.projectCode}`);
+        } else if (templateName && department) {
             const templateTasks = getTemplateTasks(department.toUpperCase(), templateName);
             for (const task of templateTasks) {
                 await Task.create({
@@ -1340,7 +1504,7 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
                     order: task.order,
                 });
             }
-            console.log(`✅ Created ${templateTasks.length} tasks from template "${templateName}" and assigned to Manager`);
+            console.log(`Created ${templateTasks.length} tasks from template "${templateName}" and assigned to Manager`);
         }
 
         // Create dedicated folder for project attachments using projectCode_projectId format
@@ -1368,11 +1532,13 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
             budget: project.budget,
             managerId: project.managerId,
             templateUsed: project.templateUsed,
-            teamIds: project.teamIds
+            teamIds: project.teamIds,
+            projectType: project.projectType,
+            totalBatchSize: project.totalBatchSize
         });
     } catch (err) {
         console.error('Error creating project:', err);
-        res.status(500).json({ message: 'Failed to create project' });
+        res.status(500).json({ message: 'Failed to create project', error: err.message });
     }
 });
 
@@ -2060,7 +2226,718 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
     }
 });
 
+app.put('/api/projects/:projectId/production/tasks/:taskId', authMiddleware, async (req, res) => {
+    try {
+        const { projectId, taskId } = req.params;
+        const { unitsCompleted, assigneeId } = req.body;
+
+        if (!isValidObjectId(projectId) || !isValidObjectId(taskId)) {
+            return res.status(400).json({ message: 'Invalid project or task ID.' });
+        }
+
+        if (!Number.isInteger(unitsCompleted) || unitsCompleted < 0) {
+            return res.status(400).json({ message: 'unitsCompleted must be a whole number greater than or equal to 0.' });
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.projectType !== 'PRODUCTION') {
+            return res.status(400).json({ message: 'Only production projects support direct phase updates.' });
+        }
+        if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the assigned manager can update production phase counts.' });
+        }
+
+        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
+        const task = productionTasks.find((item) => item._id.toString() === taskId);
+        if (!task) {
+            return res.status(404).json({ message: 'Production phase task not found.' });
+        }
+        const existingAssignments = await ProductionAssignment.find({ projectId, taskId });
+        if (existingAssignments.length > 0) {
+            return res.status(400).json({ message: 'This phase uses split worker allocations. Update the worker allocation rows instead of the phase total.' });
+        }
+
+        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
+        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
+        const totalAvailable = previousTask
+            ? Number(previousTask.unitsCompleted || 0)
+            : Number(project.totalBatchSize || 0);
+
+        if (unitsCompleted > totalAvailable) {
+            return res.status(400).json({
+                message: previousTask
+                    ? `${task.productionPhase || task.title} cannot exceed ${totalAvailable} board(s) completed in the previous phase.`
+                    : `The first phase cannot exceed the total batch size of ${project.totalBatchSize}.`
+            });
+        }
+
+        const nextTask = productionTasks[taskIndex + 1];
+        if (nextTask) {
+            const nextTaskDemand = Number(nextTask.unitsCurrentlyHere || 0) + Number(nextTask.unitsCompleted || 0);
+            if (unitsCompleted < nextTaskDemand) {
+                return res.status(400).json({
+                    message: `${task.productionPhase || task.title} completed boards cannot be less than ${nextTaskDemand}, because the next phase already uses that quantity.`
+                });
+            }
+        }
+
+        if (task.sequence === PCB_PRODUCTION_PHASES.length && unitsCompleted > Number(project.totalBatchSize || 0)) {
+            return res.status(400).json({ message: `Final qc completed units cannot exceed the total batch size of ${project.totalBatchSize}.` });
+        }
+
+        const previousAssigneeId = task.assigneeId ? task.assigneeId.toString() : null;
+
+        if (assigneeId !== undefined && assigneeId !== null && assigneeId !== '') {
+            if (!isValidObjectId(assigneeId)) {
+                return res.status(400).json({ message: 'Invalid assignee ID.' });
+            }
+
+            const assignee = await User.findById(assigneeId).select('_id name');
+            if (!assignee) {
+                return res.status(404).json({ message: 'Assigned worker not found.' });
+            }
+
+            const teamMemberIds = (project.teamIds || []).map((id) => id.toString());
+            const isProjectManager = project.managerId && project.managerId.toString() === assigneeId.toString();
+            const isProjectTeamMember = teamMemberIds.includes(assigneeId.toString());
+
+            if (!isProjectManager && !isProjectTeamMember) {
+                return res.status(400).json({ message: 'Assigned worker must belong to this production project team.' });
+            }
+
+            task.assigneeId = assignee._id;
+            if (!task.assignedAt || previousAssigneeId !== assignee._id.toString()) {
+                task.assignedAt = new Date();
+            }
+        } else if (assigneeId !== undefined) {
+            task.assigneeId = null;
+            task.assignedAt = null;
+        }
+
+        task.unitsCompleted = unitsCompleted;
+        await task.save();
+
+        const { project: syncedProject } = await syncProductionProjectState(projectId);
+        const updatedTask = await Task.findById(taskId).populate('assigneeId', 'name');
+
+        await logActivity(
+            'PRODUCTION_PHASE_UPDATED',
+            `Updated ${task.productionPhase || task.title} to ${unitsCompleted} completed boards${updatedTask?.assigneeId?.name ? ` and assigned ${updatedTask.assigneeId.name}` : ''}`,
+            req.user._id,
+            req.user.name,
+            project._id,
+            project.name
+        );
+
+        res.json({
+            success: true,
+            message: `${task.productionPhase || task.title} updated successfully.`,
+            task: {
+                id: updatedTask._id,
+                _id: updatedTask._id,
+                title: updatedTask.title,
+                description: updatedTask.description,
+                status: updatedTask.status,
+                projectId: updatedTask.projectId,
+                assigneeId: updatedTask.assigneeId?._id || null,
+                assigneeName: updatedTask.assigneeId?.name || '',
+                isProductionTask: updatedTask.isProductionTask || false,
+                productionPhase: updatedTask.productionPhase || '',
+                sequence: updatedTask.sequence || 0,
+                unitsCompleted: updatedTask.unitsCompleted || 0,
+                unitsCurrentlyHere: updatedTask.unitsCurrentlyHere || 0
+            },
+            projectStatus: syncedProject?.status || project.status
+        });
+    } catch (err) {
+        console.error('❌ [Production Phase Update]: Error:', err);
+        res.status(500).json({ message: 'Failed to update production phase', error: err.message });
+    }
+});
+
+app.get('/api/projects/:projectId/production/assignments', authMiddleware, async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        if (!isValidObjectId(projectId)) {
+            return res.status(400).json({ message: 'Invalid project ID.' });
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.projectType !== 'PRODUCTION') {
+            return res.status(400).json({ message: 'Only production projects support worker allocations.' });
+        }
+
+        const assignments = await ProductionAssignment.find({ projectId })
+            .populate('userId', 'name role department')
+            .populate('taskId', 'productionPhase title sequence')
+            .sort({ createdAt: 1 });
+
+        res.json(assignments.map((assignment) => ({
+            id: assignment._id,
+            _id: assignment._id,
+            projectId: assignment.projectId,
+            taskId: assignment.taskId?._id || assignment.taskId,
+            taskTitle: assignment.taskId?.productionPhase || assignment.taskId?.title || '',
+            sequence: assignment.taskId?.sequence || 0,
+            userId: assignment.userId?._id || assignment.userId,
+            userName: assignment.userId?.name || '',
+            userRole: assignment.userId?.role || '',
+            boardsAssigned: Number(assignment.boardsAssigned || 0),
+            boardsCompleted: Number(assignment.boardsCompleted || 0),
+            boardsCompletedDraft: Number(assignment.boardsCompletedDraft || 0),
+            boardsCompletedApproved: Number(assignment.boardsCompletedApproved || 0),
+            status: assignment.status || 'NOT_STARTED',
+            assignedAt: assignment.assignedAt,
+            deadline: assignment.deadline,
+            allocatedMinutes: assignment.allocatedMinutes,
+            actualMinutes: assignment.actualMinutes,
+            performanceScore: assignment.performanceScore,
+            delayStatus: assignment.delayStatus || 'NONE',
+            delayReason: assignment.delayReason || '',
+            delayRequestedAt: assignment.delayRequestedAt,
+            rejectionReason: assignment.rejectionReason || '',
+        })));
+    } catch (err) {
+        console.error('❌ [Production Assignments Load]: Error:', err);
+        res.status(500).json({ message: 'Failed to load production assignments', error: err.message });
+    }
+});
+
+app.get('/api/my/production-assignments', authMiddleware, async (req, res) => {
+    try {
+        const assignments = await ProductionAssignment.find({ userId: req.user._id })
+            .populate('projectId', 'name projectCode deadline')
+            .populate('taskId', 'productionPhase title sequence')
+            .sort({ createdAt: -1 });
+
+        res.json(assignments.map((assignment) => ({
+            id: assignment._id,
+            _id: assignment._id,
+            projectId: assignment.projectId?._id || assignment.projectId,
+            projectName: assignment.projectId?.name || 'Unknown',
+            projectCode: assignment.projectId?.projectCode || '',
+            taskId: assignment.taskId?._id || assignment.taskId,
+            productionPhase: assignment.taskId?.productionPhase || assignment.taskId?.title || '',
+            sequence: assignment.taskId?.sequence || 0,
+            boardsAssigned: Number(assignment.boardsAssigned || 0),
+            boardsCompleted: Number(assignment.boardsCompleted || 0),
+            boardsCompletedDraft: Number(assignment.boardsCompletedDraft || 0),
+            boardsCompletedApproved: Number(assignment.boardsCompletedApproved || 0),
+            status: assignment.status || 'NOT_STARTED',
+            deadline: assignment.deadline,
+            assignedAt: assignment.assignedAt,
+            completedAt: assignment.completedAt,
+            allocatedMinutes: assignment.allocatedMinutes,
+            actualMinutes: assignment.actualMinutes,
+            performanceScore: assignment.performanceScore,
+            delayStatus: assignment.delayStatus || 'NONE',
+            delayReason: assignment.delayReason || '',
+            delayRequestedAt: assignment.delayRequestedAt,
+            rejectionReason: assignment.rejectionReason || '',
+        })));
+    } catch (err) {
+        console.error('❌ [My Production Assignments]: Error:', err);
+        res.status(500).json({ message: 'Failed to load my production assignments', error: err.message });
+    }
+});
+
+app.put('/api/production/assignments/:assignmentId/progress', authMiddleware, async (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        const { boardsCompletedDraft, delayReason } = req.body;
+
+        if (!isValidObjectId(assignmentId)) {
+            return res.status(400).json({ message: 'Invalid assignment ID.' });
+        }
+        if (!Number.isInteger(boardsCompletedDraft) || boardsCompletedDraft < 0) {
+            return res.status(400).json({ message: 'boardsCompletedDraft must be a whole number greater than or equal to 0.' });
+        }
+
+        const assignment = await ProductionAssignment.findById(assignmentId).populate('taskId', 'productionPhase title');
+        if (!assignment) return res.status(404).json({ message: 'Production assignment not found.' });
+        if (assignment.userId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'You can only update your own production allocation progress.' });
+        }
+
+        const approved = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+        if (boardsCompletedDraft < approved) {
+            return res.status(400).json({ message: 'Draft completed boards cannot be less than already approved completed boards.' });
+        }
+        if (boardsCompletedDraft > Number(assignment.boardsAssigned || 0)) {
+            return res.status(400).json({ message: 'Draft completed boards cannot exceed assigned boards.' });
+        }
+
+        const now = new Date();
+        const isOverdue = assignment.deadline && now > new Date(assignment.deadline) && boardsCompletedDraft > approved;
+        if (isOverdue && !String(delayReason || '').trim()) {
+            return res.status(400).json({ message: 'Delay reason is required when submitting completed boards after the deadline.' });
+        }
+
+        assignment.boardsCompletedDraft = boardsCompletedDraft;
+        assignment.delayReason = isOverdue ? String(delayReason).trim() : '';
+        assignment.delayStatus = isOverdue ? 'PENDING_MANAGER' : 'NONE';
+        assignment.delayRequestedAt = isOverdue ? now : null;
+        assignment.status = boardsCompletedDraft > approved ? 'WAITING_APPROVAL' : deriveProductionAssignmentStatus(assignment);
+        await assignment.save();
+
+        res.json({
+            success: true,
+            message: `${assignment.taskId?.productionPhase || assignment.taskId?.title || 'Production allocation'} progress submitted for review.`,
+        });
+    } catch (err) {
+        console.error('❌ [Production Progress Submit]: Error:', err);
+        res.status(500).json({ message: 'Failed to submit production progress', error: err.message });
+    }
+});
+
+app.put('/api/production/assignments/:assignmentId/review', authMiddleware, requireRole(roles.MANAGER, roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        const { approved, rejectionReason } = req.body;
+
+        if (!isValidObjectId(assignmentId)) {
+            return res.status(400).json({ message: 'Invalid assignment ID.' });
+        }
+
+        const assignment = await ProductionAssignment.findById(assignmentId);
+        if (!assignment) return res.status(404).json({ message: 'Production assignment not found.' });
+
+        const project = await Project.findById(assignment.projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found.' });
+        const isAssignedManager = project.managerId && project.managerId.toString() === req.user._id.toString();
+        const isSuper = [roles.SUPER_USER, roles.SUPER_ADMIN].includes(req.user.role);
+        if (!isAssignedManager && !isSuper) {
+            return res.status(403).json({ message: 'Only the assigned manager or super admin can review this production submission.' });
+        }
+
+        if (assignment.status !== 'WAITING_APPROVAL') {
+            return res.status(400).json({ message: 'This production assignment is not waiting for approval.' });
+        }
+
+        const nextApproved = Number(assignment.boardsCompletedDraft || 0);
+        if (approved) {
+            assignment.boardsCompletedApproved = nextApproved;
+            assignment.boardsCompleted = nextApproved;
+            assignment.boardsCompletedDraft = nextApproved;
+            assignment.completedAt = nextApproved >= Number(assignment.boardsAssigned || 0) ? new Date() : null;
+            assignment.delayStatus = assignment.delayStatus === 'PENDING_MANAGER' ? 'APPROVED' : assignment.delayStatus;
+            assignment.managerDelayApproved = assignment.delayStatus === 'APPROVED';
+            assignment.managerDelayReviewedBy = req.user._id;
+            assignment.managerDelayReviewedAt = new Date();
+            assignment.rejectionReason = '';
+        } else {
+            if (!String(rejectionReason || '').trim()) {
+                return res.status(400).json({ message: 'Rejection reason is required when rejecting a production submission.' });
+            }
+            assignment.boardsCompletedDraft = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+            assignment.delayStatus = 'REJECTED';
+            assignment.managerDelayApproved = false;
+            assignment.managerDelayReviewedBy = req.user._id;
+            assignment.managerDelayReviewedAt = new Date();
+            assignment.rejectionReason = String(rejectionReason).trim();
+        }
+
+        assignment.status = deriveProductionAssignmentStatus(assignment);
+        await assignment.save();
+        await syncProductionProjectState(assignment.projectId);
+
+        res.json({
+            success: true,
+            message: approved ? 'Production submission approved.' : 'Production submission rejected.',
+        });
+    } catch (err) {
+        console.error('❌ [Production Progress Review]: Error:', err);
+        res.status(500).json({ message: 'Failed to review production progress', error: err.message });
+    }
+});
+
+app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMiddleware, async (req, res) => {
+    try {
+        const { projectId, taskId } = req.params;
+        const { userId, boardsAssigned, deadline } = req.body;
+
+        if (!isValidObjectId(projectId) || !isValidObjectId(taskId) || !isValidObjectId(userId)) {
+            return res.status(400).json({ message: 'Invalid project, task, or worker ID.' });
+        }
+
+        if (!Number.isInteger(boardsAssigned) || boardsAssigned < 0) {
+            return res.status(400).json({ message: 'boardsAssigned must be a whole number greater than or equal to 0.' });
+        }
+        if (!deadline) {
+            return res.status(400).json({ message: 'Deadline is required for production worker allocation.' });
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.projectType !== 'PRODUCTION') {
+            return res.status(400).json({ message: 'Only production projects support worker allocations.' });
+        }
+        if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the assigned manager can create production worker allocations.' });
+        }
+
+        const task = await Task.findOne({ _id: taskId, projectId, isProductionTask: true });
+        if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
+
+        const worker = await User.findById(userId).select('_id name');
+        if (!worker) return res.status(404).json({ message: 'Assigned worker not found.' });
+
+        const teamMemberIds = (project.teamIds || []).map((id) => id.toString());
+        const isProjectManager = project.managerId && project.managerId.toString() === userId.toString();
+        if (!isProjectManager && !teamMemberIds.includes(userId.toString())) {
+            return res.status(400).json({ message: 'Assigned worker must belong to this production project team.' });
+        }
+
+        const existing = await ProductionAssignment.findOne({ projectId, taskId, userId });
+        if (existing) {
+            return res.status(400).json({ message: 'This worker already has an allocation for the selected production phase.' });
+        }
+
+        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
+        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
+        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
+        const totalAvailable = previousTask
+            ? Number(previousTask.unitsCompleted || 0)
+            : Number(project.totalBatchSize || 0);
+
+        const existingAssignments = await ProductionAssignment.find({ projectId, taskId });
+        const assignedAlready = existingAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsAssigned || 0), 0);
+
+        if (assignedAlready + boardsAssigned > totalAvailable) {
+            return res.status(400).json({ message: `Assigned boards exceed available boards for ${task.productionPhase || task.title}. Remaining allocatable boards: ${Math.max(0, totalAvailable - assignedAlready)}.` });
+        }
+
+        const assignment = await ProductionAssignment.create({
+            projectId,
+            taskId,
+            userId,
+            boardsAssigned,
+            boardsCompleted: 0,
+            boardsCompletedDraft: 0,
+            boardsCompletedApproved: 0,
+            deadline: new Date(deadline),
+            allocatedMinutes: calculateAllocatedMinutes(new Date(), new Date(deadline)),
+            delayStatus: 'NONE',
+            status: deriveProductionAssignmentStatus({ boardsAssigned, boardsCompletedApproved: 0, boardsCompletedDraft: 0 }),
+            assignedBy: req.user._id,
+            assignedAt: new Date(),
+            completedAt: null,
+        });
+
+        const { project: syncedProject } = await syncProductionProjectState(projectId);
+        const populatedAssignment = await ProductionAssignment.findById(assignment._id).populate('userId', 'name role');
+
+        res.status(201).json({
+            success: true,
+            message: `${worker.name} assigned to ${task.productionPhase || task.title}.`,
+            assignment: {
+                id: populatedAssignment._id,
+                _id: populatedAssignment._id,
+                projectId: populatedAssignment.projectId,
+                taskId: populatedAssignment.taskId,
+                userId: populatedAssignment.userId?._id || populatedAssignment.userId,
+                userName: populatedAssignment.userId?.name || '',
+                userRole: populatedAssignment.userId?.role || '',
+                boardsAssigned: Number(populatedAssignment.boardsAssigned || 0),
+                boardsCompleted: Number(populatedAssignment.boardsCompleted || 0),
+                boardsCompletedDraft: Number(populatedAssignment.boardsCompletedDraft || 0),
+                boardsCompletedApproved: Number(populatedAssignment.boardsCompletedApproved || 0),
+                status: populatedAssignment.status || 'NOT_STARTED',
+                assignedAt: populatedAssignment.assignedAt,
+                deadline: populatedAssignment.deadline,
+            },
+            projectStatus: syncedProject?.status || project.status,
+        });
+    } catch (err) {
+        console.error('❌ [Production Assignment Create]: Error:', err);
+        res.status(500).json({ message: 'Failed to create production assignment', error: err.message });
+    }
+});
+
+app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignmentId', authMiddleware, async (req, res) => {
+    try {
+        const { projectId, taskId, assignmentId } = req.params;
+        const { boardsAssigned, deadline } = req.body;
+
+        if (!isValidObjectId(projectId) || !isValidObjectId(taskId) || !isValidObjectId(assignmentId)) {
+            return res.status(400).json({ message: 'Invalid project, task, or assignment ID.' });
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (project.projectType !== 'PRODUCTION') {
+            return res.status(400).json({ message: 'Only production projects support worker allocations.' });
+        }
+        if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the assigned manager can update production worker allocations.' });
+        }
+
+        const task = await Task.findOne({ _id: taskId, projectId, isProductionTask: true });
+        if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
+
+        const assignment = await ProductionAssignment.findOne({ _id: assignmentId, projectId, taskId });
+        if (!assignment) return res.status(404).json({ message: 'Production assignment not found.' });
+
+        const nextBoardsAssigned = boardsAssigned === undefined ? Number(assignment.boardsAssigned || 0) : Number(boardsAssigned);
+        const nextBoardsCompletedApproved = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+
+        if (!Number.isInteger(nextBoardsAssigned) || nextBoardsAssigned < 0) {
+            return res.status(400).json({ message: 'boardsAssigned must be a whole number greater than or equal to 0.' });
+        }
+        if (nextBoardsCompletedApproved > nextBoardsAssigned) {
+            return res.status(400).json({ message: 'Approved completed boards cannot exceed assigned boards for a worker allocation.' });
+        }
+
+        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
+        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
+        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
+        const totalAvailable = previousTask
+            ? Number(previousTask.unitsCompleted || 0)
+            : Number(project.totalBatchSize || 0);
+
+        const siblingAssignments = await ProductionAssignment.find({ projectId, taskId, _id: { $ne: assignmentId } });
+        const assignedByOthers = siblingAssignments.reduce((sum, item) => sum + Number(item.boardsAssigned || 0), 0);
+        const completedByOthers = siblingAssignments.reduce((sum, item) => sum + Number(item.boardsCompletedApproved ?? item.boardsCompleted ?? 0), 0);
+
+        if (assignedByOthers + nextBoardsAssigned > totalAvailable) {
+            return res.status(400).json({ message: `Assigned boards exceed available boards for ${task.productionPhase || task.title}. Remaining allocatable boards: ${Math.max(0, totalAvailable - assignedByOthers)}.` });
+        }
+
+        const nextPhase = productionTasks[taskIndex + 1];
+        if (nextPhase) {
+            const nextTaskDemand = Number(nextPhase.unitsCurrentlyHere || 0) + Number(nextPhase.unitsCompleted || 0);
+            if (completedByOthers + nextBoardsCompletedApproved < nextTaskDemand) {
+                return res.status(400).json({ message: `${task.productionPhase || task.title} completed boards cannot be reduced below ${nextTaskDemand}, because the next phase already uses that quantity.` });
+            }
+        }
+
+        assignment.boardsAssigned = nextBoardsAssigned;
+        if (deadline !== undefined) {
+            assignment.deadline = deadline ? new Date(deadline) : null;
+        }
+        assignment.allocatedMinutes = calculateAllocatedMinutes(assignment.assignedAt, assignment.deadline);
+        assignment.boardsCompleted = Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0);
+        assignment.status = deriveProductionAssignmentStatus(assignment);
+        assignment.completedAt = assignment.status === 'COMPLETED' ? (assignment.completedAt || new Date()) : null;
+        await assignment.save();
+
+        const { project: syncedProject } = await syncProductionProjectState(projectId);
+        const populatedAssignment = await ProductionAssignment.findById(assignmentId).populate('userId', 'name role');
+
+        res.json({
+            success: true,
+            message: `${task.productionPhase || task.title} allocation updated successfully.`,
+            assignment: {
+                id: populatedAssignment._id,
+                _id: populatedAssignment._id,
+                projectId: populatedAssignment.projectId,
+                taskId: populatedAssignment.taskId,
+                userId: populatedAssignment.userId?._id || populatedAssignment.userId,
+                userName: populatedAssignment.userId?.name || '',
+                userRole: populatedAssignment.userId?.role || '',
+                boardsAssigned: Number(populatedAssignment.boardsAssigned || 0),
+                boardsCompleted: Number(populatedAssignment.boardsCompleted || 0),
+                boardsCompletedDraft: Number(populatedAssignment.boardsCompletedDraft || 0),
+                boardsCompletedApproved: Number(populatedAssignment.boardsCompletedApproved || 0),
+                status: populatedAssignment.status || 'NOT_STARTED',
+                assignedAt: populatedAssignment.assignedAt,
+                deadline: populatedAssignment.deadline,
+            },
+            projectStatus: syncedProject?.status || project.status,
+        });
+    } catch (err) {
+        console.error('❌ [Production Assignment Update]: Error:', err);
+        res.status(500).json({ message: 'Failed to update production assignment', error: err.message });
+    }
+});
+
+// ============ PRODUCTION DISPATCH ROUTES ============
+
+// GET /api/projects/:projectId/production/dispatches — list all dispatches for a project
+app.get('/api/projects/:projectId/production/dispatches', authMiddleware, async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        if (!isValidObjectId(projectId)) {
+            return res.status(400).json({ message: 'Invalid project ID.' });
+        }
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found.' });
+        if (project.projectType !== 'PRODUCTION') {
+            return res.status(400).json({ message: 'Only production projects support dispatches.' });
+        }
+
+        const dispatches = await ProductionDispatch.find({ projectId })
+            .sort({ createdAt: -1 });
+
+        res.json(dispatches.map(d => ({
+            id: d._id,
+            _id: d._id,
+            dcNumber: d.dcNumber,
+            projectId: d.projectId,
+            projectName: d.projectName,
+            projectCode: d.projectCode,
+            customerName: d.customerName,
+            customerAddress: d.customerAddress,
+            customerGSTIN: d.customerGSTIN,
+            placeOfSupply: d.placeOfSupply,
+            boardFrom: d.boardFrom,
+            boardTo: d.boardTo,
+            boardCount: d.boardCount,
+            productDescription: d.productDescription,
+            hsnCode: d.hsnCode,
+            ratePerBoard: d.ratePerBoard,
+            igstPercent: d.igstPercent,
+            challanType: d.challanType,
+            notes: d.notes,
+            status: d.status,
+            createdByName: d.createdByName,
+            createdAt: d.createdAt,
+            dispatchedAt: d.dispatchedAt,
+        })));
+    } catch (err) {
+        console.error('❌ [Production Dispatches List]:', err);
+        res.status(500).json({ message: 'Failed to load dispatches', error: err.message });
+    }
+});
+
+// POST /api/projects/:projectId/production/dispatches — create a dispatch
+app.post('/api/projects/:projectId/production/dispatches',
+    authMiddleware,
+    requireRole(roles.MANAGER, roles.SUPER_USER, roles.SUPER_ADMIN),
+    async (req, res) => {
+        try {
+            const { projectId } = req.params;
+            if (!isValidObjectId(projectId)) {
+                return res.status(400).json({ message: 'Invalid project ID.' });
+            }
+
+            const project = await Project.findById(projectId);
+            if (!project) return res.status(404).json({ message: 'Project not found.' });
+            if (project.projectType !== 'PRODUCTION') {
+                return res.status(400).json({ message: 'Dispatches can only be created for production projects.' });
+            }
+
+            const {
+                customerName,
+                customerAddress,
+                customerGSTIN,
+                placeOfSupply,
+                boardFrom,
+                boardTo,
+                productDescription,
+                hsnCode,
+                ratePerBoard,
+                igstPercent,
+                challanType,
+                notes,
+            } = req.body;
+
+            if (!customerName || !customerName.trim()) {
+                return res.status(400).json({ message: 'Customer name is required.' });
+            }
+            const from = Number(boardFrom);
+            const to = Number(boardTo);
+            if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) {
+                return res.status(400).json({ message: 'Board From must be ≥ 1 and Board To must be ≥ Board From.' });
+            }
+
+            const dispatch = await ProductionDispatch.create({
+                projectId,
+                projectName: project.name,
+                projectCode: project.projectCode || '',
+                customerName: customerName.trim(),
+                customerAddress: (customerAddress || '').trim(),
+                customerGSTIN: (customerGSTIN || '').trim(),
+                placeOfSupply: (placeOfSupply || '').trim(),
+                boardFrom: from,
+                boardTo: to,
+                productDescription: (productDescription || 'PCB Assembly').trim(),
+                hsnCode: (hsnCode || '').trim(),
+                ratePerBoard: Number(ratePerBoard) || 0,
+                igstPercent: Number(igstPercent) || 18,
+                challanType: (challanType || 'Job Work').trim(),
+                notes: (notes || '').trim(),
+                status: 'CREATED',
+                createdBy: req.user._id,
+                createdByName: req.user.name || '',
+            });
+
+            await logActivity(
+                'PRODUCTION_DISPATCH_CREATED',
+                `Dispatch ${dispatch.dcNumber} created for ${customerName} — boards #${from}–#${to}`,
+                req.user._id,
+                req.user.name,
+                dispatch._id,
+                dispatch.dcNumber
+            );
+
+            res.status(201).json({
+                id: dispatch._id,
+                _id: dispatch._id,
+                dcNumber: dispatch.dcNumber,
+                projectId: dispatch.projectId,
+                projectName: dispatch.projectName,
+                projectCode: dispatch.projectCode,
+                customerName: dispatch.customerName,
+                customerAddress: dispatch.customerAddress,
+                customerGSTIN: dispatch.customerGSTIN,
+                placeOfSupply: dispatch.placeOfSupply,
+                boardFrom: dispatch.boardFrom,
+                boardTo: dispatch.boardTo,
+                boardCount: dispatch.boardCount,
+                productDescription: dispatch.productDescription,
+                hsnCode: dispatch.hsnCode,
+                ratePerBoard: dispatch.ratePerBoard,
+                igstPercent: dispatch.igstPercent,
+                challanType: dispatch.challanType,
+                notes: dispatch.notes,
+                status: dispatch.status,
+                createdByName: dispatch.createdByName,
+                createdAt: dispatch.createdAt,
+            });
+        } catch (err) {
+            console.error('❌ [Production Dispatch Create]:', err);
+            res.status(500).json({ message: 'Failed to create dispatch', error: err.message });
+        }
+    }
+);
+
+// PUT /api/projects/:projectId/production/dispatches/:dcId/status — update dispatch status
+app.put('/api/projects/:projectId/production/dispatches/:dcId/status',
+    authMiddleware,
+    requireRole(roles.MANAGER, roles.SUPER_USER, roles.SUPER_ADMIN),
+    async (req, res) => {
+        try {
+            const { projectId, dcId } = req.params;
+            const { status } = req.body;
+            if (!isValidObjectId(projectId) || !isValidObjectId(dcId)) {
+                return res.status(400).json({ message: 'Invalid ID.' });
+            }
+            if (!['CREATED', 'DISPATCHED'].includes(status)) {
+                return res.status(400).json({ message: 'Invalid status. Use CREATED or DISPATCHED.' });
+            }
+
+            const dispatch = await ProductionDispatch.findOne({ _id: dcId, projectId });
+            if (!dispatch) return res.status(404).json({ message: 'Dispatch not found.' });
+
+            dispatch.status = status;
+            if (status === 'DISPATCHED' && !dispatch.dispatchedAt) {
+                dispatch.dispatchedAt = new Date();
+            }
+            await dispatch.save();
+
+            res.json({ success: true, message: `Dispatch marked as ${status}.`, status: dispatch.status, dispatchedAt: dispatch.dispatchedAt });
+        } catch (err) {
+            console.error('❌ [Production Dispatch Status Update]:', err);
+            res.status(500).json({ message: 'Failed to update dispatch status', error: err.message });
+        }
+    }
+);
+
 // ============ TASK ROUTES ============
+
 app.get('/api/projects/:projectId/tasks', authMiddleware, async (req, res) => {
     try {
         const { projectId } = req.params;
@@ -2070,12 +2947,18 @@ app.get('/api/projects/:projectId/tasks', authMiddleware, async (req, res) => {
         const tasks = await Task.find({ projectId }).populate('assigneeId', 'name');
         res.json(tasks.map(t => ({
             id: t._id,
+            _id: t._id,
             title: t.title,
             description: t.description,
             status: t.status,
             projectId: t.projectId,
             assigneeId: t.assigneeId?._id,
             assigneeName: t.assigneeId?.name,
+            isProductionTask: t.isProductionTask || false,
+            productionPhase: t.productionPhase || '',
+            sequence: t.sequence || 0,
+            unitsCompleted: t.unitsCompleted || 0,
+            unitsCurrentlyHere: t.unitsCurrentlyHere || 0,
         })));
     } catch (err) {
         console.error('❌ [Load Tasks]: Error:', err);
@@ -2103,6 +2986,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
 
         res.json(tasks.map(t => ({
             id: t._id,
+            _id: t._id,
             title: t.title,
             description: t.description,
             status: t.status,
@@ -2123,7 +3007,12 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
             delayReason: t.delayReason,
             delayRequestedAt: t.delayRequestedAt,
             adminDelayApproved: t.adminDelayApproved,
-            delayRejectionReason: t.delayRejectionReason
+            delayRejectionReason: t.delayRejectionReason,
+            isProductionTask: t.isProductionTask || false,
+            productionPhase: t.productionPhase || '',
+            sequence: t.sequence || 0,
+            unitsCompleted: t.unitsCompleted || 0,
+            unitsCurrentlyHere: t.unitsCurrentlyHere || 0
         })));
     } catch (err) {
         console.error('❌ [Load Tasks]: Error:', err);
@@ -2180,6 +3069,11 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
             performanceScore: task.performanceScore,
             comments: task.comments,
             queries: task.queries, // This preserves the MongoDB _id for each query
+            isProductionTask: task.isProductionTask || false,
+            productionPhase: task.productionPhase || '',
+            sequence: task.sequence || 0,
+            unitsCompleted: task.unitsCompleted || 0,
+            unitsCurrentlyHere: task.unitsCurrentlyHere || 0
         });
     } catch (err) {
         console.error('❌ [Get Task]: Error:', err);
@@ -2195,6 +3089,10 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         if (!title || !projectId) return res.status(400).json({ message: 'Title and projectId are required' });
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
+
+        if (project.projectType === 'PRODUCTION') {
+            return res.status(400).json({ message: 'Manual task creation is not allowed for production projects.' });
+        }
 
         // If no assigneeId provided, assign to the creator ONLY if they are an Employee or Intern
         const finalAssigneeId = assigneeId || (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user._id : null);
@@ -2299,6 +3197,10 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
+        if (task.isProductionTask) {
+            return res.status(400).json({ message: 'Production tasks must be updated from the production dashboard.' });
+        }
+
         // Augment with project name
         const taskObj = task.toObject();
         if (task.projectId) {
@@ -2365,6 +3267,10 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
+
+        if (task.isProductionTask) {
+            return res.status(400).json({ message: 'Production task status must be updated from the production dashboard.' });
+        }
 
         const { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy, rejectionReason } = req.body;
         console.log('Updating task:', taskId, { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy });

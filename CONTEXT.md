@@ -1,18 +1,15 @@
 # Agent Context Brief
-_Rewrite this completely at the end of every session. Max 40 lines._
 
 ## What I Need To Know Right Now
-- This is the IPMS-Enarxi PNPM workspace with `client` (Vite React) and `server` (Express).
-- The "Add New Item" modal in [MasterDataManagement.jsx](file:///d:/users/hameed/Desktop/Enarxi/Project%20Management/client/src/components/inventory/MasterDataManagement.jsx) has an "Item Code" input field for manual item code creation.
-- The backend `/admin/items` route in [inventoryRoutes.js](file:///d:/users/hameed/Desktop/Enarxi/Project%20Management/server/inventoryRoutes.js) accepts manual `itemCode` fields and validates uniqueness.
-- Auto-generation of item codes is maintained as a fallback if `itemCode` is not provided (ensures bulk uploads work seamlessly).
-- Local validation completed: client build passed.
+- PCB production projects use a fixed 10-phase flow.
+- Employee/Intern projects page now correctly queries all tasks for the active project via `/api/projects/:projectId/tasks` (since the standard `/api/tasks` endpoint filters out manager-assigned production phase tasks).
+- Employee detail view has `ProductionWorkerProjectView` integrated to render allocated stages, approved boards, and input fields to submit completed boards for manager review.
 
 ## Recent Gotchas
-- The backend `/admin/items` route did not previously destructure or support `itemCode` from request payloads during creation; this has been added.
+- Employees/Interns were seeing an empty "My Board Allocations" card because the global tasks list only returned items explicitly assigned to them, excluding manager-assigned production phase tasks. Explicitly querying `/api/projects/:projectId/tasks` resolved this.
 
 ## Active Assumptions
-- Manual item codes must be unique across all items (validated on backend with 400 response if duplicated).
+- Employees/Interns submit completed board drafts which must be approved by the project manager before advancing stages.
 
 ## Carry-Forward
-- Verify the manual creation flow with both unique and duplicate manual item codes to ensure error notifications work.
+- Ensure that the board completion workflow functions correctly from start (employee submission) to finish (manager approval/rejection).
