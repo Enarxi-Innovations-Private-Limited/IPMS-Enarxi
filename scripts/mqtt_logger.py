@@ -27,6 +27,7 @@ TOPICS = [
     "esp32/battery/voltage",
 ]
 EXCEL_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "esp32_data.xlsx")
+IST = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
 # ----------------------------------------------------------------
 
 message_count = 0
@@ -56,7 +57,7 @@ def flush_row(userdata):
     """Write a combined row when both values are available, then reset buffer."""
     global message_count, reading_buffer
 
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = datetime.datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
     battery = reading_buffer["battery"]
     solar = reading_buffer["solar"]
 
