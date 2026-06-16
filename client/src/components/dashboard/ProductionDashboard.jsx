@@ -82,6 +82,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
     const [expandedTasks, setExpandedTasks] = useState({});
     const [assignmentDrafts, setAssignmentDrafts] = useState({});
     const [newAssignmentDrafts, setNewAssignmentDrafts] = useState({});
+    const [progressDrafts, setProgressDrafts] = useState({}); // { [assignmentId]: boardsCompletedDraft }
 
     // ── Tab system ──
     const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'dispatches'
@@ -359,6 +360,50 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         }
     };
 
+    const createSelfAssignment = async (taskId, unassignedBoards) => {
+        const allocationDraft = newAssignmentDrafts[taskId] || {};
+        const boardsAssigned = Number(allocationDraft.boardsAssigned) || unassignedBoards;
+        const deadline = allocationDraft.deadline || (project?.deadline ? new Date(project.deadline).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10));
+
+        if (!currentUserId) {
+            setAssignmentErrors((prev) => ({ ...prev, [taskId]: 'User not identified for self assignment.' }));
+            return;
+        }
+
+        if (!Number.isInteger(boardsAssigned) || boardsAssigned <= 0) {
+            setAssignmentErrors((prev) => ({ ...prev, [taskId]: 'Assigned boards must be greater than 0.' }));
+            return;
+        }
+
+        setAssignmentSaving((prev) => ({ ...prev, [taskId]: true }));
+        setAssignmentErrors((prev) => ({ ...prev, [taskId]: '' }));
+
+        try {
+            const response = await api.post(`/projects/${projectId}/production/tasks/${taskId}/assignments`, {
+                userId: currentUserId,
+                boardsAssigned,
+                deadline
+            });
+            setFeedback({
+                type: 'success',
+                message: response.data?.message || 'Self assignment created successfully.'
+            });
+            setNewAssignmentDrafts((prev) => ({
+                ...prev,
+                [taskId]: { userId: '', boardsAssigned: '', deadline: '' }
+            }));
+            await refreshProductionData();
+            setExpandedTasks((prev) => ({ ...prev, [taskId]: true }));
+        } catch (err) {
+            setAssignmentErrors((prev) => ({
+                ...prev,
+                [taskId]: err.response?.data?.message || 'Failed to create self assignment.'
+            }));
+        } finally {
+            setAssignmentSaving((prev) => ({ ...prev, [taskId]: false }));
+        }
+    };
+
     const reviewAssignment = async (assignmentId, approved, rejectionReason = '') => {
         setAssignmentSaving((prev) => ({ ...prev, [assignmentId]: true }));
         setAssignmentErrors((prev) => ({ ...prev, [assignmentId]: '' }));
@@ -376,6 +421,61 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
             setAssignmentErrors((prev) => ({
                 ...prev,
                 [assignmentId]: err.response?.data?.message || 'Failed to review production submission.'
+            }));
+        } finally {
+            setAssignmentSaving((prev) => ({ ...prev, [assignmentId]: false }));
+        }
+    };
+
+    const submitProgress = async (assignmentId, boardsAssigned) => {
+        const raw = progressDrafts[assignmentId];
+        const boardsCompletedDraft = Number(raw);
+
+        if (raw === undefined || raw === '') {
+            setAssignmentErrors((prev) => ({ ...prev, [assignmentId]: 'Enter number of boards completed.' }));
+            return;
+        }
+        if (!Number.isInteger(boardsCompletedDraft) || boardsCompletedDraft < 0) {
+            setAssignmentErrors((prev) => ({ ...prev, [assignmentId]: 'Boards completed must be a whole number ≥ 0.' }));
+            return;
+        }
+        if (boardsCompletedDraft > boardsAssigned) {
+            setAssignmentErrors((prev) => ({ ...prev, [assignmentId]: `Cannot exceed assigned boards (${boardsAssigned}).` }));
+            return;
+        }
+
+        setAssignmentSaving((prev) => ({ ...prev, [assignmentId]: true }));
+        setAssignmentErrors((prev) => ({ ...prev, [assignmentId]: '' }));
+
+        try {
+            // Submit progress draft
+            await api.put(`/production/assignments/${assignmentId}/progress`, {
+                boardsCompletedDraft
+            });
+
+            // Managers skip the approval queue — auto-approve immediately
+            if (canEditProduction) {
+                await api.put(`/production/assignments/${assignmentId}/review`, {
+                    approved: true,
+                    rejectionReason: ''
+                });
+                setFeedback({
+                    type: 'success',
+                    message: `Progress updated: ${boardsCompletedDraft} boards completed.`
+                });
+            } else {
+                setFeedback({
+                    type: 'success',
+                    message: 'Progress submitted for manager approval.'
+                });
+            }
+
+            setProgressDrafts((prev) => ({ ...prev, [assignmentId]: undefined }));
+            await refreshProductionData();
+        } catch (err) {
+            setAssignmentErrors((prev) => ({
+                ...prev,
+                [assignmentId]: err.response?.data?.message || 'Failed to submit progress.'
             }));
         } finally {
             setAssignmentSaving((prev) => ({ ...prev, [assignmentId]: false }));
@@ -952,8 +1052,13 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                 const isEditing = editingTaskId === taskId;
                                                 const state = getTaskState(task);
                                                 const availableCapacity = getAvailableCapacity(task, index, sortedTasks, totalBatch);
-                                                const assignee = users?.find((user) => getUserId(user) === (task.assigneeId || task.assigneeId?._id));
                                                 const taskAssignments = assignmentsByTaskId[String(taskId)] || [];
+                                                // For the Lead column: use userName directly from assignment data (avoids ObjectId vs string mismatch)
+                                                const singleAssigneeName = taskAssignments.length === 1 ? taskAssignments[0].userName : null;
+                                                // Fallback to users list only when no split allocations exist
+                                                const fallbackAssignee = taskAssignments.length === 0
+                                                    ? users?.find((user) => String(getUserId(user)) === String(task.assigneeId?._id || task.assigneeId))
+                                                    : null;
                                                 const assignedBoards = taskAssignments.reduce((sum, item) => sum + Number(item.boardsAssigned || 0), 0);
                                                 const unassignedBoards = Math.max(0, availableCapacity - assignedBoards);
                                                 const progressWidth = availableCapacity > 0 ? Math.min(100, (Number(task.unitsCompleted || 0) / availableCapacity) * 100) : 0;
@@ -1018,13 +1123,23 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                         <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{taskAssignments.length} workers assigned</p>
                                                                         <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">{assignedBoards} boards allocated</p>
                                                                     </div>
-                                                                ) : assignee ? (
+                                                                ) : singleAssigneeName ? (
                                                                     <div className="flex items-center gap-2">
                                                                         <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#b8c3ff] text-[10px] font-bold text-[#002388]">
-                                                                            {assignee.name?.slice(0, 1) || 'U'}
+                                                                            {singleAssigneeName.slice(0, 1).toUpperCase()}
                                                                         </div>
                                                                         <div>
-                                                                            <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{assignee.name}</p>
+                                                                            <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{singleAssigneeName}</p>
+                                                                            <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">Assigned</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : fallbackAssignee ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#b8c3ff] text-[10px] font-bold text-[#002388]">
+                                                                            {fallbackAssignee.name?.slice(0, 1) || 'U'}
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{fallbackAssignee.name}</p>
                                                                             <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">Assigned</p>
                                                                         </div>
                                                                     </div>
@@ -1107,6 +1222,29 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                                         />
                                                                                         <div className="text-right">
                                                                                             <div className="flex flex-wrap justify-end gap-2">
+                                                                                                {/* Progress submit — visible to the assigned user (including self-assigned manager) */}
+                                                                                                {String(assignment.userId?._id || assignment.userId) === String(currentUserId) && assignment.status !== 'COMPLETED' && (
+                                                                                                    <div className="flex items-center gap-2">
+                                                                                                        <input
+                                                                                                            type="number"
+                                                                                                            min="0"
+                                                                                                            step="1"
+                                                                                                            placeholder="Done"
+                                                                                                            value={progressDrafts[assignmentId] ?? ''}
+                                                                                                            onChange={(e) => setProgressDrafts((prev) => ({ ...prev, [assignmentId]: e.target.value }))}
+                                                                                                            className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#00e383]"
+                                                                                                        />
+                                                                                                        <button
+                                                                                                            type="button"
+                                                                                                            onClick={() => submitProgress(assignmentId, assignment.boardsAssigned)}
+                                                                                                            disabled={assignmentSaving[assignmentId]}
+                                                                                                            className="rounded bg-[#00e383] px-3 py-2 text-[11px] font-bold text-[#00210e] disabled:opacity-60"
+                                                                                                        >
+                                                                                                            {assignmentSaving[assignmentId] ? 'Saving...' : 'Submit Progress'}
+                                                                                                        </button>
+                                                                                                    </div>
+                                                                                                )}
+                                                                                                {/* Manager controls */}
                                                                                                 <button
                                                                                                     type="button"
                                                                                                     onClick={() => saveAssignment(taskId, assignmentId)}
@@ -1178,7 +1316,17 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                                     onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
                                                                                     className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                 />
-                                                                                <div className="text-right">
+                                                                                <div className="flex items-center justify-end gap-2">
+                                                                                    {(assignableUserIds.size === 0 || assignableUserIds.has(String(currentUserId))) && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => createSelfAssignment(taskId, unassignedBoards)}
+                                                                                            disabled={assignmentSaving[taskId]}
+                                                                                            className="rounded border border-[#00e3fd] bg-transparent px-3 py-2 text-[11px] font-bold text-[#00e3fd] transition-colors hover:bg-[#00e3fd]/10 disabled:opacity-60"
+                                                                                        >
+                                                                                            {assignmentSaving[taskId] ? 'Saving...' : 'Self Assign'}
+                                                                                        </button>
+                                                                                    )}
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() => createAssignment(taskId)}
@@ -1390,7 +1538,6 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                         </aside>
                     </div>
                 </div>
-            </div>
             )}
         </div>
     );

@@ -214,3 +214,17 @@ body {
   }
 }
 
+/* Date Picker Dark Theme */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+/* Hide Number Input Spin Arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

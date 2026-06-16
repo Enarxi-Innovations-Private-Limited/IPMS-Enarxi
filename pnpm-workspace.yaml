@@ -3,6 +3,7 @@ packages:
   - 'server'
 
 allowBuilds:
+  core-js: true
   cypress: true
   esbuild: true
   mongodb-memory-server: true
