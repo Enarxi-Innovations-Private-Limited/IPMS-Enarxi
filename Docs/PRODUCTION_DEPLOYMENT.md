@@ -8,7 +8,9 @@ For the full command reference with use cases, read:
 
 ## Current Live Deployment Design
 
-- Process manager: `systemd`
+- Process manager: `PM2`
+- App PM2 user: `enarxi-staging`
+- Root PM2 user: `root` (for `nginx`)
 - Backend service: `ipms-backend`
 - BOM service: `ipms-preview-bom`
 - Web server: `nginx`
@@ -25,16 +27,16 @@ For the full command reference with use cases, read:
 - Backend changed:
   - update code
   - install backend dependencies if needed
-  - restart `ipms-backend`
+  - restart `ipms-backend` with PM2
 
 - BOM changed:
   - update code
   - install Python requirements if needed
-  - restart `ipms-preview-bom`
+  - restart `ipms-preview-bom` with PM2
 
 - nginx changed:
   - run `nginx -t`
-  - reload nginx
+  - restart `nginx` with root PM2
 
 ## Frontend Deployment
 
@@ -58,7 +60,7 @@ cd /home/enarxi-staging/IPMS-Enarxi
 git pull
 cd server
 npm install
-systemctl restart ipms-backend
+pm2 restart ipms-backend
 ```
 
 Use case:
@@ -73,7 +75,7 @@ cd server/BOM
 source venv/bin/activate
 pip install -r requirements.txt
 deactivate
-systemctl restart ipms-preview-bom
+pm2 restart ipms-preview-bom
 ```
 
 Use case:
@@ -95,7 +97,8 @@ cd /home/enarxi-staging/IPMS-Enarxi/server/BOM
 source venv/bin/activate
 pip install -r requirements.txt
 deactivate
-systemctl restart ipms-backend ipms-preview-bom
+pm2 restart ipms-backend
+pm2 restart ipms-preview-bom
 ```
 
 Use case:
@@ -104,7 +107,8 @@ Deploy combined frontend, backend, and BOM updates.
 ## Post-Deploy Verification
 
 ```bash
-systemctl status ipms-backend ipms-preview-bom
+pm2 list
+sudo pm2 list
 curl -I https://tracker.enarxi.com
 curl -I https://tracker.enarxi.com/api/
 ss -ltnp | grep 127.0.0.1:5000
@@ -117,8 +121,8 @@ Confirm services are up, nginx is serving traffic, and the internal listeners ar
 ## nginx Deploy Verification
 
 ```bash
-nginx -t
-systemctl reload nginx
+sudo nginx -t
+sudo pm2 restart nginx
 ```
 
 Use case:
@@ -132,4 +136,4 @@ pm2 restart ipms-bom
 ```
 
 Use case:
-Do not use these for live production. Production is no longer managed by PM2.
+Do not use `systemctl restart` for the live app stack anymore. Production is now managed by PM2.
