@@ -24,7 +24,12 @@ server/dist/
 # ==================== Environment Variables ====================
 # NEVER commit these - contain secrets!
 .env
+.env.save
+.env.local
+.env.production
+.env.development
 server/.env
+client/.env
 server/BOM/.env
 
 
@@ -78,6 +83,7 @@ $RECYCLE.BIN/
 *~
 
 # ==================== Temporary Files ====================
+.temp/
 tmp/
 temp/
 *.tmp
@@ -152,4 +158,3 @@ credentials/
 # ==================== Keep These Folders ====================
 # Create .gitkeep to keep empty folders
 !.gitkeep
-.env
