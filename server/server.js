@@ -367,7 +367,15 @@ const supportsProductionWorkflow = (project) => (
 
 const getProductionTaskQuery = (projectId, project) => {
     if (project?.projectType === 'FULL_PRODUCT_PRODUCTION') {
-        return { projectId, isProductionTask: false, isFullProductStage: true };
+        return {
+            projectId,
+            isProductionTask: false,
+            $or: [
+                { isFullProductStage: true },
+                { isFullProductStage: { $exists: false } },
+                { isFullProductStage: false }
+            ]
+        };
     }
     return { projectId, isProductionTask: true };
 };
@@ -421,6 +429,10 @@ const syncProductionProjectState = async (projectId) => {
         const task = tasks[index];
         const allowedCompleted = getProductionTaskCapacity(project);
         const taskAssignments = assignmentsByTaskId[task._id.toString()] || [];
+
+        if (project.projectType === 'FULL_PRODUCT_PRODUCTION' && !task.isFullProductStage) {
+            task.isFullProductStage = true;
+        }
 
         if (taskAssignments.length > 0) {
             task.unitsCompleted = taskAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0), 0);
@@ -1713,9 +1725,9 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        const { name, description, department, status, deadline, endDate, teamIds, budget, managerId } = req.body;
+        const { name, description, department, status, deadline, endDate, teamIds, budget, managerId, totalBatchSize } = req.body;
         console.log('Updating project:', projectId);
-        console.log('Request body:', { name, description, department, status, deadline, teamIds, budget, managerId });
+        console.log('Request body:', { name, description, department, status, deadline, teamIds, budget, managerId, totalBatchSize });
         console.log('Current project status:', project.status);
 
         const isSuperProjectEditor = [roles.SUPER_USER, roles.SUPER_ADMIN].includes(req.user.role);
@@ -1739,6 +1751,17 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         // Only Super Users can update budget
         if (budget !== undefined && isSuperProjectEditor) {
             project.budget = budget;
+        }
+        if (totalBatchSize !== undefined && isSuperProjectEditor) {
+            if (supportsProductionWorkflow(project)) {
+                const nextBatchSize = Number(totalBatchSize);
+                if (!(nextBatchSize > 0)) {
+                    return res.status(400).json({ message: 'Total batch size is required for production projects.' });
+                }
+                project.totalBatchSize = nextBatchSize;
+            } else {
+                project.totalBatchSize = 0;
+            }
         }
 
         if (status) {
@@ -1788,6 +1811,9 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         }
 
         await project.save();
+        if (supportsProductionWorkflow(project)) {
+            await syncProductionProjectState(project._id);
+        }
         
         // Sync to Inventory Tracker
         await syncProjectToInventory(project, req.user);
@@ -2328,6 +2354,11 @@ app.put('/api/projects/:projectId/production/tasks/:taskId', authMiddleware, asy
         }
 
         const totalAvailable = getProductionTaskCapacity(project);
+        if (totalAvailable <= 0) {
+            return res.status(400).json({
+                message: 'Project total batch size is missing. Set the project quantity before updating production boards.'
+            });
+        }
 
         if (unitsCompleted > totalAvailable) {
             return res.status(400).json({
@@ -2649,6 +2680,11 @@ app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMi
         }
 
         const totalAvailable = getProductionTaskCapacity(project);
+        if (totalAvailable <= 0) {
+            return res.status(400).json({
+                message: 'Project total batch size is missing. Set the project quantity before assigning boards.'
+            });
+        }
 
         const existingAssignments = await ProductionAssignment.find({ projectId, taskId });
         const assignedAlready = existingAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsAssigned || 0), 0);
@@ -2739,6 +2775,11 @@ app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignme
         }
 
         const totalAvailable = getProductionTaskCapacity(project);
+        if (totalAvailable <= 0) {
+            return res.status(400).json({
+                message: 'Project total batch size is missing. Set the project quantity before editing board assignments.'
+            });
+        }
 
         const siblingAssignments = await ProductionAssignment.find({ projectId, taskId, _id: { $ne: assignmentId } });
         const assignedByOthers = siblingAssignments.reduce((sum, item) => sum + Number(item.boardsAssigned || 0), 0);

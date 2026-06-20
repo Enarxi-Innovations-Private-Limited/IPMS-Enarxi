@@ -85,6 +85,7 @@ export default function SuperUserProjectsPage() {
         department: 'SOFTWARE',
         managerId: '',
         budget: '',
+        totalBatchSize: '',
     });
 
     const isProductionCapableProjectView = (project, tasksForProject = []) => {
@@ -218,7 +219,10 @@ export default function SuperUserProjectsPage() {
                 description: editForm.description,
                 managerId: editForm.managerId,
                 budget: editForm.budget,
-                department: editForm.department
+                department: editForm.department,
+                totalBatchSize: ['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType)
+                    ? (parseInt(editForm.totalBatchSize, 10) || 0)
+                    : undefined
             };
             await api.put(`/projects/${selectedProject.id}`, updatePayload);
 
@@ -369,6 +373,7 @@ export default function SuperUserProjectsPage() {
             status: project.status,
             managerId: project.managerId || '',
             budget: project.budget || '',
+            totalBatchSize: project.totalBatchSize || '',
         });
         setFormError('');
         setEditFiles([]);
@@ -1385,7 +1390,12 @@ export default function SuperUserProjectsPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
-                                    <select className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
+                                    <select
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer disabled:bg-slate-100 disabled:text-slate-400"
+                                        value={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType) ? 'HARDWARE' : editForm.department}
+                                        disabled={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType)}
+                                        onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                                    >
                                         <option value="SOFTWARE">Software (IT)</option>
                                         <option value="HARDWARE">Hardware</option>
                                     </select>
@@ -1400,6 +1410,26 @@ export default function SuperUserProjectsPage() {
                                     </select>
                                 </div>
                             </div>
+
+                            {['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType) && (
+                                <div>
+                                    <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                        Number Of Boards / Products *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        required
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-[#556070] placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        placeholder="Enter total quantity"
+                                        value={editForm.totalBatchSize}
+                                        onChange={(e) => setEditForm({ ...editForm, totalBatchSize: e.target.value })}
+                                    />
+                                    <p className="mt-2 text-xs text-slate-400">
+                                        This quantity is used for both `PRODUCTION` and `FULL_PRODUCT_PRODUCTION` board allocation.
+                                    </p>
+                                </div>
+                            )}
 
 
                             {/* Budget */}

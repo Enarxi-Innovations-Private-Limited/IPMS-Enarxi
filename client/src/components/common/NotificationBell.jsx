@@ -117,33 +117,37 @@ export default function NotificationBell() {
             {showDropdown && (
                 <>
                     <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px] md:hidden" onClick={() => setShowDropdown(false)}></div>
-                    <div className="fixed left-4 right-4 top-16 md:absolute md:top-full md:right-0 md:left-auto md:w-80 bg-[#161A23] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-border-dark bg-background-dark/50">
-                            <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                    <div className="fixed left-4 right-4 top-16 md:absolute md:top-full md:right-0 md:left-auto md:w-80 bg-[#161A23] border border-[#31384b] rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-right">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#31384b] bg-[#202636]">
+                            <h3 className="text-sm font-semibold text-[#f4f7ff]">Notifications</h3>
                             {unreadCount > 0 && (
                                 <button
                                     onClick={handleMarkAllRead}
-                                    className="text-xs text-primary hover:text-primary-light transition-colors"
+                                    className="text-xs font-medium text-[#8bc6ff] hover:text-[#c4e2ff] transition-colors"
                                 >
                                     Mark all as read
                                 </button>
                             )}
                         </div>
-                        <div className="max-h-96 overflow-y-auto">
+                        <div className="max-h-96 overflow-y-auto bg-[#161A23]">
                             {notifications.length > 0 ? (
                                 notifications.map((notification) => (
                                     <div
                                         key={notification._id}
                                         onClick={() => handleNotificationClick(notification)}
-                                        className={`px-4 py-3 border-b border-border-dark last:border-0 hover:bg-background-dark/50 cursor-pointer transition-colors ${!notification.isRead ? 'bg-primary/5' : ''}`}
+                                        className={`px-4 py-3 border-b border-[#31384b] last:border-0 cursor-pointer transition-colors ${
+                                            !notification.isRead
+                                                ? 'bg-[#1d2740] hover:bg-[#23304f]'
+                                                : 'bg-[#161A23] hover:bg-[#1c2230]'
+                                        }`}
                                     >
                                         <div className="flex gap-3">
-                                            <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-primary' : 'bg-transparent'}`} />
+                                            <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${!notification.isRead ? 'bg-[#36c2ff]' : 'bg-[#4a5268]'}`} />
                                             <div className="flex-1">
-                                                <p className={`text-sm ${!notification.isRead ? 'text-white font-medium' : 'text-text-secondary'}`}>
+                                                <p className={`text-sm leading-6 ${!notification.isRead ? 'text-[#f4f7ff] font-medium' : 'text-[#c6d0e1]'}`}>
                                                     {notification.message}
                                                 </p>
-                                                <p className="text-xs text-text-secondary mt-1">
+                                                <p className="mt-1 text-xs text-[#8d98ad]">
                                                     {new Date(notification.createdAt).toLocaleDateString()} {new Date(notification.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
@@ -151,7 +155,7 @@ export default function NotificationBell() {
                                     </div>
                                 ))
                             ) : (
-                                <div className="px-4 py-8 text-center text-text-secondary text-sm">
+                                <div className="px-4 py-8 text-center text-sm text-[#a7b1c4]">
                                     <span className="material-symbols-outlined text-4xl mb-2 opacity-50 block mx-auto">notifications_off</span>
                                     No notifications
                                 </div>

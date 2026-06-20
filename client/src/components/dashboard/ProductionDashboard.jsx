@@ -140,7 +140,8 @@ export default function ProductionDashboard({
         String(currentUserId) === String(projectManagerId)
     );
     const showActionsColumn = showManagerActions && canEditProduction;
-    const totalBatch = Number(project?.totalBatchSize || 0) || 100;
+    const totalBatch = Number(project?.totalBatchSize || 0);
+    const hasProjectCapacity = totalBatch > 0;
     const assignableUserIds = new Set(
         (project?.teamIds || [])
             .map((member) => (typeof member === 'object' && member ? member.id || member._id : member))
@@ -941,6 +942,11 @@ export default function ProductionDashboard({
                         {assignmentErrors.global}
                     </div>
                 )}
+                {!hasProjectCapacity && (
+                    <div className="rounded-xl border border-[#8a5a00] bg-[#8a5a00]/15 px-4 py-3 text-xs text-[#ffe2b7]">
+                        Project quantity is not set for this board. A super admin must save the project with a valid total batch size before manager assignments can start.
+                    </div>
+                )}
 
                 <div className="overflow-hidden rounded-[20px] border border-[#434656] bg-[#0b1326] shadow-[0_24px_80px_rgba(6,14,32,0.45)]">
                     <div className="border-b border-[#222a3d] bg-[#171f33] px-6 py-4">
@@ -977,7 +983,7 @@ export default function ProductionDashboard({
                             <div className="grid grid-cols-3 gap-3 xl:min-w-[420px]">
                                 <div className="rounded-2xl border border-[#2a3144] bg-[#0a1020] px-4 py-3">
                                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">Target</p>
-                                    <p className="mt-2 text-2xl font-bold text-[#efefff]">{totalBatch}</p>
+                                    <p className="mt-2 text-2xl font-bold text-[#efefff]">{hasProjectCapacity ? totalBatch : 'Not set'}</p>
                                 </div>
                                 <div className="rounded-2xl border border-[#2a3144] bg-[#0a1020] px-4 py-3">
                                     <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">Completion</p>
@@ -1042,14 +1048,14 @@ export default function ProductionDashboard({
                                             value={fullProductDraft.title}
                                             onChange={(event) => setFullProductDraft((prev) => ({ ...prev, title: event.target.value }))}
                                             placeholder="Task Title..."
-                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#5f6980] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#8ea4c9] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
                                         />
                                         <input
                                             type="text"
                                             value={fullProductDraft.description}
                                             onChange={(event) => setFullProductDraft((prev) => ({ ...prev, description: event.target.value }))}
                                             placeholder="Description (optional)..."
-                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#5f6980] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#8ea4c9] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
                                         />
                                         <div className="relative">
                                             <input
@@ -1060,6 +1066,7 @@ export default function ProductionDashboard({
                                                 onChange={(event) => setFullProductDraft((prev) => ({ ...prev, deadline: event.target.value }))}
                                                 className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 pr-12 text-sm text-[#efefff] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
                                                 aria-label="Stage deadline"
+                                                style={{ colorScheme: 'dark' }}
                                             />
                                             <span className="material-symbols-outlined pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#7f8aa4]">
                                                 calendar_today
@@ -1067,7 +1074,7 @@ export default function ProductionDashboard({
                                         </div>
                                         <button
                                             type="submit"
-                                            disabled={!fullProductDraft.title.trim() || !fullProductDraft.deadline || fullProductSaving}
+                                            disabled={!fullProductDraft.title.trim() || !fullProductDraft.deadline || fullProductSaving || !hasProjectCapacity}
                                             className="flex items-center justify-center gap-2 rounded-xl bg-[#4b5871] px-6 py-3 text-sm font-bold text-white transition-all hover:bg-[#5b6882] disabled:cursor-not-allowed disabled:bg-[#313b50] disabled:text-[#7f8aa4]"
                                         >
                                             <span className="material-symbols-outlined text-lg">add</span>
@@ -1220,7 +1227,7 @@ export default function ProductionDashboard({
                                                                                     <div className="mb-4">
                                                                                         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
                                                                                         <p className="mt-1 text-[12px] text-[#dae2fd]">
-                                                                                            Capacity: {availableCapacity} units. Assigned: {assignedBoards}. Remaining unassigned: {unassignedBoards}.
+                                                                                            Capacity: {hasProjectCapacity ? availableCapacity : 'Not set'} units. Assigned: {assignedBoards}. Remaining unassigned: {hasProjectCapacity ? unassignedBoards : 'Not set'}.
                                                                                         </p>
                                                                                     </div>
                                                                                     {assignmentErrors[taskId] && (
@@ -1252,7 +1259,7 @@ export default function ProductionDashboard({
                                                                                                         step="1"
                                                                                                         value={assignmentDraft.boardsAssigned}
                                                                                                         onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, boardsAssigned: e.target.value } }))}
-                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#2e5bff]"
                                                                                                     />
                                                                                                     <input
                                                                                                         type="number"
@@ -1260,12 +1267,18 @@ export default function ProductionDashboard({
                                                                                                         value={assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0}
                                                                                                         className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd]"
                                                                                                     />
-                                                                                                    <input
-                                                                                                        type="date"
-                                                                                                        value={assignmentDraft.deadline}
-                                                                                                        onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
-                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                                    />
+                                                                                                    <div className="relative">
+                                                                                                        <input
+                                                                                                            type="date"
+                                                                                                            value={assignmentDraft.deadline}
+                                                                                                            onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
+                                                                                                            className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                            style={{ colorScheme: 'dark' }}
+                                                                                                        />
+                                                                                                        <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
+                                                                                                            calendar_today
+                                                                                                        </span>
+                                                                                                    </div>
                                                                                                     <div className="flex flex-wrap justify-end gap-2">
                                                                                                         {String(assignment.userId?._id || assignment.userId) === String(currentUserId) && assignment.status !== 'COMPLETED' && (
                                                                                                             <div className="flex items-center gap-2">
@@ -1276,7 +1289,7 @@ export default function ProductionDashboard({
                                                                                                                     placeholder="Done"
                                                                                                                     value={progressDrafts[assignmentId] ?? ''}
                                                                                                                     onChange={(e) => setProgressDrafts((prev) => ({ ...prev, [assignmentId]: e.target.value }))}
-                                                                                                                    className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#00e383]"
+                                                                                                                    className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#00e383]"
                                                                                                                 />
                                                                                                                 <button
                                                                                                                     type="button"
@@ -1340,7 +1353,7 @@ export default function ProductionDashboard({
                                                                                                 value={newAssignmentDrafts[taskId]?.boardsAssigned || ''}
                                                                                                 onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), boardsAssigned: e.target.value } }))}
                                                                                                 placeholder="Assigned"
-                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#2e5bff]"
                                                                                             />
                                                                                             <input
                                                                                                 type="text"
@@ -1348,18 +1361,24 @@ export default function ProductionDashboard({
                                                                                                 value="0"
                                                                                                 className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd]"
                                                                                             />
-                                                                                            <input
-                                                                                                type="date"
-                                                                                                value={newAssignmentDrafts[taskId]?.deadline || ''}
-                                                                                                onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
-                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                            />
+                                                                                            <div className="relative">
+                                                                                                <input
+                                                                                                    type="date"
+                                                                                                    value={newAssignmentDrafts[taskId]?.deadline || ''}
+                                                                                                    onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
+                                                                                                    className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                    style={{ colorScheme: 'dark' }}
+                                                                                                />
+                                                                                                <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
+                                                                                                    calendar_today
+                                                                                                </span>
+                                                                                            </div>
                                                                                             <div className="flex items-center justify-end gap-2">
                                                                                                 {(assignableUserIds.size === 0 || assignableUserIds.has(String(currentUserId))) && (
                                                                                                     <button
                                                                                                         type="button"
                                                                                                         onClick={() => createSelfAssignment(taskId, unassignedBoards)}
-                                                                                                        disabled={assignmentSaving[taskId]}
+                                                                                                        disabled={assignmentSaving[taskId] || !hasProjectCapacity}
                                                                                                         className="rounded border border-[#00e3fd] bg-transparent px-3 py-2 text-[11px] font-bold text-[#00e3fd] transition-colors hover:bg-[#00e3fd]/10 disabled:opacity-60"
                                                                                                     >
                                                                                                         {assignmentSaving[taskId] ? 'Saving...' : 'Self Assign'}
@@ -1368,7 +1387,7 @@ export default function ProductionDashboard({
                                                                                                 <button
                                                                                                     type="button"
                                                                                                     onClick={() => createAssignment(taskId)}
-                                                                                                    disabled={assignmentSaving[taskId]}
+                                                                                                    disabled={assignmentSaving[taskId] || !hasProjectCapacity}
                                                                                                     className="rounded bg-[#00e3fd] px-3 py-2 text-[11px] font-bold text-[#001f24] disabled:opacity-60"
                                                                                                 >
                                                                                                     {assignmentSaving[taskId] ? 'Saving...' : 'Add worker'}
@@ -1480,7 +1499,7 @@ export default function ProductionDashboard({
                                     <div className="grid grid-cols-2 gap-3">
                                         <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
                                             <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Batch</p>
-                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{totalBatch}</p>
+                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{hasProjectCapacity ? totalBatch : 'Not set'}</p>
                                         </div>
                                         <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
                                             <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Units Done</p>
@@ -2023,7 +2042,7 @@ export default function ProductionDashboard({
                                                                         <div className="mb-4">
                                                                             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
                                                                             <p className="mt-1 text-[12px] text-[#dae2fd]">
-                                                                                Capacity: {availableCapacity} boards. Assigned: {assignedBoards}. Remaining unassigned: {unassignedBoards}.
+                                                                                Capacity: {hasProjectCapacity ? availableCapacity : 'Not set'} boards. Assigned: {assignedBoards}. Remaining unassigned: {hasProjectCapacity ? unassignedBoards : 'Not set'}.
                                                                             </p>
                                                                         </div>
                                                                         {assignmentErrors[taskId] && (
@@ -2059,7 +2078,7 @@ export default function ProductionDashboard({
                                                                                             step="1"
                                                                                             value={assignmentDraft.boardsAssigned}
                                                                                             onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, boardsAssigned: e.target.value } }))}
-                                                                                            className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                            className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#2e5bff]"
                                                                                         />
                                                                                         <input
                                                                                             type="number"
@@ -2067,12 +2086,18 @@ export default function ProductionDashboard({
                                                                                             value={assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0}
                                                                                             className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                         />
-                                                                                        <input
-                                                                                            type="date"
-                                                                                            value={assignmentDraft.deadline}
-                                                                                            onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
-                                                                                            className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                        />
+                                                                                        <div className="relative">
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                value={assignmentDraft.deadline}
+                                                                                                onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
+                                                                                                className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                style={{ colorScheme: 'dark' }}
+                                                                                            />
+                                                                                            <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
+                                                                                                calendar_today
+                                                                                            </span>
+                                                                                        </div>
                                                                                         <div className="text-right">
                                                                                             <div className="flex flex-wrap justify-end gap-2">
                                                                                                 {/* Progress submit — visible to the assigned user (including self-assigned manager) */}
@@ -2085,7 +2110,7 @@ export default function ProductionDashboard({
                                                                                                             placeholder="Done"
                                                                                                             value={progressDrafts[assignmentId] ?? ''}
                                                                                                             onChange={(e) => setProgressDrafts((prev) => ({ ...prev, [assignmentId]: e.target.value }))}
-                                                                                                            className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#00e383]"
+                                                                                                            className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#00e383]"
                                                                                                         />
                                                                                                         <button
                                                                                                             type="button"
@@ -2154,7 +2179,7 @@ export default function ProductionDashboard({
                                                                                     value={newAssignmentDrafts[taskId]?.boardsAssigned || ''}
                                                                                     onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), boardsAssigned: e.target.value } }))}
                                                                                     placeholder="Assigned"
-                                                                                    className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                    className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] placeholder:text-[#8ea4c9] outline-none focus:border-[#2e5bff]"
                                                                                 />
                                                                                 <input
                                                                                     type="text"
@@ -2163,18 +2188,24 @@ export default function ProductionDashboard({
                                                                                     placeholder="Approved"
                                                                                     className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                 />
-                                                                                <input
-                                                                                    type="date"
-                                                                                    value={newAssignmentDrafts[taskId]?.deadline || ''}
-                                                                                    onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
-                                                                                    className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                />
+                                                                                <div className="relative">
+                                                                                    <input
+                                                                                        type="date"
+                                                                                        value={newAssignmentDrafts[taskId]?.deadline || ''}
+                                                                                        onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
+                                                                                        className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                        style={{ colorScheme: 'dark' }}
+                                                                                    />
+                                                                                    <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
+                                                                                        calendar_today
+                                                                                    </span>
+                                                                                </div>
                                                                                 <div className="flex items-center justify-end gap-2">
                                                                                     {(assignableUserIds.size === 0 || assignableUserIds.has(String(currentUserId))) && (
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => createSelfAssignment(taskId, unassignedBoards)}
-                                                                                            disabled={assignmentSaving[taskId]}
+                                                                                            disabled={assignmentSaving[taskId] || !hasProjectCapacity}
                                                                                             className="rounded border border-[#00e3fd] bg-transparent px-3 py-2 text-[11px] font-bold text-[#00e3fd] transition-colors hover:bg-[#00e3fd]/10 disabled:opacity-60"
                                                                                         >
                                                                                             {assignmentSaving[taskId] ? 'Saving...' : 'Self Assign'}
@@ -2183,7 +2214,7 @@ export default function ProductionDashboard({
                                                                                     <button
                                                                                         type="button"
                                                                                         onClick={() => createAssignment(taskId)}
-                                                                                        disabled={assignmentSaving[taskId]}
+                                                                                        disabled={assignmentSaving[taskId] || !hasProjectCapacity}
                                                                                         className="rounded bg-[#00e3fd] px-3 py-2 text-[11px] font-bold text-[#001f24] disabled:opacity-60"
                                                                                     >
                                                                                         {assignmentSaving[taskId] ? 'Saving...' : 'Add worker'}
@@ -2338,7 +2369,7 @@ export default function ProductionDashboard({
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
                                         <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Batch</p>
-                                        <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{totalBatch}</p>
+                                        <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{hasProjectCapacity ? totalBatch : 'Not set'}</p>
                                     </div>
                                     <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
                                         <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Units Done</p>
