@@ -199,7 +199,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
     };
 
     const isAssignee = currentUser && (currentUser.id === (activeTask.assigneeId?._id || activeTask.assigneeId));
-    const showCompleteButton = activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
+    const showCompleteButton = !activeTask.isFullProductStage && activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">

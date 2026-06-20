@@ -274,7 +274,7 @@ export default function InternProjectsPage() {
     if (selectedProject) {
         const stats = getProjectStats(selectedProject.id);
         const projectTasks = getProjectTasks(selectedProject.id);
-        const projectProductionTasks = fullProjectTasks.filter((task) => task.isProductionTask);
+        const projectProductionTasks = fullProjectTasks.filter((task) => task.isProductionTask || task.isFullProductStage);
         const projectProductionAssignments = productionAssignments.filter((assignment) => String(assignment.projectId) === String(selectedProject.id));
 
         const mobileTabs = [
@@ -297,7 +297,7 @@ export default function InternProjectsPage() {
             await handleTaskStatusChange(task.id, next);
         };
 
-        if (selectedProject.projectType === 'PRODUCTION') {
+        if (['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType)) {
             return (
                 <InternLayout currentPage="projects">
                     <div className="p-6 lg:px-12 pb-24">

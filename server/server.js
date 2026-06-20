@@ -354,14 +354,39 @@ const calculateActualMinutes = (assignedAt, completedAt) => {
     return minutes > 0 ? minutes : 1;
 };
 
+const FIXED_PRODUCTION_PROJECT_TYPES = new Set(['PRODUCTION']);
+const PRODUCTION_WORKFLOW_PROJECT_TYPES = new Set(['PRODUCTION', 'FULL_PRODUCT_PRODUCTION']);
+
+const isFixedProductionProject = (project) => (
+    !!project && FIXED_PRODUCTION_PROJECT_TYPES.has(project.projectType)
+);
+
+const supportsProductionWorkflow = (project) => (
+    !!project && PRODUCTION_WORKFLOW_PROJECT_TYPES.has(project.projectType)
+);
+
+const getProductionTaskQuery = (projectId, project) => {
+    if (project?.projectType === 'FULL_PRODUCT_PRODUCTION') {
+        return { projectId, isProductionTask: false, isFullProductStage: true };
+    }
+    return { projectId, isProductionTask: true };
+};
+
+const getProductionTasksForProject = async (projectId, project) => (
+    Task.find(getProductionTaskQuery(projectId, project)).sort({ sequence: 1, createdAt: 1 })
+);
+
+const getProductionTaskCapacity = (project) => Math.max(0, Number(project?.totalBatchSize || 0));
+
 const syncProductionProjectState = async (projectId) => {
     const project = await Project.findById(projectId);
-    if (!project || project.projectType !== 'PRODUCTION') {
+    if (!supportsProductionWorkflow(project)) {
         return { project: null, tasks: [] };
     }
 
-    const tasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
-    const assignments = await ProductionAssignment.find({ projectId }).sort({ createdAt: 1 });
+    const tasks = await getProductionTasksForProject(projectId, project);
+    const taskIds = tasks.map((task) => task._id);
+    const assignments = await ProductionAssignment.find({ projectId, taskId: { $in: taskIds } }).sort({ createdAt: 1 });
     const assignmentsByTaskId = assignments.reduce((acc, assignment) => {
         const key = assignment.taskId.toString();
         if (!acc[key]) acc[key] = [];
@@ -394,15 +419,15 @@ const syncProductionProjectState = async (projectId) => {
 
     for (let index = 0; index < tasks.length; index += 1) {
         const task = tasks[index];
-        const allowedCompleted = index === 0
-            ? Number(project.totalBatchSize || 0)
-            : Number(tasks[index - 1]?.unitsCompleted || 0);
+        const allowedCompleted = getProductionTaskCapacity(project);
         const taskAssignments = assignmentsByTaskId[task._id.toString()] || [];
 
         if (taskAssignments.length > 0) {
             task.unitsCompleted = taskAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0), 0);
             task.assigneeId = taskAssignments.length === 1 ? taskAssignments[0].userId : null;
             task.assignedAt = taskAssignments[0]?.assignedAt || task.assignedAt || now;
+        } else {
+            task.unitsCompleted = Math.min(Number(task.unitsCompleted || 0), allowedCompleted);
         }
 
         task.unitsCurrentlyHere = Math.max(0, allowedCompleted - Number(task.unitsCompleted || 0));
@@ -425,14 +450,15 @@ const syncProductionProjectState = async (projectId) => {
         await Promise.all(tasks.map((task) => task.save()));
     }
 
-    const finalTask = tasks[tasks.length - 1];
-    const hasMeaningfulProgress = tasks.some((task) => Number(task.unitsCompleted || 0) > 0);
+    const fullCapacity = getProductionTaskCapacity(project);
+    const hasMeaningfulProgress = tasks.some((task) => (
+        Number(task.unitsCompleted || 0) > 0 ||
+        Number(task.unitsCurrentlyHere || 0) < fullCapacity ||
+        (assignmentsByTaskId[task._id.toString()] || []).length > 0
+    ));
+    const allTasksComplete = tasks.length > 0 && tasks.every((task) => Number(task.unitsCompleted || 0) >= fullCapacity);
 
-    if (
-        finalTask &&
-        Number(finalTask.unitsCompleted || 0) >= Number(project.totalBatchSize || 0) &&
-        Number(finalTask.unitsCurrentlyHere || 0) === 0
-    ) {
+    if (allTasksComplete) {
         project.status = 'COMPLETED';
     } else if (hasMeaningfulProgress) {
         project.status = 'ACTIVE';
@@ -985,8 +1011,8 @@ app.get('/api/users', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_
         // Super Admins see all non-super users
         query.role = { $in: ['MANAGER', 'EMPLOYEE', 'INTERN', 'PURCHASE_MANAGER', 'STORE_MANAGER'] };
     } else if (req.user.role === roles.MANAGER && req.user.department) {
-        // Managers see only employees and interns from their department
-        query.role = { $in: ['EMPLOYEE', 'INTERN'] };
+        // Managers see managers, employees, and interns from their department
+        query.role = { $in: ['MANAGER', 'EMPLOYEE', 'INTERN'] };
         query.department = req.user.department;
     } else {
         // Others see only employees and interns
@@ -1435,17 +1461,23 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
         console.log('Creating project:', { name, department, managerId, startDate, deadline, endDate, projectType, totalBatchSize });
 
         if (!name) return res.status(400).json({ message: 'Project name is required' });
+        const normalizedProjectType = projectType || 'GENERAL';
+        const usesProductionWorkflow = PRODUCTION_WORKFLOW_PROJECT_TYPES.has(normalizedProjectType);
+        const usesFixedProductionFlow = FIXED_PRODUCTION_PROJECT_TYPES.has(normalizedProjectType);
 
         // Ensure we have a deadline (either from deadline or endDate field)
         const projectDeadline = deadline || endDate;
         if (!projectDeadline) {
             return res.status(400).json({ message: 'Project deadline/end date is required' });
         }
+        if (usesProductionWorkflow && !(Number(totalBatchSize) > 0)) {
+            return res.status(400).json({ message: 'Total batch size is required for production projects.' });
+        }
 
         const project = await Project.create({
             name,
             description: description || '',
-            department: projectType === 'PRODUCTION' ? 'HARDWARE' : (department || 'SOFTWARE'),
+            department: usesProductionWorkflow ? 'HARDWARE' : (department || 'SOFTWARE'),
             status: 'PLANNING',
             managerId: managerId || null,
             startDate: startDate || new Date(),
@@ -1454,8 +1486,8 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
             templateUsed: templateName || '',
             teamIds: teamIds || [],
             createdBy: req.user._id,
-            projectType: projectType || 'GENERAL',
-            totalBatchSize: projectType === 'PRODUCTION' ? (Number(totalBatchSize) || 100) : 0,
+            projectType: normalizedProjectType,
+            totalBatchSize: usesProductionWorkflow ? Number(totalBatchSize) : 0,
         });
 
         // Notify Manager
@@ -1469,8 +1501,8 @@ app.post('/api/projects', authMiddleware, requireRole(roles.SUPER_USER, roles.SU
         }
 
         // Seeding production tasks or template tasks
-        if (projectType === 'PRODUCTION') {
-            const batchSize = Number(totalBatchSize) || 100;
+        if (usesFixedProductionFlow) {
+            const batchSize = Number(totalBatchSize);
             for (let i = 0; i < PCB_PRODUCTION_PHASES.length; i++) {
                 const phaseName = PCB_PRODUCTION_PHASES[i];
                 await Task.create({
@@ -1686,13 +1718,26 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         console.log('Request body:', { name, description, department, status, deadline, teamIds, budget, managerId });
         console.log('Current project status:', project.status);
 
+        const isSuperProjectEditor = [roles.SUPER_USER, roles.SUPER_ADMIN].includes(req.user.role);
+        const isManagerLike = [roles.MANAGER, roles.ENGINEER].includes(req.user.role);
+        const isPrimaryManager = !!project.managerId && project.managerId.toString() === req.user._id.toString();
+
+        if (isManagerLike && !isPrimaryManager) {
+            return res.status(403).json({ message: 'Only the assigned primary manager can update this project.' });
+        }
+
         if (name) project.name = name;
         if (description !== undefined) project.description = description;
-        if (department) project.department = department;
-        if (managerId !== undefined) project.managerId = managerId;
+        if (department && isSuperProjectEditor) project.department = department;
+        if (managerId !== undefined) {
+            if (!isSuperProjectEditor) {
+                return res.status(403).json({ message: 'Only super admin can change the primary manager.' });
+            }
+            project.managerId = managerId;
+        }
 
         // Only Super Users can update budget
-        if (budget !== undefined && (req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN)) {
+        if (budget !== undefined && isSuperProjectEditor) {
             project.budget = budget;
         }
 
@@ -1716,6 +1761,19 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
                 (id && typeof id === 'object' && (id._id || id.id)) ? (id._id || id.id).toString() : id.toString()
             );
 
+            if (isManagerLike) {
+                const addedMemberIds = newTeamIds.filter((id) => !oldTeamIds.includes(id));
+                if (addedMemberIds.length > 0) {
+                    const addedUsers = await User.find({ _id: { $in: addedMemberIds } }).select('_id role department');
+                    const invalidManager = addedUsers.find((user) =>
+                        user.role === roles.MANAGER && user.department !== req.user.department
+                    );
+                    if (invalidManager) {
+                        return res.status(400).json({ message: 'Managers can only add same-department managers to a project.' });
+                    }
+                }
+            }
+
             // Find removed members
             const removedMembers = oldTeamIds.filter(id => !newTeamIds.includes(id));
 
@@ -1735,7 +1793,18 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         await syncProjectToInventory(project, req.user);
 
         console.log('✅ Project updated successfully:', project._id, 'Status:', project.status);
-        res.json({ id: project._id, name: project.name, description: project.description, department: project.department, status: project.status, deadline: project.deadline, teamIds: project.teamIds.map(id => id.toString()) });
+        res.json({
+            id: project._id,
+            name: project.name,
+            description: project.description,
+            department: project.department,
+            status: project.status,
+            deadline: project.deadline,
+            teamIds: project.teamIds.map(id => id.toString()),
+            managerId: project.managerId ? project.managerId.toString() : null,
+            projectType: project.projectType,
+            totalBatchSize: project.totalBatchSize || 0
+        });
     } catch (err) {
         console.error('Error updating project:', err);
         res.status(500).json({ message: 'Failed to update project', error: err.message });
@@ -2241,14 +2310,14 @@ app.put('/api/projects/:projectId/production/tasks/:taskId', authMiddleware, asy
 
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        if (project.projectType !== 'PRODUCTION') {
+        if (!isFixedProductionProject(project)) {
             return res.status(400).json({ message: 'Only production projects support direct phase updates.' });
         }
         if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Only the assigned manager can update production phase counts.' });
         }
 
-        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
+        const productionTasks = await getProductionTasksForProject(projectId, project);
         const task = productionTasks.find((item) => item._id.toString() === taskId);
         if (!task) {
             return res.status(404).json({ message: 'Production phase task not found.' });
@@ -2258,31 +2327,15 @@ app.put('/api/projects/:projectId/production/tasks/:taskId', authMiddleware, asy
             return res.status(400).json({ message: 'This phase uses split worker allocations. Update the worker allocation rows instead of the phase total.' });
         }
 
-        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
-        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
-        const totalAvailable = previousTask
-            ? Number(previousTask.unitsCompleted || 0)
-            : Number(project.totalBatchSize || 0);
+        const totalAvailable = getProductionTaskCapacity(project);
 
         if (unitsCompleted > totalAvailable) {
             return res.status(400).json({
-                message: previousTask
-                    ? `${task.productionPhase || task.title} cannot exceed ${totalAvailable} board(s) completed in the previous phase.`
-                    : `The first phase cannot exceed the total batch size of ${project.totalBatchSize}.`
+                message: `${task.productionPhase || task.title} cannot exceed the total batch size of ${project.totalBatchSize}.`
             });
         }
 
-        const nextTask = productionTasks[taskIndex + 1];
-        if (nextTask) {
-            const nextTaskDemand = Number(nextTask.unitsCurrentlyHere || 0) + Number(nextTask.unitsCompleted || 0);
-            if (unitsCompleted < nextTaskDemand) {
-                return res.status(400).json({
-                    message: `${task.productionPhase || task.title} completed boards cannot be less than ${nextTaskDemand}, because the next phase already uses that quantity.`
-                });
-            }
-        }
-
-        if (task.sequence === PCB_PRODUCTION_PHASES.length && unitsCompleted > Number(project.totalBatchSize || 0)) {
+        if (project.projectType === 'PRODUCTION' && task.sequence === PCB_PRODUCTION_PHASES.length && unitsCompleted > Number(project.totalBatchSize || 0)) {
             return res.status(400).json({ message: `Final qc completed units cannot exceed the total batch size of ${project.totalBatchSize}.` });
         }
 
@@ -2365,7 +2418,7 @@ app.get('/api/projects/:projectId/production/assignments', authMiddleware, async
 
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        if (project.projectType !== 'PRODUCTION') {
+        if (!supportsProductionWorkflow(project)) {
             return res.status(400).json({ message: 'Only production projects support worker allocations.' });
         }
 
@@ -2571,14 +2624,14 @@ app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMi
 
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        if (project.projectType !== 'PRODUCTION') {
+        if (!supportsProductionWorkflow(project)) {
             return res.status(400).json({ message: 'Only production projects support worker allocations.' });
         }
         if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Only the assigned manager can create production worker allocations.' });
         }
 
-        const task = await Task.findOne({ _id: taskId, projectId, isProductionTask: true });
+        const task = await Task.findOne({ _id: taskId, ...getProductionTaskQuery(projectId, project) });
         if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
 
         const worker = await User.findById(userId).select('_id name');
@@ -2595,12 +2648,7 @@ app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMi
             return res.status(400).json({ message: 'This worker already has an allocation for the selected production phase.' });
         }
 
-        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
-        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
-        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
-        const totalAvailable = previousTask
-            ? Number(previousTask.unitsCompleted || 0)
-            : Number(project.totalBatchSize || 0);
+        const totalAvailable = getProductionTaskCapacity(project);
 
         const existingAssignments = await ProductionAssignment.find({ projectId, taskId });
         const assignedAlready = existingAssignments.reduce((sum, assignment) => sum + Number(assignment.boardsAssigned || 0), 0);
@@ -2667,14 +2715,14 @@ app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignme
 
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        if (project.projectType !== 'PRODUCTION') {
+        if (!supportsProductionWorkflow(project)) {
             return res.status(400).json({ message: 'Only production projects support worker allocations.' });
         }
         if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Only the assigned manager can update production worker allocations.' });
         }
 
-        const task = await Task.findOne({ _id: taskId, projectId, isProductionTask: true });
+        const task = await Task.findOne({ _id: taskId, ...getProductionTaskQuery(projectId, project) });
         if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
 
         const assignment = await ProductionAssignment.findOne({ _id: assignmentId, projectId, taskId });
@@ -2690,27 +2738,13 @@ app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignme
             return res.status(400).json({ message: 'Approved completed boards cannot exceed assigned boards for a worker allocation.' });
         }
 
-        const productionTasks = await Task.find({ projectId, isProductionTask: true }).sort({ sequence: 1 });
-        const taskIndex = productionTasks.findIndex((item) => item._id.toString() === taskId);
-        const previousTask = taskIndex > 0 ? productionTasks[taskIndex - 1] : null;
-        const totalAvailable = previousTask
-            ? Number(previousTask.unitsCompleted || 0)
-            : Number(project.totalBatchSize || 0);
+        const totalAvailable = getProductionTaskCapacity(project);
 
         const siblingAssignments = await ProductionAssignment.find({ projectId, taskId, _id: { $ne: assignmentId } });
         const assignedByOthers = siblingAssignments.reduce((sum, item) => sum + Number(item.boardsAssigned || 0), 0);
-        const completedByOthers = siblingAssignments.reduce((sum, item) => sum + Number(item.boardsCompletedApproved ?? item.boardsCompleted ?? 0), 0);
 
         if (assignedByOthers + nextBoardsAssigned > totalAvailable) {
             return res.status(400).json({ message: `Assigned boards exceed available boards for ${task.productionPhase || task.title}. Remaining allocatable boards: ${Math.max(0, totalAvailable - assignedByOthers)}.` });
-        }
-
-        const nextPhase = productionTasks[taskIndex + 1];
-        if (nextPhase) {
-            const nextTaskDemand = Number(nextPhase.unitsCurrentlyHere || 0) + Number(nextPhase.unitsCompleted || 0);
-            if (completedByOthers + nextBoardsCompletedApproved < nextTaskDemand) {
-                return res.status(400).json({ message: `${task.productionPhase || task.title} completed boards cannot be reduced below ${nextTaskDemand}, because the next phase already uses that quantity.` });
-            }
         }
 
         assignment.boardsAssigned = nextBoardsAssigned;
@@ -2764,7 +2798,7 @@ app.get('/api/projects/:projectId/production/dispatches', authMiddleware, async 
         }
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found.' });
-        if (project.projectType !== 'PRODUCTION') {
+        if (!isFixedProductionProject(project)) {
             return res.status(400).json({ message: 'Only production projects support dispatches.' });
         }
 
@@ -2815,7 +2849,7 @@ app.post('/api/projects/:projectId/production/dispatches',
 
             const project = await Project.findById(projectId);
             if (!project) return res.status(404).json({ message: 'Project not found.' });
-            if (project.projectType !== 'PRODUCTION') {
+            if (!isFixedProductionProject(project)) {
                 return res.status(400).json({ message: 'Dispatches can only be created for production projects.' });
             }
 
@@ -2951,10 +2985,12 @@ app.get('/api/projects/:projectId/tasks', authMiddleware, async (req, res) => {
             title: t.title,
             description: t.description,
             status: t.status,
+            createdAt: t.createdAt,
             projectId: t.projectId,
             assigneeId: t.assigneeId?._id,
             assigneeName: t.assigneeId?.name,
             isProductionTask: t.isProductionTask || false,
+            isFullProductStage: t.isFullProductStage || false,
             productionPhase: t.productionPhase || '',
             sequence: t.sequence || 0,
             unitsCompleted: t.unitsCompleted || 0,
@@ -2990,6 +3026,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
             title: t.title,
             description: t.description,
             status: t.status,
+            createdAt: t.createdAt,
             projectId: t.projectId?._id,
             projectName: isEmployeeOrIntern ? null : (t.projectId?.name || 'Unknown'),
             projectCode: t.projectId?.projectCode || null,
@@ -3009,6 +3046,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
             adminDelayApproved: t.adminDelayApproved,
             delayRejectionReason: t.delayRejectionReason,
             isProductionTask: t.isProductionTask || false,
+            isFullProductStage: t.isFullProductStage || false,
             productionPhase: t.productionPhase || '',
             sequence: t.sequence || 0,
             unitsCompleted: t.unitsCompleted || 0,
@@ -3056,6 +3094,7 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
             title: task.title,
             description: task.description,
             status: task.status,
+            createdAt: task.createdAt,
             projectId: task.projectId?._id,
             projectName: isEmployeeOrIntern ? null : (task.projectId?.name || 'Unknown'),
             projectCode: task.projectId?.projectCode || null,
@@ -3070,6 +3109,7 @@ app.get('/api/tasks/:id', authMiddleware, async (req, res) => {
             comments: task.comments,
             queries: task.queries, // This preserves the MongoDB _id for each query
             isProductionTask: task.isProductionTask || false,
+            isFullProductStage: task.isFullProductStage || false,
             productionPhase: task.productionPhase || '',
             sequence: task.sequence || 0,
             unitsCompleted: task.unitsCompleted || 0,
@@ -3095,7 +3135,9 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         }
 
         // If no assigneeId provided, assign to the creator ONLY if they are an Employee or Intern
-        const finalAssigneeId = assigneeId || (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user._id : null);
+        const finalAssigneeId = project.projectType === 'FULL_PRODUCT_PRODUCTION'
+            ? null
+            : (assigneeId || (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user._id : null));
 
         // Set assignedAt if assignee is provided
         const assignedAt = finalAssigneeId ? new Date() : null;
@@ -3113,6 +3155,23 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
             if (allocatedMinutes < 0) allocatedMinutes = 0;
         }
 
+        let fullProductStageMeta = {};
+        if (project.projectType === 'FULL_PRODUCT_PRODUCTION') {
+            const lastStage = await Task.findOne({
+                projectId,
+                isProductionTask: false
+            })
+                .sort({ sequence: -1, createdAt: -1 })
+                .select('sequence');
+
+            fullProductStageMeta = {
+                isFullProductStage: true,
+                sequence: Number(lastStage?.sequence || 0) + 1,
+                unitsCompleted: 0,
+                unitsCurrentlyHere: 0
+            };
+        }
+
         const task = await Task.create({
             title,
             description: description || '',
@@ -3123,7 +3182,14 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
             assignedAt,
             deadline: deadlineDate,
             allocatedMinutes,
+            ...fullProductStageMeta,
         });
+        let createdTask = task;
+
+        if (project.projectType === 'FULL_PRODUCT_PRODUCTION') {
+            await syncProductionProjectState(projectId);
+            createdTask = await Task.findById(task._id);
+        }
 
         // Auto-switch Project to ACTIVE if task is assigned
         // Auto-switch Project to ACTIVE if task is assigned AND ensure User is in Team
@@ -3163,22 +3229,28 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
             await Notification.create({
                 recipientId: finalAssigneeId,
                 type: 'TASK_ASSIGNMENT',
-                message: `You have been assigned to task "${task.title}" with deadline: ${deadlineDate.toLocaleDateString()}`,
-                relatedId: task._id
+                message: `You have been assigned to task "${createdTask.title}" with deadline: ${deadlineDate.toLocaleDateString()}`,
+                relatedId: createdTask._id
             });
         }
 
-        console.log('✅ Task created:', task._id, 'assigned to:', finalAssigneeId, 'deadline:', deadlineDate);
+        console.log('✅ Task created:', createdTask._id, 'assigned to:', finalAssigneeId, 'deadline:', deadlineDate);
         res.status(201).json({
-            id: task._id,
-            title: task.title,
-            description: task.description,
-            status: task.status,
-            projectId: task.projectId,
-            assigneeId: task.assigneeId,
-            deadline: task.deadline,
-            assignedAt: task.assignedAt,
-            allocatedMinutes: task.allocatedMinutes
+            id: createdTask._id,
+            title: createdTask.title,
+            description: createdTask.description,
+            status: createdTask.status,
+            createdAt: createdTask.createdAt,
+            projectId: createdTask.projectId,
+            assigneeId: createdTask.assigneeId,
+            deadline: createdTask.deadline,
+            assignedAt: createdTask.assignedAt,
+            allocatedMinutes: createdTask.allocatedMinutes,
+            isProductionTask: createdTask.isProductionTask || false,
+            isFullProductStage: createdTask.isFullProductStage || false,
+            sequence: createdTask.sequence || 0,
+            unitsCompleted: createdTask.unitsCompleted || 0,
+            unitsCurrentlyHere: createdTask.unitsCurrentlyHere || 0
         });
     } catch (err) {
         console.error('❌ Error creating task:', err);
@@ -3235,6 +3307,7 @@ app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, r
             console.log('Task not found in DB for delete:', taskId);
             return res.status(404).json({ message: 'Task not found in database' });
         }
+        const shouldResyncProductionState = Boolean(task.isFullProductStage && task.projectId);
 
         // Optionally check ownership/project management here if strictly required,
         // but requireRole(MANAGER) covers the basic 'Manager can delete' requirement.
@@ -3249,6 +3322,10 @@ app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, r
         }
 
         await Task.findByIdAndDelete(taskId);
+        await ProductionAssignment.deleteMany({ taskId });
+        if (shouldResyncProductionState) {
+            await syncProductionProjectState(task.projectId);
+        }
         console.log(`✅ Task deleted: ${taskId}`);
         res.json({ message: 'Task deleted successfully', id: taskId });
     } catch (err) {
@@ -3270,6 +3347,9 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         if (task.isProductionTask) {
             return res.status(400).json({ message: 'Production task status must be updated from the production dashboard.' });
+        }
+        if (task.isFullProductStage && (req.body.status !== undefined || req.body.assigneeId !== undefined)) {
+            return res.status(400).json({ message: 'Full product stage status and assignments must be updated from the production board split workflow.' });
         }
 
         const { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy, rejectionReason } = req.body;

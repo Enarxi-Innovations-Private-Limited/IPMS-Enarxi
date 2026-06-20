@@ -87,10 +87,14 @@ export default function SuperUserProjectsPage() {
         budget: '',
     });
 
-    const isProductionProjectView = (project, tasksForProject = []) => {
+    const isProductionCapableProjectView = (project, tasksForProject = []) => {
         if (!project) return false;
-        return project.projectType === 'PRODUCTION' || tasksForProject.some((task) => task.isProductionTask);
+        return project.projectType === 'PRODUCTION'
+            || project.projectType === 'FULL_PRODUCT_PRODUCTION'
+            || tasksForProject.some((task) => task.isProductionTask);
     };
+
+    const isFullProductProductionProject = (project) => project?.projectType === 'FULL_PRODUCT_PRODUCTION';
 
     const formatBudgetDisplay = (val) => {
         if (!val) return '';
@@ -180,7 +184,18 @@ export default function SuperUserProjectsPage() {
             }
 
             setShowCreateModal(false);
-            setCreateForm({ name: '', description: '', department: 'SOFTWARE', managerId: '', startDate: '', endDate: '', budget: '', templateName: '' });
+            setCreateForm({
+                name: '',
+                description: '',
+                department: 'SOFTWARE',
+                managerId: '',
+                startDate: '',
+                endDate: '',
+                budget: '',
+                templateName: '',
+                projectType: 'GENERAL',
+                totalBatchSize: 100,
+            });
             setTemplates([]);
             setSelectedFiles([]);
             await loadProjects();
@@ -446,6 +461,10 @@ export default function SuperUserProjectsPage() {
         return users.filter((u) => teamIds.includes(u.id));
     };
 
+    const detailTasks = isFullProductProductionProject(selectedProject)
+        ? projectTasks.filter((task) => !task.isProductionTask)
+        : projectTasks;
+
     return (
         <SuperUserLayout currentPage="projects">
             <div className="p-6 lg:px-12 pb-24">
@@ -573,7 +592,7 @@ export default function SuperUserProjectsPage() {
                                                             </div>
                                                         ))}
                                                         {team.length > 3 && (
-                                                            <div className="size-7 rounded-full bg-surface-dark flex items-center justify-center border-2 border-border-dark">
+                                                            <div key={`overflow-${project.id}`} className="size-7 rounded-full bg-surface-dark flex items-center justify-center border-2 border-border-dark">
                                                                 <span className="text-text-secondary text-xs">+{team.length - 3}</span>
                                                             </div>
                                                         )}
@@ -663,23 +682,24 @@ export default function SuperUserProjectsPage() {
                                         setCreateForm(prev => ({
                                             ...prev,
                                             projectType: val,
-                                            department: val === 'PRODUCTION' ? 'HARDWARE' : prev.department,
+                                            department: ['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(val) ? 'HARDWARE' : prev.department,
                                             templateName: ''
                                         }));
                                     }}>
                                         <option value="GENERAL">General Project</option>
                                         <option value="PRODUCTION">PCB Production Run</option>
+                                        <option value="FULL_PRODUCT_PRODUCTION">Full Product Production</option>
                                     </select>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Total Batch Size (Boards)</label>
                                     <input
                                         type="number"
-                                        disabled={createForm.projectType !== 'PRODUCTION'}
-                                        required={createForm.projectType === 'PRODUCTION'}
+                                        disabled={!['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType)}
+                                        required={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType)}
                                         className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none disabled:opacity-50"
                                         placeholder="e.g. 100"
-                                        value={createForm.projectType === 'PRODUCTION' ? createForm.totalBatchSize : ''}
+                                        value={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType) ? createForm.totalBatchSize : ''}
                                         onChange={(e) => setCreateForm({ ...createForm, totalBatchSize: parseInt(e.target.value) || 0 })}
                                     />
                                 </div>
@@ -690,9 +710,9 @@ export default function SuperUserProjectsPage() {
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Department *</label>
                                     <select 
-                                        disabled={createForm.projectType === 'PRODUCTION'}
+                                        disabled={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType)}
                                         className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer disabled:opacity-70" 
-                                        value={createForm.projectType === 'PRODUCTION' ? 'HARDWARE' : createForm.department} 
+                                        value={['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType) ? 'HARDWARE' : createForm.department} 
                                         onChange={(e) => {
                                             setCreateForm({ ...createForm, department: e.target.value, templateName: '', managerId: '' });
                                             loadTemplates(e.target.value);
@@ -707,7 +727,7 @@ export default function SuperUserProjectsPage() {
                                     <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.managerId} onChange={(e) => setCreateForm({ ...createForm, managerId: e.target.value })}>
                                         <option value="">Select Manager</option>
                                         {managers.filter(m => {
-                                            const dept = createForm.projectType === 'PRODUCTION' ? 'HARDWARE' : createForm.department;
+                                            const dept = ['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType) ? 'HARDWARE' : createForm.department;
                                             return !dept || m.department === dept || m.department === 'ALL';
                                         }).map(m => (
                                             <option key={m.id} value={m.id}>{m.name} ({m.department})</option>
@@ -717,7 +737,7 @@ export default function SuperUserProjectsPage() {
                             </div>
 
                             {/* Task Template */}
-                            {createForm.projectType !== 'PRODUCTION' && (
+                            {!['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(createForm.projectType) && (
                                 <div>
                                     <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Task Template</label>
                                     <select className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.templateName} onChange={(e) => setCreateForm({ ...createForm, templateName: e.target.value })}>
@@ -863,7 +883,7 @@ export default function SuperUserProjectsPage() {
                     </div>
 
                     {/* Modal Container */}
-                    <div className="relative bg-[#11141D] border border-white/10 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] z-10">
+                    <div className="relative bg-[#11141D] border border-white/10 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[95vh] z-10">
                         {/* Hero Header */}
                         <div className="relative pt-8 pb-10 px-10 border-b border-white/5" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(10, 12, 18, 0) 100%)' }}>
                             <div className="flex items-start justify-between">
@@ -912,25 +932,28 @@ export default function SuperUserProjectsPage() {
                             <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/5">
                                 <div
                                     className="h-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)] transition-all duration-500"
-                                    style={{ width: `${projectTasks.length > 0 ? (projectTasks.filter(t => t.status === 'COMPLETED').length / projectTasks.length * 100) : 0}%` }}
+                                    style={{ width: `${detailTasks.length > 0 ? (detailTasks.filter(t => t.status === 'COMPLETED').length / detailTasks.length * 100) : 0}%` }}
                                 ></div>
                             </div>
                         </div>
 
                         {/* Content Area */}
-                        <div className="flex-1 overflow-auto custom-scrollbar p-8">
-                            {isProductionProjectView(selectedProject, projectTasks) ? (
-                                <ProductionDashboard
-                                    project={selectedProject}
-                                    tasks={projectTasks}
-                                    users={users}
-                                    showManagerActions={false}
-                                    onRefresh={() => {
-                                        loadProjects();
-                                        loadProjectTasks(selectedProject.id || selectedProject._id);
-                                    }}
-                                />
-                            ) : (
+                        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-8">
+                            {isProductionCapableProjectView(selectedProject, projectTasks) && (
+                                <div className="mb-8">
+                                    <ProductionDashboard
+                                        project={selectedProject}
+                                        tasks={projectTasks}
+                                        users={users}
+                                        showManagerActions={false}
+                                        onRefresh={() => {
+                                            loadProjects();
+                                            loadProjectTasks(selectedProject.id || selectedProject._id);
+                                        }}
+                                    />
+                                </div>
+                            )}
+                            {!isProductionCapableProjectView(selectedProject, projectTasks) && (
                                 <div className="flex flex-col-reverse lg:flex-row gap-8">
                                     {/* Left Column: Task Management */}
                                     <div className="flex-1 space-y-6 min-w-0">
@@ -943,10 +966,10 @@ export default function SuperUserProjectsPage() {
 
                                         {loadingTasks ? (
                                             <div className="text-center py-12 text-slate-500">Loading tasks...</div>
-                                        ) : projectTasks.length > 0 ? (
+                                        ) : detailTasks.length > 0 ? (
                                             <>
                                                 <div className="md:hidden space-y-4">
-                                                    {projectTasks.map((task) => {
+                                                    {detailTasks.map((task) => {
                                                         const assignee = users.find(u => u.id === task.assigneeId);
                                                         return (
                                                             <div key={task.id} className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
@@ -996,7 +1019,7 @@ export default function SuperUserProjectsPage() {
                                                             </tr>
                                                         </thead>
                                                         <tbody className="divide-y divide-white/5">
-                                                            {projectTasks.map((task) => {
+                                                            {detailTasks.map((task) => {
                                                                 const assignee = users.find(u => u.id === task.assigneeId);
                                                                 return (
                                                                     <tr key={task.id} className="group hover:bg-white/[0.02] transition-colors">
@@ -1064,20 +1087,20 @@ export default function SuperUserProjectsPage() {
                                             <div className="flex gap-4">
                                                 <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Total Tasks</p>
-                                                    <p className="text-2xl font-bold text-[#556070]">{projectTasks.length}</p>
+                                                    <p className="text-2xl font-bold text-[#556070]">{detailTasks.length}</p>
                                                 </div>
                                                 <div className="flex-1 bg-white/5 border border-white/5 p-4 rounded-2xl" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                     <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Completed</p>
-                                                    <p className="text-2xl font-bold text-emerald-500">{projectTasks.filter(t => t.status === 'COMPLETED').length.toString().padStart(2, '0')}</p>
+                                                    <p className="text-2xl font-bold text-emerald-500">{detailTasks.filter(t => t.status === 'COMPLETED').length.toString().padStart(2, '0')}</p>
                                                 </div>
                                             </div>
                                             <div className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl w-full" style={{ border: '1px solid rgba(255, 255, 255, 0.05)' }}>
                                                 <p className="text-[10px] font-bold text-blue-400 uppercase mb-1">In Progress</p>
                                                 <div className="flex items-end justify-between">
-                                                    <p className="text-2xl font-bold text-[#556070]">{projectTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
-                                                    {projectTasks.length > 0 && (
+                                                    <p className="text-2xl font-bold text-[#556070]">{detailTasks.filter(t => t.status === 'IN_PROGRESS').length.toString().padStart(2, '0')}</p>
+                                                    {detailTasks.length > 0 && (
                                                         <span className="text-xs text-blue-400 font-bold">
-                                                            {Math.round((projectTasks.filter(t => t.status === 'IN_PROGRESS').length / projectTasks.length) * 100)}% Active
+                                                            {Math.round((detailTasks.filter(t => t.status === 'IN_PROGRESS').length / detailTasks.length) * 100)}% Active
                                                         </span>
                                                     )}
                                                 </div>

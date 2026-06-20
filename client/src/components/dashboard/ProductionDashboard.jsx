@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
+import { ENARXI_LOGO_B64 } from '../../assets/enarxi-logo-b64.js';
 
 const PHASE_ICONS = {
     Procurement: 'check_circle',
@@ -38,9 +39,14 @@ const getTaskState = (task) => {
     return 'pending';
 };
 
-const getAvailableCapacity = (task, index, sortedTasks, totalBatch) => {
-    if (index === 0) return totalBatch;
-    return Number(sortedTasks[index - 1]?.unitsCompleted || 0);
+const getAvailableCapacity = (task, index, sortedTasks, totalBatch) => Number(totalBatch || 0);
+
+const getWorkflowCompletionPercent = (workflowTasks, totalBatch) => {
+    const capacity = Number(totalBatch || 0);
+    if (capacity <= 0 || workflowTasks.length === 0) return 0;
+    const completedTotal = workflowTasks.reduce((sum, task) => sum + Math.min(Number(task.unitsCompleted || 0), capacity), 0);
+    const totalRequired = workflowTasks.length * capacity;
+    return Math.min(100, Math.round((completedTotal / totalRequired) * 100));
 };
 
 const getDaysLeftLabel = (deadline) => {
@@ -69,7 +75,16 @@ const getStepLabel = (task) => {
     return phase;
 };
 
-export default function ProductionDashboard({ project, tasks, users, onRefresh, showManagerActions = true }) {
+export default function ProductionDashboard({
+    project,
+    tasks,
+    users,
+    onRefresh,
+    showManagerActions = true,
+    onTaskSelect = null,
+    onAssignTask = null,
+    onDeleteTask = null
+}) {
     const [editingTaskId, setEditingTaskId] = useState(null);
     const [draft, setDraft] = useState({ unitsCompleted: '', assigneeId: '' });
     const [rowLoading, setRowLoading] = useState({});
@@ -93,6 +108,8 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
     const [showCreateDispatch, setShowCreateDispatch] = useState(false);
     const [dispatchSaving, setDispatchSaving] = useState(false);
     const [dispatchError, setDispatchError] = useState('');
+    const [fullProductDraft, setFullProductDraft] = useState({ title: '', description: '', deadline: '' });
+    const [fullProductSaving, setFullProductSaving] = useState(false);
     const emptyDispatchForm = {
         customerName: '', customerAddress: '', customerGSTIN: '', placeOfSupply: '',
         boardFrom: '', boardTo: '',
@@ -100,10 +117,18 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         challanType: 'Job Work', notes: '',
     };
     const [dispatchForm, setDispatchForm] = useState(emptyDispatchForm);
+    const isFullProductProject = project?.projectType === 'FULL_PRODUCT_PRODUCTION';
 
     const sortedTasks = [...(tasks || [])]
         .filter((task) => task.isProductionTask)
         .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
+    const fullProductStages = [...(tasks || [])]
+        .filter((task) => !task.isProductionTask)
+        .sort((a, b) => {
+            const seqDiff = Number(a.sequence || 0) - Number(b.sequence || 0);
+            if (seqDiff !== 0) return seqDiff;
+            return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
 
     const projectId = getProjectId(project);
     const currentUser = getCurrentUser();
@@ -131,22 +156,26 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         .filter((user) => assignableUserIds.size === 0 || assignableUserIds.has(String(getUserId(user))))
         .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-    const finalTask = sortedTasks[sortedTasks.length - 1];
     const assignmentsByTaskId = assignments.reduce((acc, assignment) => {
         const key = String(assignment.taskId);
         if (!acc[key]) acc[key] = [];
         acc[key].push(assignment);
         return acc;
     }, {});
-    const boardsPassed = Number(finalTask?.unitsCompleted || 0);
-    const activeStations = sortedTasks.filter((task) => Number(task.unitsCurrentlyHere || 0) > 0).length;
+    const boardsPassed = sortedTasks.reduce((sum, task) => sum + Number(task.unitsCompleted || 0), 0);
+    const activeStations = sortedTasks.filter((task) => Number(task.unitsCompleted || 0) > 0 || Number(task.unitsCurrentlyHere || 0) < totalBatch).length;
     const activePct = sortedTasks.length > 0 ? Math.round((activeStations / sortedTasks.length) * 100) : 0;
-    const overallCompletion = totalBatch > 0 ? Math.min(100, Math.round((boardsPassed / totalBatch) * 100)) : 0;
-    const projectState = boardsPassed >= totalBatch && Number(finalTask?.unitsCurrentlyHere || 0) === 0
+    const overallCompletion = getWorkflowCompletionPercent(sortedTasks, totalBatch);
+    const projectState = sortedTasks.length > 0 && sortedTasks.every((task) => Number(task.unitsCompleted || 0) >= totalBatch)
         ? 'COMPLETED'
-        : sortedTasks.some((task, index) => Number(task.unitsCompleted || 0) > 0 || (index > 0 && Number(task.unitsCurrentlyHere || 0) > 0))
+        : sortedTasks.some((task) => Number(task.unitsCompleted || 0) > 0 || Number(task.unitsCurrentlyHere || 0) < totalBatch || (assignmentsByTaskId[String(getTaskId(task))] || []).length > 0)
             ? 'ACTIVE'
             : 'PLANNING';
+    const fullProductCompletedCount = fullProductStages.filter((task) => task.status === 'COMPLETED').length;
+    const fullProductActiveCount = fullProductStages.filter((task) => task.status === 'IN_PROGRESS' || task.status === 'WAITING_APPROVAL').length;
+    const fullProductBoardsPassed = fullProductStages.reduce((sum, task) => sum + Number(task.unitsCompleted || 0), 0);
+    const fullProductProgress = getWorkflowCompletionPercent(fullProductStages, totalBatch);
+    const canManageFullProductBoard = Boolean(showManagerActions && currentUserId && projectManagerId && String(currentUserId) === String(projectManagerId));
 
     useEffect(() => {
         if (!editingTaskId) return;
@@ -159,6 +188,14 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
 
     useEffect(() => {
         if (!projectId || sortedTasks.length === 0) {
+            if (isFullProductProject && fullProductStages.length > 0) {
+                // Allow full-product boards to load their worker allocations even without fixed production tasks.
+            } else {
+                setAssignments([]);
+                return;
+            }
+        }
+        if (!projectId || (sortedTasks.length === 0 && fullProductStages.length === 0)) {
             setAssignments([]);
             return;
         }
@@ -191,7 +228,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         };
 
         loadAssignments();
-    }, [projectId, sortedTasks.length]);
+    }, [fullProductStages.length, isFullProductProject, projectId, sortedTasks.length]);
 
     const beginEdit = (task) => {
         const taskId = getTaskId(task);
@@ -482,18 +519,8 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         }
     };
 
-    if (sortedTasks.length === 0) {
-        return (
-            <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[20px] border border-[#434656] bg-[#0b1326] px-6 py-16 text-center text-[#dae2fd]">
-                <span className="material-symbols-outlined mb-4 text-6xl text-[#9cf0ff]">inventory_2</span>
-                <h3 className="text-xl font-bold">Initializing production phases</h3>
-                <p className="mt-2 text-sm text-[#c4c5d9]">The PCB production flow is syncing for this project.</p>
-            </div>
-        );
-    }
-
-    // ── Load dispatches when Dispatches tab is activated ──
     useEffect(() => {
+        if (isFullProductProject) return;
         if (activeTab !== 'dispatches' || !projectId) return;
         const loadDispatches = async () => {
             setDispatchLoading(true);
@@ -507,9 +534,79 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
             }
         };
         loadDispatches();
-    }, [activeTab, projectId]);
+    }, [activeTab, isFullProductProject, projectId]);
+
+    const showInitializingState = sortedTasks.length === 0;
+
+    // ── Load dispatches when Dispatches tab is activated ──
+    useEffect(() => {
+        if (isFullProductProject) return;
+        if (activeTab !== 'dispatches' || !projectId) return;
+        const loadDispatches = async () => {
+            setDispatchLoading(true);
+            try {
+                const res = await api.get(`/projects/${projectId}/production/dispatches`);
+                setDispatches(res.data || []);
+            } catch (err) {
+                console.error('Failed to load dispatches:', err);
+            } finally {
+                setDispatchLoading(false);
+            }
+        };
+        loadDispatches();
+    }, [activeTab, isFullProductProject, projectId]);
+
+    const handleCreateFullProductStage = async (event) => {
+        event.preventDefault();
+
+        const trimmedTitle = fullProductDraft.title.trim();
+        if (!trimmedTitle) {
+            setFeedback({ type: 'error', message: 'Stage title is required.' });
+            return;
+        }
+        if (!fullProductDraft.deadline) {
+            setFeedback({ type: 'error', message: 'Stage deadline is required.' });
+            return;
+        }
+
+        setFullProductSaving(true);
+        setFeedback({ type: '', message: '' });
+        try {
+            await api.post('/tasks', {
+                title: trimmedTitle,
+                description: fullProductDraft.description.trim(),
+                projectId,
+                deadline: fullProductDraft.deadline
+            });
+            setFullProductDraft({ title: '', description: '', deadline: '' });
+            setFeedback({ type: 'success', message: 'Board stage created successfully.' });
+            if (onRefresh) await onRefresh();
+        } catch (err) {
+            setFeedback({
+                type: 'error',
+                message: err.response?.data?.message || 'Failed to create board stage.'
+            });
+        } finally {
+            setFullProductSaving(false);
+        }
+    };
 
     // ── Create dispatch ──
+    const getFullProductStageBadge = (status) => {
+        switch (status) {
+            case 'COMPLETED':
+                return 'border-[#007e46] bg-[#007e46]/15 text-[#c2ffd1]';
+            case 'IN_PROGRESS':
+                return 'border-[#2e5bff] bg-[#2e5bff]/15 text-[#dbe4ff]';
+            case 'WAITING_APPROVAL':
+                return 'border-[#f59e0b] bg-[#f59e0b]/15 text-[#fde68a]';
+            case 'ON_HOLD':
+                return 'border-[#93000a] bg-[#93000a]/20 text-[#ffdad6]';
+            default:
+                return 'border-[#343b4f] bg-[#11192d] text-[#8e90a2]';
+        }
+    };
+
     const handleCreateDispatch = async (e) => {
         e.preventDefault();
         setDispatchError('');
@@ -538,130 +635,877 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
         }
     };
 
-    // ── PDF Generator ──
+    // ── PDF Generator ── (matches reference design)
     const generateDCPdf = (dc) => {
         const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-        const W = 210; const marginL = 14; const marginR = 196;
+        const W = 210;
+        const mL = 14;
+        const mR = 196;
         let y = 14;
 
-        doc.setFillColor(15, 23, 42);
-        doc.rect(0, 0, W, 28, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(14); doc.setFont('helvetica', 'bold');
-        doc.text('ENARXI INNOVATIONS PVT LTD', marginL, 10);
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal');
-        doc.text('No. 12, Industrial Area, Patna, Bihar - 800001  |  GSTIN: 10AAGCE7875R1ZJ', marginL, 16);
-        doc.text('Email: info@enarxi.com  |  Phone: +91 9876543210', marginL, 21);
-        doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.setTextColor(99, 220, 255);
-        doc.text('Delivery Challan', marginR, 12, { align: 'right' });
-        doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 200, 255);
-        doc.text('(Not a Tax Invoice)', marginR, 18, { align: 'right' });
-        y = 34;
+        // ─── Helper: number to words ───
+        const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+            'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+            'Seventeen', 'Eighteen', 'Nineteen'];
+        const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+        const toWords = (n) => {
+            n = Math.round(n);
+            if (n === 0) return 'Zero';
+            if (n < 20) return ones[n];
+            if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? ' ' + ones[n % 10] : '');
+            if (n < 1000) return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + toWords(n % 100) : '');
+            if (n < 100000) return toWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + toWords(n % 1000) : '');
+            if (n < 10000000) return toWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + toWords(n % 100000) : '');
+            return toWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + toWords(n % 10000000) : '');
+        };
+        const amountInWords = (amount) => {
+            const rupees = Math.floor(amount);
+            const paise = Math.round((amount - rupees) * 100);
+            let words = 'Indian Rupee ' + toWords(rupees);
+            if (paise > 0) words += ' and ' + toWords(paise) + ' Paise';
+            return words + ' Only';
+        };
 
-        doc.setFillColor(241, 245, 255);
-        doc.roundedRect(marginL, y, 88, 38, 2, 2, 'F');
-        doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(99, 102, 241);
-        doc.text('DELIVER TO', marginL + 3, y + 5);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(15, 23, 42);
-        doc.text(dc.customerName || '', marginL + 3, y + 11);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(71, 85, 105);
-        const addrLines = doc.splitTextToSize(dc.customerAddress || '', 82);
-        addrLines.slice(0, 3).forEach((line, i) => doc.text(line, marginL + 3, y + 17 + i * 4.5));
-        if (dc.customerGSTIN) { doc.setFont('helvetica', 'bold'); doc.text('GSTIN: ' + dc.customerGSTIN, marginL + 3, y + 33); }
+        // ─── LOGO (actual Enarxi logo image) ───
+        // Logo dimensions: keep aspect ratio, fit within ~55mm wide x 18mm tall
+        doc.addImage(ENARXI_LOGO_B64, 'PNG', mL, y, 55, 18);
+        y += 21;
 
-        doc.setFillColor(241, 245, 255);
-        doc.roundedRect(106, y, 90, 38, 2, 2, 'F');
-        doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(99, 102, 241);
-        doc.text('CHALLAN DETAILS', 109, y + 5);
-        const challanRows = [
-            ['DC No', dc.dcNumber || ''],
-            ['Date', dc.createdAt ? new Date(dc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''],
-            ['Type', dc.challanType || 'Job Work'],
-            ['Place of Supply', dc.placeOfSupply || ''],
-            ['Project Ref', dc.projectCode || ''],
+        // Company details
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(30, 41, 59);
+        doc.text('ENARXI INNOVATIONS PVT LTD', mL, y);
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        const companyAddr = 'No. 12, Industrial Area, Patna, Bihar - 800001';
+        doc.text(companyAddr, mL, y); y += 4.5;
+        doc.text('Chennai Tamil Nadu 600034', mL, y); y += 4.5;
+        doc.text('India', mL, y); y += 4.5;
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(30, 41, 59);
+        doc.text('GSTIN 10AAGCE7875R1ZJ', mL, y);
+
+        // ─── DELIVERY CHALLAN title (right side) ───
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(22);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Delivery Challan', mR, 20, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Delivery Challan# ' + (dc.dcNumber || ''), mR, 28, { align: 'right' });
+
+        y += 10;
+
+        // ─── Divider ───
+        doc.setDrawColor(203, 213, 225);
+        doc.setLineWidth(0.4);
+        doc.line(mL, y, mR, y);
+        y += 7;
+
+        // ─── DELIVER TO (left) + CHALLAN DETAILS (right) ───
+        const leftX = mL;
+        const rightX = 115;
+
+        // Deliver To
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(0, 153, 153);
+        doc.text('Deliver To', leftX, y);
+        y += 5;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(30, 41, 59);
+        doc.text(dc.customerName || '', leftX, y);
+        y += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(71, 85, 105);
+        const addrLines = doc.splitTextToSize(dc.customerAddress || '', 85);
+        addrLines.slice(0, 4).forEach(line => { doc.text(line, leftX, y); y += 4.5; });
+        if (dc.customerGSTIN) {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(30, 41, 59);
+            doc.text('GST- ' + dc.customerGSTIN, leftX, y);
+            y += 4.5;
+        }
+        if (dc.placeOfSupply) {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text('Place Of Supply: ' + dc.placeOfSupply, leftX, y);
+            y += 4.5;
+        }
+
+        // Challan Details (right column, starts at same y as deliver to section)
+        const detailsStartY = y - (addrLines.slice(0, 4).length * 4.5) - (dc.customerGSTIN ? 4.5 : 0) - (dc.placeOfSupply ? 4.5 : 0) - 5 - 5;
+        let ry = detailsStartY;
+        const challanDetails = [
+            ['Challan Date :', dc.createdAt ? new Date(dc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }) : ''],
+            ['Challan Type :', dc.challanType || 'Job Work'],
+            ['Place of Supply :', dc.placeOfSupply || ''],
+            ['Project Ref :', dc.projectCode || ''],
         ];
-        challanRows.forEach(([label, val], i) => {
-            doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(100, 116, 139);
-            doc.text(label + ':', 109, y + 11 + i * 5.5);
-            doc.setFont('helvetica', 'normal'); doc.setTextColor(15, 23, 42);
-            doc.text(String(val), 140, y + 11 + i * 5.5);
+        doc.setFontSize(8);
+        challanDetails.forEach(([label, val]) => {
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(100, 116, 139);
+            doc.text(label, rightX, ry);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(30, 41, 59);
+            doc.text(val, rightX + 38, ry);
+            ry += 6;
         });
-        y += 44;
 
-        doc.setFillColor(15, 23, 42);
-        doc.rect(marginL, y, 182, 8, 'F');
-        doc.setTextColor(255, 255, 255); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold');
-        [{ x: marginL + 2, label: 'S.No' }, { x: marginL + 14, label: 'Description' }, { x: marginL + 96, label: 'HSN/SAC' }, { x: marginL + 120, label: 'Quantity' }, { x: marginL + 148, label: 'Unit' }, { x: marginL + 165, label: 'Unit Range' }]
-            .forEach(col => doc.text(col.label, col.x, y + 5.5));
+        y += 6;
+
+        // ─── Divider ───
+        doc.setDrawColor(203, 213, 225);
+        doc.line(mL, y, mR, y);
+        y += 6;
+
+        // ─── TABLE HEADER ───
+        doc.setFillColor(30, 41, 59);
+        doc.rect(mL, y, 182, 8, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        const cols = [
+            { x: mL + 3, label: '#' },
+            { x: mL + 13, label: 'Item & Description' },
+            { x: mL + 105, label: 'HSN/SAC' },
+            { x: mL + 128, label: 'Qty' },
+            { x: mL + 143, label: 'Rate' },
+            { x: mR - 2, label: 'Amount', align: 'right' },
+        ];
+        cols.forEach(col => doc.text(col.label, col.x, y + 5.5, { align: col.align }));
         y += 8;
 
-        doc.setFillColor(248, 250, 255);
-        doc.rect(marginL, y, 182, 14, 'F');
-        doc.setDrawColor(203, 213, 225); doc.rect(marginL, y, 182, 14);
-        doc.setTextColor(30, 41, 59); doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-        doc.text('1', marginL + 2, y + 6);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
-        doc.text(dc.productDescription || 'PCB Assembly', marginL + 14, y + 6);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
-        doc.text('Batch Ref: ' + (dc.projectCode || ''), marginL + 14, y + 11);
-        doc.setTextColor(30, 41, 59); doc.setFontSize(8);
-        doc.text(dc.hsnCode || '\u2014', marginL + 96, y + 8);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+        // ─── TABLE ROW ───
         const bCount = dc.boardCount || (dc.boardTo - dc.boardFrom + 1);
-        doc.text(String(bCount), marginL + 120, y + 8);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-        doc.text('Nos', marginL + 148, y + 8);
-        doc.setFontSize(8); doc.setTextColor(71, 85, 105);
-        doc.text('#' + dc.boardFrom + ' \u2013 #' + dc.boardTo, marginL + 165, y + 8);
+        const ratePerBoard = dc.ratePerBoard || 0;
+        const rowAmount = ratePerBoard * bCount;
+
+        doc.setFillColor(250, 252, 255);
+        doc.rect(mL, y, 182, 14, 'F');
+        doc.setDrawColor(220, 226, 240);
+        doc.rect(mL, y, 182, 14);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
+        doc.text('1', mL + 3, y + 6);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8.5);
+        doc.text(dc.productDescription || 'PCB Assembly', mL + 13, y + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Batch Ref: ' + (dc.projectCode || '') + '  |  Boards #' + dc.boardFrom + '–#' + dc.boardTo, mL + 13, y + 11);
+        doc.setTextColor(30, 41, 59);
+        doc.setFontSize(8);
+        doc.text(dc.hsnCode || '—', mL + 105, y + 8);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.text(String(bCount) + '.00', mL + 128, y + 8);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text(ratePerBoard > 0 ? ratePerBoard.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—', mL + 143, y + 8);
+        doc.text(rowAmount > 0 ? rowAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '—', mR - 2, y + 8, { align: 'right' });
         y += 14;
 
-        const hasPrice = dc.ratePerBoard > 0;
-        if (hasPrice) {
-            const subtotal = dc.ratePerBoard * bCount;
+        // ─── TOTALS ───
+        if (ratePerBoard > 0) {
+            const subtotal = rowAmount;
             const igstAmt = (subtotal * (dc.igstPercent || 18)) / 100;
             const total = subtotal + igstAmt;
+
+            y += 2;
+            const totRows = [
+                { label: 'Sub Total', val: subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }), bold: false },
+                { label: `IGST${dc.igstPercent || 18} (${dc.igstPercent || 18}%)`, val: igstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 }), bold: false },
+                { label: 'Total', val: '\u20B9' + total.toLocaleString('en-IN', { minimumFractionDigits: 2 }), bold: true },
+            ];
+            totRows.forEach(({ label, val, bold }) => {
+                if (bold) {
+                    doc.setFillColor(245, 247, 255);
+                    doc.rect(mL + 95, y, 101, 8, 'F');
+                    doc.setDrawColor(200, 210, 230);
+                    doc.rect(mL + 95, y, 101, 8);
+                }
+                doc.setFont('helvetica', bold ? 'bold' : 'normal');
+                doc.setFontSize(bold ? 9 : 8);
+                doc.setTextColor(bold ? 30 : 71, bold ? 41 : 85, bold ? 59 : 105);
+                doc.text(label, mL + 130, y + 5.5);
+                doc.setTextColor(30, 41, 59);
+                doc.text(val, mR - 2, y + 5.5, { align: 'right' });
+                y += bold ? 8 : 7;
+            });
+
+            // ─── Total In Words ───
             y += 4;
-            [['Sub Total', '\u20B9 ' + subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 }), false],
-             ['IGST @ ' + (dc.igstPercent || 18) + '%', '\u20B9 ' + igstAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 }), false],
-             ['TOTAL', '\u20B9 ' + total.toLocaleString('en-IN', { minimumFractionDigits: 2 }), true]]
-                .forEach(([label, val, bold]) => {
-                    doc.setFillColor(bold ? 15 : 248, bold ? 23 : 250, bold ? 42 : 255);
-                    doc.rect(marginL + 110, y, 72, 7, 'F');
-                    doc.setFont('helvetica', bold ? 'bold' : 'normal'); doc.setFontSize(8);
-                    doc.setTextColor(bold ? 255 : 71, bold ? 255 : 85, bold ? 255 : 105);
-                    doc.text(label, marginL + 113, y + 5);
-                    doc.setTextColor(bold ? 99 : 30, bold ? 220 : 41, bold ? 255 : 59);
-                    doc.text(val, marginR - 2, y + 5, { align: 'right' });
-                    y += 7;
-                });
-            y += 4;
-        } else { y += 6; }
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(100, 116, 139);
+            doc.text('Total In Words:', mL + 95, y);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(30, 41, 59);
+            const wordsText = doc.splitTextToSize(amountInWords(total), 85);
+            wordsText.forEach((line, i) => doc.text(line, mL + 125, y + i * 4.5));
+            y += wordsText.length * 4.5 + 6;
+        } else {
+            // No price — just board count summary
+            y += 6;
+            doc.setFillColor(254, 252, 232);
+            doc.roundedRect(mL, y, 182, 12, 2, 2, 'F');
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.setTextColor(146, 64, 14);
+            doc.text('Total Qty: ' + bCount + ' Nos  |  Unit Numbers: #' + dc.boardFrom + ' to #' + dc.boardTo, mL + 3, y + 5);
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(6.5);
+            doc.setTextColor(120, 53, 15);
+            doc.text('This delivery challan is for traceability. Boards are covered under warranty as per agreement terms.', mL + 3, y + 10);
+            y += 16;
+        }
 
-        doc.setFillColor(254, 252, 232);
-        doc.roundedRect(marginL, y, 182, 14, 2, 2, 'F');
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(146, 64, 14);
-        doc.text('Total Qty: ' + bCount + ' Nos  |  Unit Numbers: #' + dc.boardFrom + ' to #' + dc.boardTo, marginL + 3, y + 6);
-        doc.setFont('helvetica', 'italic'); doc.setFontSize(6.5); doc.setTextColor(120, 53, 15);
-        doc.text('This delivery challan is for traceability. Boards are covered under warranty as per agreement terms.', marginL + 3, y + 11);
-        y += 18;
-        if (dc.notes) { doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(71, 85, 105); doc.text('Notes: ' + dc.notes, marginL, y); y += 8; }
+        if (dc.notes) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(71, 85, 105);
+            doc.text('Notes: ' + dc.notes, mL, y);
+            y += 7;
+        }
 
-        y = Math.max(y + 10, 240);
-        doc.setDrawColor(203, 213, 225);
-        doc.line(marginL, y, marginL + 55, y); doc.line(marginR - 55, y, marginR, y);
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(100, 116, 139);
-        doc.text("Receiver's Signature", marginL, y + 5);
-        doc.text('Authorized Signatory', marginR - 55, y + 5);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(30, 41, 59);
-        doc.text('For Enarxi Innovations Pvt Ltd', marginR - 55, y + 11);
+        // ─── AUTHORIZED SIGNATURE (bottom left) ───
+        const sigY = Math.max(y + 10, 240);
+        // Signature line
+        doc.setDrawColor(100, 116, 139);
+        doc.setLineWidth(0.5);
+        doc.line(mL, sigY + 14, mL + 52, sigY + 14);
 
-        doc.setFillColor(15, 23, 42);
+        // Draw a simple stamp circle to mimic seal
+        doc.setDrawColor(0, 100, 140);
+        doc.setLineWidth(0.5);
+        doc.circle(mL + 20, sigY + 6, 8, 'S');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(4.5);
+        doc.setTextColor(0, 80, 120);
+        doc.text('ENARXI INNOVATIONS', mL + 9.5, sigY + 4.5);
+        doc.text('PRIVATE LIMITED', mL + 12, sigY + 7);
+        doc.text('INDIA', mL + 17.5, sigY + 9.5);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(30, 41, 59);
+        doc.text('Authorized Signature', mL, sigY + 19);
+
+        // ─── FOOTER ───
+        doc.setFillColor(235, 240, 255);
         doc.rect(0, 285, W, 12, 'F');
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(148, 163, 184);
-        doc.text((dc.dcNumber || 'DC') + ' | Generated ' + new Date().toLocaleDateString('en-IN') + ' | System-generated delivery challan — Enarxi Innovations Pvt Ltd', W / 2, 292, { align: 'center' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(6.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text(
+            (dc.dcNumber || 'DC') + '  |  Generated ' + new Date().toLocaleDateString('en-IN') + '  |  System-generated document — Enarxi Innovations Pvt Ltd',
+            W / 2, 292, { align: 'center' }
+        );
 
         doc.save((dc.dcNumber || 'DC') + '_' + (dc.customerName || 'Customer').replace(/\s+/g, '_') + '.pdf');
     };
+
+    if (isFullProductProject) {
+        return (
+            <div className="space-y-6 text-[#dae2fd]">
+                {feedback.message && (
+                    <div className={`flex items-center justify-between rounded-xl border px-4 py-3 text-xs ${
+                        feedback.type === 'success'
+                            ? 'border-[#007e46] bg-[#007e46]/15 text-[#c2ffd1]'
+                            : 'border-[#93000a] bg-[#93000a]/20 text-[#ffdad6]'
+                    }`}>
+                        <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-sm">
+                                {feedback.type === 'success' ? 'check_circle' : 'error'}
+                            </span>
+                            <span>{feedback.message}</span>
+                        </div>
+                        <button type="button" onClick={() => setFeedback({ type: '', message: '' })} className="text-current/70 hover:text-current">
+                            <span className="material-symbols-outlined text-sm">close</span>
+                        </button>
+                    </div>
+                )}
+                {assignmentErrors.global && (
+                    <div className="rounded-xl border border-[#93000a] bg-[#93000a]/20 px-4 py-3 text-xs text-[#ffdad6]">
+                        {assignmentErrors.global}
+                    </div>
+                )}
+
+                <div className="overflow-hidden rounded-[20px] border border-[#434656] bg-[#0b1326] shadow-[0_24px_80px_rgba(6,14,32,0.45)]">
+                    <div className="border-b border-[#222a3d] bg-[#171f33] px-6 py-4">
+                        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex items-start gap-4">
+                                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2e5bff]/20 text-[#b8c3ff]">
+                                    <span className="material-symbols-outlined">manufacturing</span>
+                                </div>
+                                <div>
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <h2 className="font-['Hanken_Grotesk'] text-[28px] font-bold tracking-[-0.02em] text-[#efefff]">
+                                            {project?.name}
+                                        </h2>
+                                        <span className="rounded-full bg-[#2e5bff]/15 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#dbe4ff]">
+                                            Full Product Board
+                                        </span>
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap items-center gap-4 text-[12px] text-[#c4c5d9]">
+                                        <span className="flex items-center gap-1.5">
+                                            <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+                                            {formatDate(project?.startDate)}
+                                        </span>
+                                        <span className="flex items-center gap-1.5 text-[#b8c3ff]">
+                                            <span className="material-symbols-outlined text-[16px]">timer</span>
+                                            {getDaysLeftLabel(project?.deadline || project?.endDate)}
+                                        </span>
+                                        <span className="rounded-full bg-[#11192d] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">
+                                            {fullProductStages.length} Stages
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3 xl:min-w-[420px]">
+                                <div className="rounded-2xl border border-[#2a3144] bg-[#0a1020] px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">Target</p>
+                                    <p className="mt-2 text-2xl font-bold text-[#efefff]">{totalBatch}</p>
+                                </div>
+                                <div className="rounded-2xl border border-[#2a3144] bg-[#0a1020] px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">Completion</p>
+                                    <p className="mt-2 text-2xl font-bold text-[#efefff]">{fullProductProgress}%</p>
+                                </div>
+                                <div className="rounded-2xl border border-[#2a3144] bg-[#0a1020] px-4 py-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8e90a2]">Total Units Done</p>
+                                    <p className="mt-2 text-2xl font-bold text-[#dbe4ff]">{fullProductBoardsPassed}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border-b border-[#222a3d] px-6 py-6">
+                        <div className="overflow-x-auto pb-2">
+                            <div className="flex min-w-max items-center gap-4">
+                                {fullProductStages.length > 0 ? fullProductStages.map((task, index) => (
+                                    <Fragment key={getTaskId(task)}>
+                                        <div className="flex min-w-[164px] flex-col items-center gap-2 text-center">
+                                            <div className={`flex h-14 w-14 items-center justify-center rounded-full border text-sm font-bold ${
+                                                task.status === 'COMPLETED'
+                                                    ? 'border-[#007e46] bg-[#007e46]/20 text-[#c2ffd1]'
+                                                    : task.status === 'IN_PROGRESS' || task.status === 'WAITING_APPROVAL'
+                                                        ? 'border-[#2e5bff] bg-[#2e5bff]/20 text-[#dbe4ff]'
+                                                        : 'border-[#4a5269] bg-[#11192d] text-[#8e90a2]'
+                                            }`}>
+                                                {index + 1}
+                                            </div>
+                                            <div>
+                                                <p className="max-w-[164px] truncate text-sm font-semibold text-[#efefff]">{task.title}</p>
+                                                <p className="mt-1 text-[11px] text-[#8e90a2]">{task.status.replaceAll('_', ' ')}</p>
+                                            </div>
+                                        </div>
+                                        {index < fullProductStages.length - 1 && (
+                                            <div className="h-px w-10 bg-[#343b4f]" />
+                                        )}
+                                    </Fragment>
+                                )) : (
+                                    <div className="rounded-2xl border border-dashed border-[#343b4f] bg-[#0a1020] px-5 py-4 text-sm text-[#8e90a2]">
+                                        No stages created yet. Add the first manager stage to start this board.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-8 p-6 pb-28">
+                        <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
+                            <div className="min-w-0 space-y-4 lg:w-[calc(100%-360px)] lg:shrink">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-[#b8c3ff]">format_list_bulleted</span>
+                                    <h3 className="font-['Hanken_Grotesk'] text-[24px] font-semibold text-[#efefff]">Task Management</h3>
+                                </div>
+
+                                {canManageFullProductBoard && (
+                                    <form
+                                        onSubmit={handleCreateFullProductStage}
+                                        className="grid gap-3 xl:grid-cols-[minmax(220px,1.15fr)_minmax(280px,1.8fr)_180px_160px]"
+                                    >
+                                        <input
+                                            type="text"
+                                            value={fullProductDraft.title}
+                                            onChange={(event) => setFullProductDraft((prev) => ({ ...prev, title: event.target.value }))}
+                                            placeholder="Task Title..."
+                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#5f6980] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={fullProductDraft.description}
+                                            onChange={(event) => setFullProductDraft((prev) => ({ ...prev, description: event.target.value }))}
+                                            placeholder="Description (optional)..."
+                                            className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 text-sm text-[#efefff] placeholder:text-[#5f6980] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="date"
+                                                value={fullProductDraft.deadline}
+                                                min={new Date().toISOString().slice(0, 10)}
+                                                max={project?.deadline ? new Date(project.deadline).toISOString().slice(0, 10) : undefined}
+                                                onChange={(event) => setFullProductDraft((prev) => ({ ...prev, deadline: event.target.value }))}
+                                                className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 pr-12 text-sm text-[#efefff] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                                aria-label="Stage deadline"
+                                            />
+                                            <span className="material-symbols-outlined pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#7f8aa4]">
+                                                calendar_today
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!fullProductDraft.title.trim() || !fullProductDraft.deadline || fullProductSaving}
+                                            className="flex items-center justify-center gap-2 rounded-xl bg-[#4b5871] px-6 py-3 text-sm font-bold text-white transition-all hover:bg-[#5b6882] disabled:cursor-not-allowed disabled:bg-[#313b50] disabled:text-[#7f8aa4]"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">add</span>
+                                            <span>{fullProductSaving ? 'Creating...' : 'Add Task'}</span>
+                                        </button>
+                                    </form>
+                                )}
+
+                                <div className="overflow-hidden rounded-xl border border-[#434656] bg-[#131b2e]">
+                                    {fullProductStages.length === 0 ? (
+                                        <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-12 text-center">
+                                            <span className="material-symbols-outlined text-5xl text-[#4a5269]">view_kanban</span>
+                                            <p className="mt-4 text-lg font-semibold text-[#efefff]">This board is empty.</p>
+                                            <p className="mt-2 text-sm text-[#8e90a2]">Create the first stage and it will appear here in production order.</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="hidden lg:block">
+                                                <table className="w-full border-collapse text-left">
+                                                    <thead>
+                                                        <tr className="border-b border-[#434656] bg-[#222a3d]">
+                                                            <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Production Phase</th>
+                                                            <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Unit Tracking</th>
+                                                            <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Status</th>
+                                                            <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Lead</th>
+                                                            <th className="px-6 py-4 text-right text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Actions</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-[#434656]/70">
+                                                        {fullProductStages.map((task, index) => {
+                                                            const taskId = String(getTaskId(task));
+                                                            const state = getTaskState(task);
+                                                            const availableCapacity = getAvailableCapacity(task, index, fullProductStages, totalBatch);
+                                                            const taskAssignments = assignmentsByTaskId[taskId] || [];
+                                                            const singleAssigneeName = taskAssignments.length === 1 ? taskAssignments[0].userName : null;
+                                                            const fallbackAssignee = taskAssignments.length === 0
+                                                                ? users?.find((user) => String(getUserId(user)) === String(task.assigneeId?._id || task.assigneeId))
+                                                                : null;
+                                                            const assignedBoards = taskAssignments.reduce((sum, item) => sum + Number(item.boardsAssigned || 0), 0);
+                                                            const unassignedBoards = Math.max(0, availableCapacity - assignedBoards);
+                                                            const progressWidth = availableCapacity > 0 ? Math.min(100, (Number(task.unitsCompleted || 0) / availableCapacity) * 100) : 0;
+
+                                                            return (
+                                                                <Fragment key={taskId}>
+                                                                    <tr className={`transition-colors ${state === 'active' ? 'bg-[#2e5bff]/8' : 'hover:bg-[#2d3449]/25'} ${state === 'pending' ? 'opacity-70' : ''}`}>
+                                                                        <td className={`px-6 py-5 ${state === 'active' ? 'border-l-4 border-[#2e5bff]' : ''}`}>
+                                                                            <p className="font-bold text-[#dae2fd]">{task.title}</p>
+                                                                            <p className="mt-1 text-[11px] text-[#c4c5d9]">
+                                                                                {taskAssignments.length > 0
+                                                                                    ? `${taskAssignments.length} worker allocation${taskAssignments.length > 1 ? 's' : ''} configured`
+                                                                                    : state === 'completed'
+                                                                                        ? `Stage complete for ${Number(task.unitsCompleted || 0)} units`
+                                                                                        : state === 'active'
+                                                                                            ? `${Number(task.unitsCurrentlyHere || 0)} units remaining in this stage`
+                                                                                            : 'Ready for allocation and manager planning'}
+                                                                            </p>
+                                                                            {rowErrors[taskId] && (
+                                                                                <div className="mt-3 rounded-lg border border-[#93000a] bg-[#93000a]/20 px-3 py-2 text-[11px] text-[#ffdad6]">
+                                                                                    {rowErrors[taskId]}
+                                                                                </div>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-6 py-5">
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className={`font-mono text-[18px] font-semibold ${state === 'completed' ? 'text-[#00e383]' : state === 'active' ? 'text-[#00e3fd]' : 'text-[#c4c5d9]'}`}>
+                                                                                    {Number(task.unitsCompleted || 0)} / {availableCapacity}
+                                                                                </span>
+                                                                                <div className="h-1 w-24 overflow-hidden rounded-full bg-[#2d3449]">
+                                                                                    <div
+                                                                                        className={`h-full ${state === 'completed' ? 'bg-[#00e383]' : state === 'active' ? 'bg-[#00e3fd]' : 'bg-[#8e90a2]'}`}
+                                                                                        style={{ width: `${progressWidth}%` }}
+                                                                                    />
+                                                                                </div>
+                                                                                <span className="text-[10px] text-[#c4c5d9]">{Number(task.unitsCurrentlyHere || 0)} units remaining here</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="px-6 py-5">
+                                                                            <span className={`inline-flex rounded-lg px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                                                                                task.status === 'COMPLETED'
+                                                                                    ? 'bg-[#007e46]/25 text-[#5bffa1]'
+                                                                                    : task.status === 'IN_PROGRESS'
+                                                                                        ? 'bg-[#00e3fd]/18 text-[#9cf0ff] shadow-[0_0_10px_rgba(0,227,253,0.18)]'
+                                                                                        : task.status === 'WAITING_APPROVAL'
+                                                                                            ? 'bg-[#2e5bff]/20 text-[#b8c3ff]'
+                                                                                            : 'bg-[#2d3449] text-[#c4c5d9]'
+                                                                            }`}>
+                                                                                {task.status === 'NOT_STARTED' ? 'Pending' : task.status.replace('_', ' ')}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="px-6 py-5">
+                                                                            {taskAssignments.length > 1 ? (
+                                                                                <div>
+                                                                                    <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{taskAssignments.length} workers assigned</p>
+                                                                                    <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">{assignedBoards} units allocated</p>
+                                                                                </div>
+                                                                            ) : singleAssigneeName ? (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#b8c3ff] text-[10px] font-bold text-[#002388]">
+                                                                                        {singleAssigneeName.slice(0, 1).toUpperCase()}
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{singleAssigneeName}</p>
+                                                                                        <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">Assigned</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : fallbackAssignee ? (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#b8c3ff] text-[10px] font-bold text-[#002388]">
+                                                                                        {fallbackAssignee.name?.slice(0, 1) || 'U'}
+                                                                                    </div>
+                                                                                    <div>
+                                                                                        <p className="text-[12px] font-bold leading-none text-[#dae2fd]">{fallbackAssignee.name}</p>
+                                                                                        <p className="mt-1 text-[10px] font-bold uppercase text-[#00e383]">Assigned</p>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex items-center gap-2 text-[#c4c5d9]">
+                                                                                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#2d3449] text-[14px]">
+                                                                                        <span className="material-symbols-outlined text-[16px]">person</span>
+                                                                                    </div>
+                                                                                    <span className="text-[12px]">Unassigned</span>
+                                                                                </div>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="px-6 py-5 text-right">
+                                                                            <div className="flex justify-end gap-2">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => toggleExpandedTask(taskId)}
+                                                                                    className="rounded-lg border border-[#2e5bff]/35 bg-[#2e5bff]/12 px-3 py-2 text-[11px] font-semibold text-[#b8c3ff] transition-colors hover:bg-[#2e5bff]/20 hover:text-[#dde1ff]"
+                                                                                >
+                                                                                    {expandedTasks[taskId] ? 'Hide split' : 'Manage split'}
+                                                                                </button>
+                                                                                {typeof onTaskSelect === 'function' && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => onTaskSelect(task)}
+                                                                                        className="rounded-lg border border-[#434656] bg-[#11192d] px-3 py-2 text-[11px] font-semibold text-[#c4c5d9] transition-colors hover:bg-[#2d3449] hover:text-white"
+                                                                                    >
+                                                                                        Details
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                    {expandedTasks[taskId] && (
+                                                                        <tr className="bg-[#10192d]">
+                                                                            <td colSpan="5" className="px-6 py-5">
+                                                                                <div className="rounded-2xl border border-[#3f485d] bg-[#0d1529] p-4">
+                                                                                    <div className="mb-4">
+                                                                                        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
+                                                                                        <p className="mt-1 text-[12px] text-[#dae2fd]">
+                                                                                            Capacity: {availableCapacity} units. Assigned: {assignedBoards}. Remaining unassigned: {unassignedBoards}.
+                                                                                        </p>
+                                                                                    </div>
+                                                                                    {assignmentErrors[taskId] && (
+                                                                                        <div className="mb-4 rounded-lg border border-[#93000a] bg-[#93000a]/20 px-3 py-2 text-[11px] text-[#ffdad6]">
+                                                                                            {assignmentErrors[taskId]}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="space-y-3">
+                                                                                        {taskAssignments.map((assignment) => {
+                                                                                            const assignmentId = String(assignment.id || assignment._id);
+                                                                                            const assignmentDraft = assignmentDrafts[assignmentId] || {
+                                                                                                boardsAssigned: String(assignment.boardsAssigned ?? 0),
+                                                                                                boardsCompletedApproved: String(assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0),
+                                                                                                deadline: assignment.deadline ? new Date(assignment.deadline).toISOString().slice(0, 10) : ''
+                                                                                            };
+
+                                                                                            return (
+                                                                                                <div key={assignmentId} className="grid grid-cols-[minmax(0,1.2fr)_100px_100px_140px_180px] items-center gap-3 rounded-xl border border-[#313a50] bg-[#131b2e] p-3">
+                                                                                                    <div>
+                                                                                                        <p className="text-[13px] font-bold text-[#dae2fd]">{assignment.userName}</p>
+                                                                                                        <p className="text-[10px] uppercase tracking-[0.14em] text-[#00e383]">{assignment.userRole || 'Worker'}</p>
+                                                                                                        <p className="mt-1 text-[10px] text-[#c4c5d9]">Draft: {assignment.boardsCompletedDraft ?? 0} | Approved: {assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0}</p>
+                                                                                                        <p className="mt-1 text-[10px] text-[#8ea4c9]">Edit assigned units or deadline here, then save.</p>
+                                                                                                        <p className="mt-1 text-[10px] text-[#c4c5d9]">{assignment.status === 'WAITING_APPROVAL' ? 'Waiting for manager approval' : assignment.status.replace('_', ' ')}</p>
+                                                                                                    </div>
+                                                                                                    <input
+                                                                                                        type="number"
+                                                                                                        min="0"
+                                                                                                        step="1"
+                                                                                                        value={assignmentDraft.boardsAssigned}
+                                                                                                        onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, boardsAssigned: e.target.value } }))}
+                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                    />
+                                                                                                    <input
+                                                                                                        type="number"
+                                                                                                        readOnly
+                                                                                                        value={assignment.boardsCompletedApproved ?? assignment.boardsCompleted ?? 0}
+                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd]"
+                                                                                                    />
+                                                                                                    <input
+                                                                                                        type="date"
+                                                                                                        value={assignmentDraft.deadline}
+                                                                                                        onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
+                                                                                                        className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                                    />
+                                                                                                    <div className="flex flex-wrap justify-end gap-2">
+                                                                                                        {String(assignment.userId?._id || assignment.userId) === String(currentUserId) && assignment.status !== 'COMPLETED' && (
+                                                                                                            <div className="flex items-center gap-2">
+                                                                                                                <input
+                                                                                                                    type="number"
+                                                                                                                    min="0"
+                                                                                                                    step="1"
+                                                                                                                    placeholder="Done"
+                                                                                                                    value={progressDrafts[assignmentId] ?? ''}
+                                                                                                                    onChange={(e) => setProgressDrafts((prev) => ({ ...prev, [assignmentId]: e.target.value }))}
+                                                                                                                    className="w-20 rounded-lg border border-[#00e383]/40 bg-[#0b1326] px-2 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#00e383]"
+                                                                                                                />
+                                                                                                                <button
+                                                                                                                    type="button"
+                                                                                                                    onClick={() => submitProgress(assignmentId, assignment.boardsAssigned)}
+                                                                                                                    disabled={assignmentSaving[assignmentId]}
+                                                                                                                    className="rounded bg-[#00e383] px-3 py-2 text-[11px] font-bold text-[#00210e] disabled:opacity-60"
+                                                                                                                >
+                                                                                                                    {assignmentSaving[assignmentId] ? 'Saving...' : 'Submit'}
+                                                                                                                </button>
+                                                                                                            </div>
+                                                                                                        )}
+                                                                                                        <button
+                                                                                                            type="button"
+                                                                                                            onClick={() => saveAssignment(taskId, assignmentId)}
+                                                                                                            disabled={assignmentSaving[assignmentId]}
+                                                                                                            className="rounded bg-[#2e5bff] px-3 py-2 text-[11px] font-bold text-[#efefff] disabled:opacity-60"
+                                                                                                        >
+                                                                                                            {assignmentSaving[assignmentId] ? 'Saving...' : 'Save edit'}
+                                                                                                        </button>
+                                                                                                        {assignment.status === 'WAITING_APPROVAL' && (
+                                                                                                            <>
+                                                                                                                <button
+                                                                                                                    type="button"
+                                                                                                                    onClick={() => reviewAssignment(assignmentId, true)}
+                                                                                                                    disabled={assignmentSaving[assignmentId]}
+                                                                                                                    className="rounded bg-[#00e383] px-3 py-2 text-[11px] font-bold text-[#00210e] disabled:opacity-60"
+                                                                                                                >
+                                                                                                                    Approve
+                                                                                                                </button>
+                                                                                                                <button
+                                                                                                                    type="button"
+                                                                                                                    onClick={() => reviewAssignment(assignmentId, false, 'Rejected by manager')}
+                                                                                                                    disabled={assignmentSaving[assignmentId]}
+                                                                                                                    className="rounded border border-[#93000a] bg-[#93000a]/15 px-3 py-2 text-[11px] font-bold text-[#ffdad6] disabled:opacity-60"
+                                                                                                                >
+                                                                                                                    Reject
+                                                                                                                </button>
+                                                                                                            </>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            );
+                                                                                        })}
+                                                                                        <div className="grid grid-cols-[minmax(0,1.2fr)_100px_100px_140px_180px] items-center gap-3 rounded-xl border border-[#3f485d] bg-[#182236] p-3">
+                                                                                            <select
+                                                                                                value={newAssignmentDrafts[taskId]?.userId || ''}
+                                                                                                onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), userId: e.target.value } }))}
+                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                            >
+                                                                                                <option value="">Select worker</option>
+                                                                                                {assignableUsers.map((user) => (
+                                                                                                    <option key={getUserId(user)} value={getUserId(user)}>
+                                                                                                        {user.name} ({user.role})
+                                                                                                    </option>
+                                                                                                ))}
+                                                                                            </select>
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                min="0"
+                                                                                                step="1"
+                                                                                                value={newAssignmentDrafts[taskId]?.boardsAssigned || ''}
+                                                                                                onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), boardsAssigned: e.target.value } }))}
+                                                                                                placeholder="Assigned"
+                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                            />
+                                                                                            <input
+                                                                                                type="text"
+                                                                                                readOnly
+                                                                                                value="0"
+                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd]"
+                                                                                            />
+                                                                                            <input
+                                                                                                type="date"
+                                                                                                value={newAssignmentDrafts[taskId]?.deadline || ''}
+                                                                                                onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
+                                                                                                className="rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
+                                                                                            />
+                                                                                            <div className="flex items-center justify-end gap-2">
+                                                                                                {(assignableUserIds.size === 0 || assignableUserIds.has(String(currentUserId))) && (
+                                                                                                    <button
+                                                                                                        type="button"
+                                                                                                        onClick={() => createSelfAssignment(taskId, unassignedBoards)}
+                                                                                                        disabled={assignmentSaving[taskId]}
+                                                                                                        className="rounded border border-[#00e3fd] bg-transparent px-3 py-2 text-[11px] font-bold text-[#00e3fd] transition-colors hover:bg-[#00e3fd]/10 disabled:opacity-60"
+                                                                                                    >
+                                                                                                        {assignmentSaving[taskId] ? 'Saving...' : 'Self Assign'}
+                                                                                                    </button>
+                                                                                                )}
+                                                                                                <button
+                                                                                                    type="button"
+                                                                                                    onClick={() => createAssignment(taskId)}
+                                                                                                    disabled={assignmentSaving[taskId]}
+                                                                                                    className="rounded bg-[#00e3fd] px-3 py-2 text-[11px] font-bold text-[#001f24] disabled:opacity-60"
+                                                                                                >
+                                                                                                    {assignmentSaving[taskId] ? 'Saving...' : 'Add worker'}
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </Fragment>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="space-y-4 p-4 lg:hidden">
+                                                {fullProductStages.map((task, index) => {
+                                                    const taskId = String(getTaskId(task));
+                                                    const availableCapacity = getAvailableCapacity(task, index, fullProductStages, totalBatch);
+                                                    const assignee = users?.find((user) => String(getUserId(user)) === String(task.assigneeId || task.assigneeId?._id));
+
+                                                    return (
+                                                        <div key={taskId} className="rounded-xl border border-[#434656] bg-[#171f33] p-4">
+                                                            <div className="flex items-start justify-between gap-3">
+                                                                <div>
+                                                                    <p className="font-bold text-[#dae2fd]">{task.title}</p>
+                                                                    <p className="mt-1 text-[11px] text-[#c4c5d9]">{Number(task.unitsCompleted || 0)} / {availableCapacity}</p>
+                                                                </div>
+                                                                <span className={`rounded-lg px-3 py-1 text-[10px] font-bold uppercase ${
+                                                                    task.status === 'COMPLETED'
+                                                                        ? 'bg-[#007e46]/25 text-[#5bffa1]'
+                                                                        : task.status === 'IN_PROGRESS'
+                                                                            ? 'bg-[#00e3fd]/18 text-[#9cf0ff]'
+                                                                            : task.status === 'WAITING_APPROVAL'
+                                                                                ? 'bg-[#2e5bff]/20 text-[#b8c3ff]'
+                                                                                : 'bg-[#2d3449] text-[#c4c5d9]'
+                                                                }`}>
+                                                                    {task.status === 'NOT_STARTED' ? 'Pending' : task.status.replace('_', ' ')}
+                                                                </span>
+                                                            </div>
+                                                            <div className="mt-3 text-[12px] text-[#c4c5d9]">
+                                                                Lead: <span className="font-semibold text-[#dae2fd]">{assignee?.name || 'Unassigned'}</span>
+                                                            </div>
+                                                            <div className="mt-3 text-[12px] text-[#c4c5d9]">
+                                                                Remaining here: {Number(task.unitsCurrentlyHere || 0)}
+                                                            </div>
+                                                            <div className="mt-4 flex flex-wrap gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => toggleExpandedTask(taskId)}
+                                                                    className="rounded border border-[#2e5bff]/30 bg-[#2e5bff]/15 px-3 py-2 text-[11px] font-semibold text-[#b8c3ff]"
+                                                                >
+                                                                    {expandedTasks[taskId] ? 'Hide split' : 'Manage split'}
+                                                                </button>
+                                                                {typeof onTaskSelect === 'function' && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => onTaskSelect(task)}
+                                                                        className="rounded border border-[#434656] bg-[#11192d] px-3 py-2 text-[11px] font-semibold text-[#c4c5d9]"
+                                                                    >
+                                                                        Details
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <aside className="min-w-0 lg:sticky lg:top-0 lg:w-[360px] lg:shrink-0 xl:w-[380px]">
+                                <div className="flex h-full flex-col gap-4 rounded-[18px] border border-[#3f485d] bg-[#10192d] p-4 shadow-[0_18px_50px_rgba(6,14,32,0.34)]">
+                                    <div>
+                                        <h3 className="font-['Hanken_Grotesk'] text-[18px] font-semibold text-[#efefff]">Project Stats</h3>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-[#4b5468] bg-[#182236] px-4 py-4">
+                                        <div className="mb-3 flex items-center justify-between gap-3">
+                                            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#cfd5e6]">Project Status</p>
+                                            <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${
+                                                fullProductProgress >= 100
+                                                    ? 'bg-[#007e46] text-[#c2ffd1]'
+                                                    : fullProductActiveCount > 0
+                                                        ? 'bg-[#2e5bff] text-[#efefff]'
+                                                        : 'bg-[#222a3d] text-[#c4c5d9]'
+                                            }`}>
+                                                {fullProductProgress >= 100 ? 'Completed' : fullProductActiveCount > 0 ? 'Active' : 'Planning'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-end justify-between gap-3">
+                                            <div>
+                                                <p className="text-[11px] text-[#9ea8bf]">Overall completion</p>
+                                                <p className="mt-1 font-mono text-[26px] font-semibold leading-none text-[#e7ecff]">{fullProductProgress}%</p>
+                                            </div>
+                                            <div className="min-w-[86px]">
+                                                <div className="h-2 w-full overflow-hidden rounded-full bg-[#313a50]">
+                                                    <div className="h-full bg-[#11d7ff]" style={{ width: `${fullProductProgress}%` }} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
+                                            <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Batch</p>
+                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{totalBatch}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
+                                            <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Units Done</p>
+                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#00e383]">{fullProductBoardsPassed}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
+                                            <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Stages Done</p>
+                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{fullProductCompletedCount}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
+                                            <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Active Stages</p>
+                                            <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{fullProductActiveCount}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </aside>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6 text-[#dae2fd]">
@@ -987,7 +1831,15 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
             )}
 
             {/* ══ DASHBOARD TAB ══ */}
-            {activeTab === 'dashboard' && (
+            {activeTab === 'dashboard' && showInitializingState && (
+                <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[20px] border border-[#434656] bg-[#0b1326] px-6 py-16 text-center text-[#dae2fd]">
+                    <span className="material-symbols-outlined mb-4 text-6xl text-[#9cf0ff]">inventory_2</span>
+                    <h3 className="text-xl font-bold">Initializing production phases</h3>
+                    <p className="mt-2 text-sm text-[#c4c5d9]">The PCB production flow is syncing for this project.</p>
+                </div>
+            )}
+
+            {activeTab === 'dashboard' && !showInitializingState && (
                 <div className="space-y-8 p-6 pb-28">
                     <section className="overflow-x-auto pb-2">
                         <div className="relative flex min-w-[920px] items-center justify-between gap-2">
@@ -1079,8 +1931,8 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                         : state === 'completed'
                                                                             ? `Phase complete for ${Number(task.unitsCompleted || 0)} boards`
                                                                             : state === 'active'
-                                                                                ? `${Number(task.unitsCurrentlyHere || 0)} boards available at this stage`
-                                                                                : `Waiting for previous stage completion`}
+                                                                                ? `${Number(task.unitsCurrentlyHere || 0)} boards remaining in this phase`
+                                                                                : 'Ready for allocation and manager planning'}
                                                                 </p>
                                                                 {rowErrors[taskId] && (
                                                                     <div className="mt-3 rounded-lg border border-[#93000a] bg-[#93000a]/20 px-3 py-2 text-[11px] text-[#ffdad6]">
@@ -1103,7 +1955,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                             style={{ width: `${progressWidth}%` }}
                                                                         />
                                                                     </div>
-                                                                    <span className="text-[10px] text-[#c4c5d9]">{Number(task.unitsCurrentlyHere || 0)} boards available here</span>
+                                                                    <span className="text-[10px] text-[#c4c5d9]">{Number(task.unitsCurrentlyHere || 0)} boards remaining here</span>
                                                                 </div>
                                                             </td>
                                                             <td className="px-6 py-5">
@@ -1171,7 +2023,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                         <div className="mb-4">
                                                                             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
                                                                             <p className="mt-1 text-[12px] text-[#dae2fd]">
-                                                                                Available: {availableCapacity} boards. Assigned: {assignedBoards}. Remaining unassigned: {unassignedBoards}.
+                                                                                Capacity: {availableCapacity} boards. Assigned: {assignedBoards}. Remaining unassigned: {unassignedBoards}.
                                                                             </p>
                                                                         </div>
                                                                         {assignmentErrors[taskId] && (
@@ -1199,6 +2051,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                                             <p className="mt-1 text-[10px] text-[#c4c5d9]">
                                                                                                 {assignment.status === 'WAITING_APPROVAL' ? 'Waiting for manager approval' : assignment.status.replace('_', ' ')}
                                                                                             </p>
+                                                                                            <p className="mt-1 text-[10px] text-[#8ea4c9]">Edit assigned boards or deadline here, then save.</p>
                                                                                         </div>
                                                                                         <input
                                                                                             type="number"
@@ -1251,7 +2104,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                                                                     disabled={assignmentSaving[assignmentId]}
                                                                                                     className="rounded bg-[#2e5bff] px-3 py-2 text-[11px] font-bold text-[#efefff] disabled:opacity-60"
                                                                                                 >
-                                                                                                    {assignmentSaving[assignmentId] ? 'Saving...' : 'Save row'}
+                                                                                                    {assignmentSaving[assignmentId] ? 'Saving...' : 'Save edit'}
                                                                                                 </button>
                                                                                                 {assignment.status === 'WAITING_APPROVAL' && (
                                                                                                     <>
@@ -1384,9 +2237,9 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                                 <div className="mt-3 text-[12px] text-[#c4c5d9]">
                                                     Lead: <span className="font-semibold text-[#dae2fd]">{assignee?.name || 'Unassigned'}</span>
                                                 </div>
-                                                <div className="mt-3 text-[12px] text-[#c4c5d9]">
-                                                    Available here: {Number(task.unitsCurrentlyHere || 0)}
-                                                </div>
+                                                    <div className="mt-3 text-[12px] text-[#c4c5d9]">
+                                                        Remaining here: {Number(task.unitsCurrentlyHere || 0)}
+                                                    </div>
                                                 {rowErrors[taskId] && (
                                                     <div className="mt-3 rounded-lg border border-[#93000a] bg-[#93000a]/20 px-3 py-2 text-[11px] text-[#ffdad6]">
                                                         {rowErrors[taskId]}
@@ -1488,7 +2341,7 @@ export default function ProductionDashboard({ project, tasks, users, onRefresh, 
                                         <p className="font-mono text-[28px] font-semibold leading-none text-[#e7ecff]">{totalBatch}</p>
                                     </div>
                                     <div className="rounded-2xl border border-[#4b5468] bg-[#2b3448] px-4 py-4">
-                                        <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Completed</p>
+                                        <p className="mb-2 text-[10px] font-bold uppercase text-[#cfd5e6]">Total Units Done</p>
                                         <p className="font-mono text-[28px] font-semibold leading-none text-[#00e383]">{boardsPassed}</p>
                                     </div>
                                 </div>

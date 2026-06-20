@@ -74,7 +74,7 @@ export default function ProductionWorkerProjectView({
     onBack
 }) {
     const productionTasks = (tasks || [])
-        .filter((task) => String(task.projectId) === String(project.id) && task.isProductionTask)
+        .filter((task) => String(task.projectId) === String(project.id) && (task.isProductionTask || task.isFullProductStage))
         .sort((a, b) => Number(a.sequence || 0) - Number(b.sequence || 0));
 
     const assignmentsByTaskId = (assignments || []).reduce((acc, assignment) => {
@@ -91,8 +91,11 @@ export default function ProductionWorkerProjectView({
     const overdueAssignments = assignments.filter((item) => item.deadline && new Date(item.deadline) < new Date() && Number(item.boardsCompletedApproved || 0) < Number(item.boardsAssigned || 0)).length;
     const myCompletion = totalAssignedBoards > 0 ? Math.round((approvedBoards / totalAssignedBoards) * 100) : 0;
     const activeAssignments = assignments.filter((item) => ['IN_PROGRESS', 'WAITING_APPROVAL'].includes(item.status)).length;
-    const finalTask = productionTasks[productionTasks.length - 1];
-    const projectCompletion = totalBatch > 0 ? Math.round((Number(finalTask?.unitsCompleted || 0) / totalBatch) * 100) : 0;
+    const projectCompletion = totalBatch > 0 && productionTasks.length > 0
+        ? Math.round(
+            (productionTasks.reduce((sum, task) => sum + Math.min(Number(task.unitsCompleted || 0), totalBatch), 0) / (productionTasks.length * totalBatch)) * 100
+        )
+        : 0;
 
     return (
         <div className="space-y-8">
@@ -148,6 +151,7 @@ export default function ProductionWorkerProjectView({
                         <div className="flex min-w-[960px] items-start gap-3">
                             {productionTasks.map((task, index) => {
                                 const phaseState = getPhaseState(task);
+                                const taskLabel = task.productionPhase || task.title;
                                 const icon = PHASE_ICONS[task.productionPhase] || 'inventory_2';
                                 const connectorClass = phaseState === 'completed'
                                     ? 'bg-[#00e383]'
@@ -170,7 +174,7 @@ export default function ProductionWorkerProjectView({
                                             <span className={`text-xs font-semibold ${
                                                 phaseState === 'pending' ? 'text-[#98a2bb]' : 'text-[#eef3ff]'
                                             }`}>
-                                                {task.productionPhase}
+                                                {taskLabel}
                                             </span>
                                         </div>
                                         {index < productionTasks.length - 1 && (
@@ -201,16 +205,17 @@ export default function ProductionWorkerProjectView({
                             {productionTasks.map((task, index) => {
                                 const taskId = String(getTaskId(task));
                                 const taskAssignments = assignmentsByTaskId[taskId] || [];
-                                const allowedBoards = index === 0 ? totalBatch : Number(productionTasks[index - 1]?.unitsCompleted || 0);
+                                const allowedBoards = totalBatch;
                                 const availableHere = Number(task.unitsCurrentlyHere || 0);
                                 const phaseCompleted = Number(task.unitsCompleted || 0);
+                                const taskLabel = task.productionPhase || task.title;
 
                                 return (
                                     <div key={taskId} className={`rounded-2xl border ${taskAssignments.length > 0 ? 'border-[#3458ff] bg-[#121b31]' : 'border-[#31394d] bg-[#11192d]'}`}>
                                         <div className="grid gap-4 border-b border-[#27324b] px-4 py-4 lg:grid-cols-[minmax(0,1.1fr)_180px_160px] lg:items-center">
                                             <div>
                                                 <div className="flex flex-wrap items-center gap-2">
-                                                    <h3 className="text-lg font-bold text-[#eef3ff]">{task.productionPhase}</h3>
+                                                    <h3 className="text-lg font-bold text-[#eef3ff]">{taskLabel}</h3>
                                                     <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.15em] ${
                                                         getPhaseState(task) === 'completed'
                                                             ? 'bg-[#007e46]/20 text-[#5bffa1]'
@@ -224,9 +229,7 @@ export default function ProductionWorkerProjectView({
                                                 <p className="mt-2 text-sm text-[#99a4bf]">
                                                     {taskAssignments.length > 0
                                                         ? `You have ${taskAssignments.length} active allocation${taskAssignments.length > 1 ? 's' : ''} in this phase.`
-                                                        : availableHere > 0
-                                                            ? `${availableHere} boards are available in this phase, but none are assigned to you yet.`
-                                                            : 'Waiting for previous stage completion.'}
+                                                        : `${availableHere} boards remain in this phase, but none are assigned to you yet.`}
                                                 </p>
                                             </div>
                                             <div>
@@ -234,7 +237,7 @@ export default function ProductionWorkerProjectView({
                                                 <p className="mt-2 font-mono text-[28px] font-semibold leading-none text-[#11d7ff]">
                                                     {phaseCompleted} / {allowedBoards}
                                                 </p>
-                                                <p className="mt-2 text-xs text-[#97a3bf]">{availableHere} boards currently here</p>
+                                                <p className="mt-2 text-xs text-[#97a3bf]">{availableHere} boards remaining in this phase</p>
                                             </div>
                                             <div className="rounded-xl border border-[#39425a] bg-[#0e1629] px-4 py-3">
                                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#8f9ab4]">My Share</p>

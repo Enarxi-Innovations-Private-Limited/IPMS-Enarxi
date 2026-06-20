@@ -60,7 +60,7 @@ const projectSchema = new mongoose.Schema({
     },
     projectType: {
         type: String,
-        enum: ['GENERAL', 'PRODUCTION'],
+        enum: ['GENERAL', 'PRODUCTION', 'FULL_PRODUCT_PRODUCTION'],
         default: 'GENERAL',
     },
     totalBatchSize: {

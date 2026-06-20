@@ -272,10 +272,10 @@ export default function EmployeeProjectsPage() {
     if (selectedProject) {
         const stats = getProjectStats(selectedProject.id);
         const projectTasks = getProjectTasks(selectedProject.id);
-        const projectProductionTasks = fullProjectTasks.filter((task) => task.isProductionTask);
+        const projectProductionTasks = fullProjectTasks.filter((task) => task.isProductionTask || task.isFullProductStage);
         const projectProductionAssignments = productionAssignments.filter((assignment) => String(assignment.projectId) === String(selectedProject.id));
 
-        if (selectedProject.projectType === 'PRODUCTION') {
+        if (['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType)) {
             return (
                 <EmployeeLayout currentPage="projects">
                     <div className="p-6 lg:px-12 pb-24">

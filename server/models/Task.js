@@ -85,6 +85,7 @@ const taskSchema = new mongoose.Schema({
     
     // Production / Flow Control Fields
     isProductionTask: { type: Boolean, default: false },
+    isFullProductStage: { type: Boolean, default: false },
     productionPhase: { type: String, default: '' },
     sequence: { type: Number, default: 0 },
     unitsCompleted: { type: Number, default: 0 },

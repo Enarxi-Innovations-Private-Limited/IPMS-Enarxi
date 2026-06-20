@@ -48,10 +48,10 @@ export default function ManagerTeamPage() {
             ]);
 
             // Filter to only show users from the same department as the manager
-            // Only show EMPLOYEE and INTERN roles (not other managers, super users, etc.)
+            // Include managers so they can be added as project members and viewed in team context
             const teamUsers = usersRes.data.filter(u =>
                 u.department === department &&
-                ['EMPLOYEE', 'INTERN'].includes(u.role)
+                ['MANAGER', 'EMPLOYEE', 'INTERN'].includes(u.role)
             );
 
             setTeamMembers(teamUsers);
@@ -112,7 +112,8 @@ export default function ManagerTeamPage() {
     });
 
     // Stats
-    const totalEmployees = teamMembers.filter(m => ['MANAGER', 'EMPLOYEE'].includes(m.role)).length;
+    const totalManagers = teamMembers.filter(m => m.role === 'MANAGER').length;
+    const totalEmployees = teamMembers.filter(m => m.role === 'EMPLOYEE').length;
     const totalInterns = teamMembers.filter(m => m.role === 'INTERN').length;
 
     const getRoleBadgeColor = (role) => {
@@ -162,13 +163,20 @@ export default function ManagerTeamPage() {
                     </div>
 
                     {/* Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Total Team</h3>
                                 <span className="material-symbols-outlined text-emerald-500">group</span>
                             </div>
                             <p className="text-3xl font-bold text-[#556070]">{teamMembers.length}</p>
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Managers</h3>
+                                <span className="material-symbols-outlined text-emerald-500">manage_accounts</span>
+                            </div>
+                            <p className="text-3xl font-bold text-[#556070]">{totalManagers}</p>
                         </div>
                         <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-xl">
                             <div className="flex items-center justify-between mb-4">
@@ -207,6 +215,7 @@ export default function ManagerTeamPage() {
                                 onChange={(e) => setFilterRole(e.target.value)}
                             >
                                 <option value="ALL">All Roles</option>
+                                <option value="MANAGER">Managers</option>
                                 <option value="EMPLOYEE">Employees</option>
                                 <option value="INTERN">Interns</option>
                             </select>

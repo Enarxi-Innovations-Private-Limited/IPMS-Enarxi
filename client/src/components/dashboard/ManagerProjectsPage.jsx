@@ -71,10 +71,14 @@ export default function ManagerProjectsPage() {
     const [selectedTeamMember, setSelectedTeamMember] = useState(null);
     const [memberPerformance, setMemberPerformance] = useState(null);
 
-    const isProductionProjectView = (project, tasksForProject = []) => {
+    const isProductionOnlyProject = (project, tasksForProject = []) => {
         if (!project) return false;
-        return project.projectType === 'PRODUCTION' || tasksForProject.some((task) => task.isProductionTask);
+        return project.projectType === 'PRODUCTION' || (!project.projectType && tasksForProject.some((task) => task.isProductionTask));
     };
+
+    const isFullProductProductionProject = (project) => project?.projectType === 'FULL_PRODUCT_PRODUCTION';
+    const isBoardProjectView = (project, tasksForProject = []) =>
+        isProductionOnlyProject(project, tasksForProject) || isFullProductProductionProject(project);
 
     useEffect(() => {
         if (notification) {
@@ -266,7 +270,8 @@ export default function ManagerProjectsPage() {
         if (!project) return [];
         // Support both populated objects and ID strings
         const memberIds = project.teamIds?.map(m => (typeof m === 'object' && m ? m.id || m._id : m)) || [];
-        return users.filter(u => !memberIds.includes(u.id));
+        const currentUser = getCurrentUser();
+        return users.filter(u => !memberIds.includes(u.id) && u.id !== currentUser?.id);
     };
 
     const getStatusColor = (status) => {
@@ -306,16 +311,41 @@ export default function ManagerProjectsPage() {
 
     const handleAddTask = async (e) => {
         if (e) e.preventDefault();
+        const trimmedTitle = newTaskTitle.trim();
         if (!newTaskDeadline) {
             setNotification({ message: 'Task deadline is mandatory', type: 'error' });
             return;
         }
+        if (!trimmedTitle) {
+            setNotification({ message: 'Task title is required', type: 'error' });
+            return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const deadlineDate = new Date(newTaskDeadline);
+        deadlineDate.setHours(0, 0, 0, 0);
+
+        if (deadlineDate < today) {
+            setNotification({ message: 'Task deadline cannot be in the past', type: 'error' });
+            return;
+        }
+
+        if (selectedProject?.deadline) {
+            const projectDeadline = new Date(selectedProject.deadline);
+            projectDeadline.setHours(0, 0, 0, 0);
+            if (deadlineDate > projectDeadline) {
+                setNotification({ message: 'Task deadline cannot be later than the project deadline', type: 'error' });
+                return;
+            }
+        }
+
         try {
             const res = await api.post('/tasks', {
-                title: newTaskTitle,
+                title: trimmedTitle,
                 description: newTaskDescription,
                 projectId: selectedProject.id,
-                deadline: new Date(newTaskDeadline),
+                deadline: deadlineDate,
                 // Assignee is left null intentionally so the manager can assign it later
             });
             setTasks([...tasks, res.data]);
@@ -327,6 +357,10 @@ export default function ManagerProjectsPage() {
             setNotification({ message: 'New Task Created', type: 'success' });
         } catch (err) {
             console.error('Failed to create task', err);
+            setNotification({
+                message: err.response?.data?.message || 'Failed to create task. Check the title and deadline and try again.',
+                type: 'error'
+            });
         }
     };
 
@@ -496,6 +530,9 @@ export default function ManagerProjectsPage() {
     const getProjectTasks = () => {
         if (!selectedProject) return [];
         let pTasks = tasks.filter(t => t.projectId === selectedProject.id);
+        if (isFullProductProductionProject(selectedProject)) {
+            pTasks = pTasks.filter((task) => !task.isProductionTask);
+        }
 
         // Status Filter
         if (taskFilter !== 'ALL') {
@@ -520,9 +557,16 @@ export default function ManagerProjectsPage() {
         return pTasks;
     };
 
+    const selectedProjectAllTasks = selectedProject
+        ? tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))
+        : [];
     const projectTasks = getProjectTasks();
     const totalPages = Math.ceil(projectTasks.length / itemsPerPage);
     const paginatedTasks = projectTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const todayDateString = new Date().toISOString().split('T')[0];
+    const projectStartDateString = selectedProject?.startDate ? new Date(selectedProject.startDate).toISOString().split('T')[0] : '';
+    const projectDeadlineDateString = selectedProject?.deadline ? new Date(selectedProject.deadline).toISOString().split('T')[0] : '';
+    const addTaskMinDate = projectStartDateString && projectStartDateString > todayDateString ? projectStartDateString : todayDateString;
 
     // Color Helpers for new design
     const getStatusBadgeStyles = (status, isAssigned) => {
@@ -593,7 +637,7 @@ export default function ManagerProjectsPage() {
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto pb-4">
                             {filteredProjects.map((p) => {
-                                const projectTasks = tasks.filter((t) => t.projectId === p.id);
+                                const projectTasks = tasks.filter((t) => t.projectId === p.id && (p.projectType !== 'FULL_PRODUCT_PRODUCTION' || !t.isProductionTask));
                                 const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
                                 const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
                                 const projectMembers = users.filter((u) => p.teamIds?.includes(u.id));
@@ -713,16 +757,16 @@ export default function ManagerProjectsPage() {
                             </div>
                         </div>
 
-                        {isProductionProjectView(
-                            selectedProject,
-                            tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))
-                        ) ? (
-                            <div className="flex-1 overflow-auto custom-scrollbar p-4 md:p-8">
+                        {isBoardProjectView(selectedProject, selectedProjectAllTasks) ? (
+                            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 md:p-8">
                                 <ProductionDashboard
                                     project={selectedProject}
-                                    tasks={tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))}
+                                    tasks={selectedProjectAllTasks}
                                     users={users}
                                     showManagerActions={true}
+                                    onTaskSelect={openTaskDetail}
+                                    onAssignTask={handleAssignClick}
+                                    onDeleteTask={handleDeleteTask}
                                     onRefresh={async () => {
                                         await loadData();
                                     }}
@@ -797,6 +841,8 @@ export default function ManagerProjectsPage() {
                                                             type="date"
                                                             value={newTaskDeadline}
                                                             onChange={(e) => setNewTaskDeadline(e.target.value)}
+                                                            min={addTaskMinDate}
+                                                            max={projectDeadlineDateString || undefined}
                                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                                             title="Set Deadline"
                                                         />
@@ -816,7 +862,7 @@ export default function ManagerProjectsPage() {
                                 </div>
 
                                 {/* Table Content */}
-                                <div className="flex-1 overflow-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
+                                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
                                     <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
                                         <table className="w-full text-left border-collapse hidden lg:table">
                                             <thead className="sticky top-0 bg-[#0a0f1d] z-10">
@@ -1143,7 +1189,7 @@ export default function ManagerProjectsPage() {
                                     <span className="text-[10px] font-bold uppercase tracking-widest group-hover:underline decoration-blue-500/50 underline-offset-4">{getTeamMembers(selectedProject).length} Members</span>
                                 </button>
                             </div>
-                            {selectedProject.projectType !== 'PRODUCTION' && (
+                            {!isBoardProjectView(selectedProject, selectedProjectAllTasks) && (
                                 <div className="flex items-center space-x-4">
                                     <span className="text-[11px] text-slate-500 font-medium">
                                         Showing {Math.min((currentPage - 1) * itemsPerPage + 1, projectTasks.length)} - {Math.min(currentPage * itemsPerPage, projectTasks.length)} of {projectTasks.length} tasks
