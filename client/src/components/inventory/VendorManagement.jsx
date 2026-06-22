@@ -3,6 +3,20 @@ import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
 
+const getNextVendorCode = (vendors = []) => {
+    const maxNumber = vendors.reduce((highest, vendor) => {
+        const match = String(vendor?.vendorCode || '')
+            .trim()
+            .toUpperCase()
+            .match(/^VEN-(\d+)$/);
+
+        if (!match) return highest;
+        return Math.max(highest, Number(match[1]));
+    }, 0);
+
+    return `VEN-${String(maxNumber + 1).padStart(3, '0')}`;
+};
+
 export default function VendorManagement() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
@@ -20,6 +34,10 @@ export default function VendorManagement() {
     const [showModal, setShowModal] = useState(false);
     const [editingVendorId, setEditingVendorId] = useState(null);
     const [formData, setFormData] = useState(emptyForm);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    const generatedVendorCode = editingVendorId ? formData.vendorCode : getNextVendorCode(vendors);
 
     useEffect(() => {
         fetchVendors();
@@ -63,6 +81,15 @@ export default function VendorManagement() {
         setShowModal(true);
     };
 
+    const openDeleteModal = (vendor) => {
+        setDeleteTarget(vendor);
+    };
+
+    const closeDeleteModal = () => {
+        if (isDeleting) return;
+        setDeleteTarget(null);
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
@@ -70,13 +97,28 @@ export default function VendorManagement() {
                 await inventoryService.updateVendor(editingVendorId, formData);
                 notifySuccess('Vendor updated successfully.');
             } else {
-                await inventoryService.createVendor(formData);
+                await inventoryService.createVendor({ ...formData, vendorCode: generatedVendorCode });
                 notifySuccess('Vendor created successfully.');
             }
             resetModal();
             fetchVendors();
         } catch (err) {
             notifyError(err.response?.data?.message || `Failed to ${editingVendorId ? 'update' : 'create'} vendor`);
+        }
+    };
+
+    const handleDeleteVendor = async () => {
+        if (!deleteTarget) return;
+        try {
+            setIsDeleting(true);
+            await inventoryService.deleteVendor(deleteTarget._id || deleteTarget.id);
+            notifySuccess('Vendor deleted successfully.');
+            setDeleteTarget(null);
+            fetchVendors();
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to delete vendor.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -137,7 +179,12 @@ export default function VendorManagement() {
                                             >
                                                 Edit
                                             </button>
-                                            <button className="text-primary hover:underline text-xs font-bold">View Profile</button>
+                                            <button
+                                                onClick={() => openDeleteModal(vendor)}
+                                                className="text-red-600 hover:text-red-700 text-xs font-bold"
+                                            >
+                                                Delete
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -163,12 +210,14 @@ export default function VendorManagement() {
                                 <div>
                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Vendor Code</label>
                                     <input 
-                                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[#556070] focus:border-primary outline-none"
-                                        placeholder="e.g. VEN-001"
-                                        value={formData.vendorCode}
-                                        onChange={(e) => setFormData({...formData, vendorCode: e.target.value})}
-                                        required
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-[#556070] outline-none"
+                                        placeholder="Auto-generated"
+                                        value={generatedVendorCode}
+                                        readOnly
                                     />
+                                    {!editingVendorId && (
+                                        <p className="mt-1 text-[11px] text-text-secondary">This code is generated automatically.</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Vendor Name</label>
@@ -230,6 +279,39 @@ export default function VendorManagement() {
                                 {editingVendorId ? 'Save Vendor Changes' : 'Complete Registration'}
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={closeDeleteModal}></div>
+                    <div className="relative w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                        <div className="px-6 py-5 border-b border-slate-200">
+                            <h2 className="text-xl font-bold text-[#556070]">Delete Vendor</h2>
+                            <p className="mt-2 text-sm text-text-secondary">
+                                Delete <span className="font-semibold text-[#556070]">{deleteTarget.name}</span> ({deleteTarget.vendorCode})?
+                                This cannot be undone.
+                            </p>
+                        </div>
+                        <div className="px-6 py-4 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeDeleteModal}
+                                className="px-4 py-2 rounded-xl border border-slate-200 text-text-secondary font-semibold"
+                                disabled={isDeleting}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleDeleteVendor}
+                                className="px-4 py-2 rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-60"
+                                disabled={isDeleting}
+                            >
+                                {isDeleting ? 'Deleting...' : 'Delete Vendor'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

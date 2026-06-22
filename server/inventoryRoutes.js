@@ -98,6 +98,34 @@ const normalizeVendorPayload = (payload = {}) => {
     };
 };
 
+const VENDOR_CODE_PREFIX = 'VEN-';
+const VENDOR_CODE_WIDTH = 3;
+
+const generateNextVendorCode = async () => {
+    const vendors = await Vendor.find({}, 'vendorCode').lean();
+    const maxNumber = vendors.reduce((highest, vendor) => {
+        const match = String(vendor?.vendorCode || '')
+            .trim()
+            .toUpperCase()
+            .match(/^VEN-(\d+)$/);
+
+        if (!match) return highest;
+        return Math.max(highest, Number(match[1]));
+    }, 0);
+
+    return `${VENDOR_CODE_PREFIX}${String(maxNumber + 1).padStart(VENDOR_CODE_WIDTH, '0')}`;
+};
+
+const ensureVendorCode = async (payload = {}) => {
+    if (payload.vendorCode) return payload;
+    const vendorCode = await generateNextVendorCode();
+    return {
+        ...payload,
+        vendorCode,
+        code: vendorCode,
+    };
+};
+
 let vendorIndexHealPromise = null;
 const ensureVendorIndexesHealed = async () => {
     if (vendorIndexHealPromise) return vendorIndexHealPromise;
@@ -1370,7 +1398,12 @@ router.get('/vendors', async (req, res) => {
 router.post('/createVendor', async (req, res) => {
     try {
         if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER, roles.PURCHASE_MANAGER])) return;
-        const vendor = await Vendor.create(req.body);
+        await ensureVendorIndexesHealed();
+        const vendorPayload = await ensureVendorCode(normalizeVendorPayload(req.body));
+        if (!vendorPayload.name) {
+            return res.status(400).json({ message: 'Vendor name is required.' });
+        }
+        const vendor = await Vendor.create(vendorPayload);
         await logAudit('Vendor', vendor._id, 'CREATE', null, vendor.toObject(), req);
         await logInvActivity('INV_MASTER_CREATE', `Vendor ${vendor.name} created`, req.user._id, req.user.name, vendor._id, vendor.name);
         res.status(201).json(vendor);
@@ -1509,7 +1542,7 @@ router.delete('/items/:id', async (req, res) => {
 router.put('/vendors/:id', async (req, res) => {
     const session = await mongoose.startSession();
     try {
-        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER, roles.PURCHASE_MANAGER])) return;
         await ensureVendorIndexesHealed();
         await session.withTransaction(async () => {
             const vendor = await Vendor.findById(req.params.id).session(session);
@@ -1535,7 +1568,7 @@ router.put('/vendors/:id', async (req, res) => {
 
 router.delete('/vendors/:id', async (req, res) => {
     try {
-        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER, roles.PURCHASE_MANAGER])) return;
         const vendor = await Vendor.findById(req.params.id);
         if (!vendor) return res.status(404).json({ message: 'Vendor not found' });
         const poCount = await PurchaseOrder.countDocuments({ vendorId: vendor._id });
@@ -3172,10 +3205,7 @@ router.post('/admin/locations', async (req, res) => {
 router.post('/admin/vendors', async (req, res) => {
     try {
         await ensureVendorIndexesHealed();
-        const vendorPayload = normalizeVendorPayload(req.body);
-        if (!vendorPayload.vendorCode) {
-            return res.status(400).json({ message: 'Vendor code is required.' });
-        }
+        const vendorPayload = await ensureVendorCode(normalizeVendorPayload(req.body));
         if (!vendorPayload.name) {
             return res.status(400).json({ message: 'Vendor name is required.' });
         }
@@ -3190,10 +3220,7 @@ router.post('/admin/vendors', async (req, res) => {
 router.post('/purchase/vendors', async (req, res) => {
     try {
         await ensureVendorIndexesHealed();
-        const vendorPayload = normalizeVendorPayload(req.body);
-        if (!vendorPayload.vendorCode) {
-            return res.status(400).json({ message: 'Vendor code is required.' });
-        }
+        const vendorPayload = await ensureVendorCode(normalizeVendorPayload(req.body));
         if (!vendorPayload.name) {
             return res.status(400).json({ message: 'Vendor name is required.' });
         }
