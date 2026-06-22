@@ -6,14 +6,16 @@ import { useNotifier } from '../common/AppNotificationProvider.jsx';
 export default function StockLocationsPage() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
-    const [locations, setLocations] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [formData, setFormData] = useState({
+    const emptyForm = {
         locationCode: '',
         name: '',
         description: ''
-    });
+    };
+    const [locations, setLocations] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingLocationId, setEditingLocationId] = useState(null);
+    const [formData, setFormData] = useState(emptyForm);
 
     useEffect(() => {
         fetchLocations();
@@ -34,14 +36,40 @@ export default function StockLocationsPage() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            await inventoryService.createLocation(formData);
-            setShowModal(false);
-            setFormData({ locationCode: '', name: '', description: '' });
+            if (editingLocationId) {
+                await inventoryService.updateLocation(editingLocationId, formData);
+                notifySuccess('Location updated successfully.');
+            } else {
+                await inventoryService.createLocation(formData);
+                notifySuccess('Location created successfully.');
+            }
+            resetModal();
             fetchLocations();
-            notifySuccess('Location created successfully.');
         } catch (err) {
-            notifyError(err.response?.data?.message || 'Failed to create location');
+            notifyError(err.response?.data?.message || `Failed to ${editingLocationId ? 'update' : 'create'} location`);
         }
+    };
+
+    const resetModal = () => {
+        setShowModal(false);
+        setEditingLocationId(null);
+        setFormData(emptyForm);
+    };
+
+    const openCreateModal = () => {
+        setEditingLocationId(null);
+        setFormData(emptyForm);
+        setShowModal(true);
+    };
+
+    const openEditModal = (location) => {
+        setEditingLocationId(location._id || location.id);
+        setFormData({
+            locationCode: location.locationCode || '',
+            name: location.name || '',
+            description: location.description || ''
+        });
+        setShowModal(true);
     };
 
     return (
@@ -54,7 +82,7 @@ export default function StockLocationsPage() {
                             <p className="text-text-secondary text-lg">Manage warehouses, zones, and storage bins.</p>
                         </div>
                         <button 
-                            onClick={() => setShowModal(true)}
+                            onClick={openCreateModal}
                             className="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
                         >
                             <span className="material-symbols-outlined">add_location</span>
@@ -93,7 +121,12 @@ export default function StockLocationsPage() {
                                         <div className="size-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></div>
                                         <span className="text-[10px] text-text-secondary font-bold uppercase tracking-wider">Active Location</span>
                                     </div>
-                                    <button className="text-primary hover:underline text-xs font-bold">Edit Details</button>
+                                    <button
+                                        onClick={() => openEditModal(loc)}
+                                        className="text-primary hover:underline text-xs font-bold"
+                                    >
+                                        Edit Details
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -104,11 +137,11 @@ export default function StockLocationsPage() {
             {/* Create Location Modal */}
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={resetModal}></div>
                     <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
                         <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                            <h2 className="text-xl font-bold text-white">Add New Location</h2>
-                            <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-white">
+                            <h2 className="text-xl font-bold text-white">{editingLocationId ? 'Edit Location' : 'Add New Location'}</h2>
+                            <button onClick={resetModal} className="text-text-secondary hover:text-white">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
@@ -144,7 +177,7 @@ export default function StockLocationsPage() {
                             </div>
                             <div className="pt-2">
                                 <button type="submit" className="w-full bg-primary py-3 rounded-xl text-white font-bold shadow-lg shadow-primary/20 hover:scale-[1.01] active:scale-95 transition-all">
-                                    Create Location
+                                    {editingLocationId ? 'Save Location Changes' : 'Create Location'}
                                 </button>
                             </div>
                         </form>
