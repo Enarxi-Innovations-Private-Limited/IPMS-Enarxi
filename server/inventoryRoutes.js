@@ -76,6 +76,53 @@ const normalizeVendorKey = (value) =>
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '');
 
+const normalizeVendorPayload = (payload = {}) => {
+    const vendorCode = String(payload.vendorCode ?? payload.code ?? '')
+        .trim()
+        .toUpperCase();
+
+    return {
+        vendorCode,
+        code: vendorCode,
+        name: String(payload.name || '').trim(),
+        website: String(payload.website || '').trim(),
+        gstin: String(payload.gstin || '').trim().toUpperCase(),
+        address: String(payload.address || '').trim(),
+        contactPerson: String(payload.contactPerson || '').trim(),
+        email: String(payload.email || '').trim(),
+        phone: String(payload.phone || '').trim(),
+        defaultPaymentTerms: String(payload.defaultPaymentTerms || '').trim(),
+        defaultDeliveryTerms: String(payload.defaultDeliveryTerms || '').trim(),
+        isLocalSource: Boolean(payload.isLocalSource),
+        isActive: payload.isActive === undefined ? true : Boolean(payload.isActive),
+    };
+};
+
+let vendorIndexHealPromise = null;
+const ensureVendorIndexesHealed = async () => {
+    if (vendorIndexHealPromise) return vendorIndexHealPromise;
+
+    vendorIndexHealPromise = (async () => {
+        const collection = Vendor.collection;
+        const indexes = await collection.indexes();
+        if (indexes.some((index) => index.name === 'code_1')) {
+            await collection.dropIndex('code_1');
+            console.log('[Inventory API] Dropped legacy vendors.code_1 index');
+        }
+
+        const refreshedIndexes = await collection.indexes();
+        if (!refreshedIndexes.some((index) => index.name === 'vendorCode_1')) {
+            await collection.createIndex({ vendorCode: 1 }, { name: 'vendorCode_1', unique: true });
+            console.log('[Inventory API] Created vendors.vendorCode_1 index');
+        }
+    })().catch((err) => {
+        vendorIndexHealPromise = null;
+        throw err;
+    });
+
+    return vendorIndexHealPromise;
+};
+
 const isBlankSkuValue = (value) => {
     const normalized = String(value || '').trim().toUpperCase();
     return !normalized || ['-', '_', 'N/A', 'NA', 'NULL'].includes(normalized);
@@ -1463,11 +1510,19 @@ router.put('/vendors/:id', async (req, res) => {
     const session = await mongoose.startSession();
     try {
         if (!requireAnyRole(req, res, [roles.ADMIN, roles.SUPER_ADMIN, roles.SUPER_USER])) return;
+        await ensureVendorIndexesHealed();
         await session.withTransaction(async () => {
             const vendor = await Vendor.findById(req.params.id).session(session);
             if (!vendor) throw new Error('Vendor not found');
             const beforeObj = vendor.toObject();
-            Object.assign(vendor, req.body);
+            const vendorPayload = normalizeVendorPayload({ ...vendor.toObject(), ...req.body });
+            if (!vendorPayload.vendorCode) {
+                throw new Error('Vendor code is required.');
+            }
+            if (!vendorPayload.name) {
+                throw new Error('Vendor name is required.');
+            }
+            Object.assign(vendor, vendorPayload);
             await vendor.save({ session });
             await logAudit('Vendor', vendor._id, 'UPDATE', beforeObj, vendor.toObject(), req);
             await logInvActivity('INV_MASTER_UPDATE', `Vendor ${vendor.name} updated`, req.user._id, req.user.name, vendor._id, vendor.name);
@@ -3116,7 +3171,15 @@ router.post('/admin/locations', async (req, res) => {
 
 router.post('/admin/vendors', async (req, res) => {
     try {
-        const vendor = await Vendor.create(req.body);
+        await ensureVendorIndexesHealed();
+        const vendorPayload = normalizeVendorPayload(req.body);
+        if (!vendorPayload.vendorCode) {
+            return res.status(400).json({ message: 'Vendor code is required.' });
+        }
+        if (!vendorPayload.name) {
+            return res.status(400).json({ message: 'Vendor name is required.' });
+        }
+        const vendor = await Vendor.create(vendorPayload);
         await logInvActivity('INV_MASTER_CREATE', `Vendor ${vendor.name} created`, req.user._id, req.user.name, vendor._id, vendor.name);
         res.status(201).json(vendor);
     } catch (err) {
@@ -3126,7 +3189,15 @@ router.post('/admin/vendors', async (req, res) => {
 
 router.post('/purchase/vendors', async (req, res) => {
     try {
-        const vendor = await Vendor.create(req.body);
+        await ensureVendorIndexesHealed();
+        const vendorPayload = normalizeVendorPayload(req.body);
+        if (!vendorPayload.vendorCode) {
+            return res.status(400).json({ message: 'Vendor code is required.' });
+        }
+        if (!vendorPayload.name) {
+            return res.status(400).json({ message: 'Vendor name is required.' });
+        }
+        const vendor = await Vendor.create(vendorPayload);
         await logInvActivity('INV_MASTER_CREATE', `Vendor ${vendor.name} created`, req.user._id, req.user.name, vendor._id, vendor.name);
         res.status(201).json(vendor);
     } catch (err) {
