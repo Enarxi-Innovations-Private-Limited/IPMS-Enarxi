@@ -5,7 +5,7 @@ Date: 2026-05-11
 Compared codebases:
 
 - Source of truth: `C:\Users\Hameed\Desktop\Enarxi\Inventory-tracker`
-- Replica target: `D:\users\hameed\Desktop\Enarxi\Project Management`
+- Replica target: `C:\Users\Hameed\OneDrive - Enarxi Innovations Pvt Ltd\Enarxi\Project Management`
 
 ## Verdict
 

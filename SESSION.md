@@ -1,25 +1,28 @@
 # Session Log
 
 ## Last Updated
-2026-06-11T12:46:00+05:30
+2026-06-18T12:20:00.000+05:30
 
 ## Goal
-Enable employees and interns to view their allocated stages and enter completed board counts.
+Clean the repo and production folder structure safely, excluding temp artifacts and tracked local credential files from Git.
 
 ## Status
 DONE
 
 ## Done This Session
-- Implemented `fullProjectTasks` state and fetch effect in `EmployeeProjectsPage.jsx` and `InternProjectsPage.jsx` to load all tasks of the selected project via `/api/projects/:projectId/tasks`.
-- Integrated `ProductionWorkerProjectView` and imported it in `EmployeeProjectsPage.jsx` to render allocations, approved boards, and input fields.
-- Filtered production tasks from `fullProjectTasks` in both pages so they show up for the logged-in employee/intern regardless of primary task assignee.
-- Verified client builds successfully.
+- Updated `.gitignore` to cover `.temp/`, `.env.save`, and `client/.env`.
+- Removed `client/.env` from Git tracking while preserving the local file.
+- Committed and pushed repo cleanup as `e7154f7` and restored `server/taskTemplates.js` in follow-up commit `e1f4fc4`.
+- Mirrored the folder cleanup on the production VPS by moving root clutter and utility scripts into `.temp/`.
+- Restarted `ipms-backend` and `ipms-preview-bom` under PM2 and verified backend, BOM docs, and public nginx responses.
 
 ## Decisions Made
-- Explicitly querying `/api/projects/:projectId/tasks` was necessary since `/api/tasks` only returns tasks directly assigned to the user.
+- Kept the cleanup on `Inventory-setup`; no new `production` branch was created yet because the server checkout is still manually diverged.
+- Restored `server/taskTemplates.js` to the tracked codebase because it is a live backend dependency, not an unused script.
+- Avoided `git pull` on the VPS and used direct file updates instead to prevent overwriting manual production-side changes.
 
 ## Blockers
-- None.
+- Production checkout remains `ahead 2, behind 1` with manual drift in `server/BOM/automation/robu.py`, `scripts/esp32_data.xlsx`, and untracked `ecosystem.production.config.js`.
 
 ## Next Step
-Confirm by logging in as an employee/intern and submitting completed board counts for a production project stage.
+Decide whether to normalize the production server onto a dedicated deploy branch or keep using direct file sync for production updates.

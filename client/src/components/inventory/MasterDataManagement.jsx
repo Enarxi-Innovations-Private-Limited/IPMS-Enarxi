@@ -604,10 +604,19 @@ export default function MasterDataManagement() {
     );
 
     const filteredItems = items.filter((item) => {
+        const q = itemSearch.toLowerCase();
         const matchesSearch =
             !itemSearch ||
-            item.name?.toLowerCase().includes(itemSearch.toLowerCase()) ||
-            item.itemCode?.toLowerCase().includes(itemSearch.toLowerCase());
+            item.name?.toLowerCase().includes(q) ||
+            item.itemCode?.toLowerCase().includes(q) ||
+            item.package?.toLowerCase().includes(q) ||
+            item.uom?.toLowerCase().includes(q) ||
+            getItemClassificationName(item).toLowerCase().includes(q) ||
+            (item.skuMappings || []).some(
+                (m) =>
+                    m.sku?.toLowerCase().includes(q) ||
+                    (m.vendorCode || m.vendorId?.vendorCode || '').toLowerCase().includes(q)
+            );
 
         const matchesClass = !itemClassFilter || getItemClassificationId(item) === itemClassFilter;
 
@@ -690,7 +699,7 @@ export default function MasterDataManagement() {
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
                                         <input
                                             type="text"
-                                            placeholder="Search by name or code..."
+                                            placeholder="Search by name, code, class, package, UOM, SKU..."
                                             value={itemSearch}
                                             onChange={(e) => setItemSearch(e.target.value)}
                                             className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
