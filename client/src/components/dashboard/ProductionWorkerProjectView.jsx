@@ -96,6 +96,7 @@ export default function ProductionWorkerProjectView({
             (productionTasks.reduce((sum, task) => sum + Math.min(Number(task.unitsCompleted || 0), totalBatch), 0) / (productionTasks.length * totalBatch)) * 100
         )
         : 0;
+    const finalTask = productionTasks[productionTasks.length - 1] ?? null;
 
     return (
         <div className="space-y-8">
@@ -110,7 +111,7 @@ export default function ProductionWorkerProjectView({
                                 <div>
                                     <div className="flex flex-wrap items-center gap-3">
                                         <h1 className="font-['Hanken_Grotesk'] text-3xl font-bold tracking-[-0.03em] text-[#eef3ff]">
-                                            {project.projectCode || project.name}
+                                            {project.name || project.projectCode}
                                         </h1>
                                         <span className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em] ${getProjectBadgeClass(project.status)}`}>
                                             {project.status}

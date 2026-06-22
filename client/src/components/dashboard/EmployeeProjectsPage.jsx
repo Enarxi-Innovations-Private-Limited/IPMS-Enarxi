@@ -433,7 +433,7 @@ export default function EmployeeProjectsPage() {
                                 </li>
                                 <li className="flex items-center">
                                     <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                    <span className="ml-2 text-white text-sm font-medium">{selectedProject.projectCode || 'No ID'}</span>
+                                    <span className="ml-2 text-white text-sm font-medium">{selectedProject.name || selectedProject.projectCode}</span>
                                 </li>
                             </ol>
                         </nav>
@@ -442,9 +442,12 @@ export default function EmployeeProjectsPage() {
                         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                             <div>
                                 <div className="flex items-center gap-3 mb-2">
-                                    <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                                        {selectedProject.projectCode || 'No ID'}
-                                    </h1>
+                                    <div>
+                                        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                                            {selectedProject.name || selectedProject.projectCode}
+                                        </h1>
+                                        <p className="text-primary font-mono text-sm mt-0.5">{selectedProject.projectCode}</p>
+                                    </div>
                                     <div className={`px-4 py-1.5 text-sm font-bold uppercase tracking-wider rounded-full border-none ${selectedProject.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
                                         selectedProject.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-400' :
                                             selectedProject.status === 'ON_HOLD' ? 'bg-orange-500/20 text-orange-400' :
@@ -802,9 +805,10 @@ export default function EmployeeProjectsPage() {
                                                     arrow_forward
                                                 </span>
                                             </div>
-                                            <h3 className="text-primary font-bold text-lg mb-2 group-hover:text-white transition-colors font-mono">
-                                                {project.projectCode || 'No ID'}
+                                            <h3 className="text-white font-bold text-lg mb-1 group-hover:text-primary transition-colors leading-snug">
+                                                {project.name || project.projectCode || 'Untitled Project'}
                                             </h3>
+                                            <p className="text-primary font-mono text-xs mb-2">{project.projectCode}</p>
                                             <p className="text-text-secondary text-sm line-clamp-2 mb-4">
                                                 {project.description || 'No description'}
                                             </p>

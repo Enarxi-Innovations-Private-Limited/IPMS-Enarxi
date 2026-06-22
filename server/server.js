@@ -1329,7 +1329,7 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
             const completedTaskCount = await Task.countDocuments({ projectId: p._id, status: 'COMPLETED' });
             return {
                 id: p._id,
-                name: isEmployeeOrIntern ? null : p.name,
+                name: p.name,
                 projectCode: p.projectCode,
                 description: p.description,
                 department: p.department || 'SOFTWARE',
@@ -1445,7 +1445,7 @@ app.get('/api/projects/:projectId', authMiddleware, async (req, res) => {
         const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
         res.json({
             id: project._id,
-            name: isEmployeeOrIntern ? null : project.name,
+            name: project.name,
             projectCode: project.projectCode,
             description: project.description,
             department: project.department || 'SOFTWARE',
