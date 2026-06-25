@@ -89,7 +89,10 @@ const taskSchema = new mongoose.Schema({
     productionPhase: { type: String, default: '' },
     sequence: { type: Number, default: 0 },
     unitsCompleted: { type: Number, default: 0 },
-    unitsCurrentlyHere: { type: Number, default: 0 }
+    unitsCurrentlyHere: { type: Number, default: 0 },
+
+    // Manager drag-to-reorder position (independent of production sequence)
+    order: { type: Number, default: 0 }
 }, {
     timestamps: true, // Automatically adds createdAt and updatedAt
 });

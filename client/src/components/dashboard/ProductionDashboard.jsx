@@ -1,8 +1,37 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
+import {
+    DndContext,
+    PointerSensor,
+    closestCenter,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
 import { ENARXI_LOGO_B64 } from '../../assets/enarxi-logo-b64.js';
+import { useSocket } from '../../context/SocketContext.jsx';
+
+function SortableProdRow({ task, children, className = '' }) {
+    const id = task._id || task.id;
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1 };
+    return (
+        <tr ref={setNodeRef} style={style} className={className}>
+            <td className="w-8 pl-3 pr-0 py-5 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+                <span className="material-symbols-outlined text-[18px] text-[#434656] hover:text-[#b8c3ff] select-none transition-colors">drag_indicator</span>
+            </td>
+            {children}
+        </tr>
+    );
+}
 
 const PHASE_ICONS = {
     Procurement: 'check_circle',
@@ -90,6 +119,13 @@ export default function ProductionDashboard({
     const [rowLoading, setRowLoading] = useState({});
     const [rowErrors, setRowErrors] = useState({});
     const [feedback, setFeedback] = useState({ type: '', message: '' });
+
+    // ── Drag-to-reorder state ──
+    const [orderedProdTasks, setOrderedProdTasks] = useState([]);
+    const [orderedFullStages, setOrderedFullStages] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const saveTimerRef = useRef(null);
+    const { socket } = useSocket();
     const [assignments, setAssignments] = useState([]);
     const [assignmentLoading, setAssignmentLoading] = useState(false);
     const [assignmentSaving, setAssignmentSaving] = useState({});
@@ -177,6 +213,78 @@ export default function ProductionDashboard({
     const fullProductBoardsPassed = fullProductStages.reduce((sum, task) => sum + Number(task.unitsCompleted || 0), 0);
     const fullProductProgress = getWorkflowCompletionPercent(fullProductStages, totalBatch);
     const canManageFullProductBoard = Boolean(showManagerActions && currentUserId && projectManagerId && String(currentUserId) === String(projectManagerId));
+
+    // Sync ordered lists when tasks prop changes (e.g. after refresh)
+    useEffect(() => {
+        const sortByOrder = (list) => [...list].sort((a, b) => {
+            const oa = Number(a.order || 0), ob = Number(b.order || 0);
+            if (oa !== ob) return oa - ob;
+            return Number(a.sequence || 0) - Number(b.sequence || 0);
+        });
+        setOrderedProdTasks(sortByOrder(sortedTasks));
+        setOrderedFullStages(sortByOrder(fullProductStages));
+    }, [tasks]);
+
+    // Socket: listen for remote reorders
+    useEffect(() => {
+        const s = socket?.current;
+        if (!s) return;
+        const handleReorder = (items) => {
+            const idToOrder = Object.fromEntries(items.map(({ taskId, order }) => [String(taskId), order]));
+            setOrderedProdTasks(prev => [...prev].sort((a, b) => {
+                const oa = idToOrder[String(a._id || a.id)] ?? Number(a.order || 0);
+                const ob = idToOrder[String(b._id || b.id)] ?? Number(b.order || 0);
+                return oa - ob;
+            }));
+            setOrderedFullStages(prev => [...prev].sort((a, b) => {
+                const oa = idToOrder[String(a._id || a.id)] ?? Number(a.order || 0);
+                const ob = idToOrder[String(b._id || b.id)] ?? Number(b.order || 0);
+                return oa - ob;
+            }));
+        };
+        s.emit('join:tasks');
+        s.on('tasks:reordered', handleReorder);
+        return () => s.off('tasks:reordered', handleReorder);
+    }, [socket]);
+
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+    const handleProdDragEnd = ({ active, over }) => {
+        if (!over || active.id === over.id) return;
+        setOrderedProdTasks((prev) => {
+            const oldIndex = prev.findIndex(t => (t._id || t.id) === active.id);
+            const newIndex = prev.findIndex(t => (t._id || t.id) === over.id);
+            const next = arrayMove(prev, oldIndex, newIndex);
+            persistOrder(next);
+            return next;
+        });
+    };
+
+    const handleFullStageDragEnd = ({ active, over }) => {
+        if (!over || active.id === over.id) return;
+        setOrderedFullStages((prev) => {
+            const oldIndex = prev.findIndex(t => (t._id || t.id) === active.id);
+            const newIndex = prev.findIndex(t => (t._id || t.id) === over.id);
+            const next = arrayMove(prev, oldIndex, newIndex);
+            persistOrder(next);
+            return next;
+        });
+    };
+
+    const persistOrder = (orderedList) => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        setIsSaving(true);
+        saveTimerRef.current = setTimeout(async () => {
+            try {
+                const items = orderedList.map((t, i) => ({ taskId: t._id || t.id, order: i }));
+                await api.put('/tasks/reorder', items);
+            } catch (err) {
+                console.error('Failed to persist task order', err);
+            } finally {
+                setIsSaving(false);
+            }
+        }, 600);
+    };
 
     useEffect(() => {
         if (!editingTaskId) return;
@@ -1000,7 +1108,7 @@ export default function ProductionDashboard({
                     <div className="border-b border-[#222a3d] px-6 py-6">
                         <div className="overflow-x-auto pb-2">
                             <div className="flex min-w-max items-center gap-4">
-                                {fullProductStages.length > 0 ? fullProductStages.map((task, index) => (
+                                {orderedFullStages.length > 0 ? orderedFullStages.map((task, index) => (
                                     <Fragment key={getTaskId(task)}>
                                         <div className="flex min-w-[164px] flex-col items-center gap-2 text-center">
                                             <div className={`flex h-14 w-14 items-center justify-center rounded-full border text-sm font-bold ${
@@ -1096,6 +1204,9 @@ export default function ProductionDashboard({
                                                 <table className="w-full border-collapse text-left">
                                                     <thead>
                                                         <tr className="border-b border-[#434656] bg-[#222a3d]">
+                                                            <th className="w-8 pl-3 pr-0">
+                                                                {isSaving && <span className="material-symbols-outlined text-[14px] text-[#b8c3ff] animate-spin">progress_activity</span>}
+                                                            </th>
                                                             <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Production Phase</th>
                                                             <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Unit Tracking</th>
                                                             <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Status</th>
@@ -1103,8 +1214,10 @@ export default function ProductionDashboard({
                                                             <th className="px-6 py-4 text-right text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Actions</th>
                                                         </tr>
                                                     </thead>
+                                                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleFullStageDragEnd}>
+                                                    <SortableContext items={orderedFullStages.map(t => t._id || t.id)} strategy={verticalListSortingStrategy}>
                                                     <tbody className="divide-y divide-[#434656]/70">
-                                                        {fullProductStages.map((task, index) => {
+                                                        {orderedFullStages.map((task, index) => {
                                                             const taskId = String(getTaskId(task));
                                                             const state = getTaskState(task);
                                                             const availableCapacity = getAvailableCapacity(task, index, fullProductStages, totalBatch);
@@ -1119,7 +1232,7 @@ export default function ProductionDashboard({
 
                                                             return (
                                                                 <Fragment key={taskId}>
-                                                                    <tr className={`transition-colors ${state === 'active' ? 'bg-[#2e5bff]/8' : 'hover:bg-[#2d3449]/25'} ${state === 'pending' ? 'opacity-70' : ''}`}>
+                                                                    <SortableProdRow task={task} className={`transition-colors ${state === 'active' ? 'bg-[#2e5bff]/8' : 'hover:bg-[#2d3449]/25'} ${state === 'pending' ? 'opacity-70' : ''}`}>
                                                                         <td className={`px-6 py-5 ${state === 'active' ? 'border-l-4 border-[#2e5bff]' : ''}`}>
                                                                             <p className="font-bold text-[#dae2fd]">{task.title}</p>
                                                                             <p className="mt-1 text-[11px] text-[#c4c5d9]">
@@ -1219,10 +1332,10 @@ export default function ProductionDashboard({
                                                                                 )}
                                                                             </div>
                                                                         </td>
-                                                                    </tr>
+                                                                    </SortableProdRow>
                                                                     {expandedTasks[taskId] && (
                                                                         <tr className="bg-[#10192d]">
-                                                                            <td colSpan="5" className="px-6 py-5">
+                                                                            <td colSpan="6" className="px-6 py-5">
                                                                                 <div className="rounded-2xl border border-[#3f485d] bg-[#0d1529] p-4">
                                                                                     <div className="mb-4">
                                                                                         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
@@ -1403,13 +1516,15 @@ export default function ProductionDashboard({
                                                             );
                                                         })}
                                                     </tbody>
+                                                    </SortableContext>
+                                                    </DndContext>
                                                 </table>
                                             </div>
 
                                             <div className="space-y-4 p-4 lg:hidden">
-                                                {fullProductStages.map((task, index) => {
+                                                {orderedFullStages.map((task, index) => {
                                                     const taskId = String(getTaskId(task));
-                                                    const availableCapacity = getAvailableCapacity(task, index, fullProductStages, totalBatch);
+                                                    const availableCapacity = getAvailableCapacity(task, index, orderedFullStages, totalBatch);
                                                     const assignee = users?.find((user) => String(getUserId(user)) === String(task.assigneeId || task.assigneeId?._id));
 
                                                     return (
@@ -1863,7 +1978,7 @@ export default function ProductionDashboard({
                     <section className="overflow-x-auto pb-2">
                         <div className="relative flex min-w-[920px] items-center justify-between gap-2">
                             <div className="absolute left-0 right-0 top-5 h-[2px] bg-[#434656]" />
-                            {sortedTasks.map((task, index) => {
+                            {orderedProdTasks.map((task, index) => {
                                 const state = getTaskState(task);
                                 const isCompleted = state === 'completed';
                                 const isActive = state === 'active';
@@ -1908,6 +2023,9 @@ export default function ProductionDashboard({
                                     <table className="w-full border-collapse text-left">
                                         <thead>
                                             <tr className="border-b border-[#434656] bg-[#222a3d]">
+                                                <th className="w-8 pl-3 pr-0">
+                                                    {isSaving && <span className="material-symbols-outlined text-[14px] text-[#b8c3ff] animate-spin">progress_activity</span>}
+                                                </th>
                                                 <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Production Phase</th>
                                                 <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Unit Tracking</th>
                                                 <th className="px-6 py-4 text-[12px] font-medium uppercase tracking-wider text-[#c4c5d9]">Status</th>
@@ -1917,12 +2035,14 @@ export default function ProductionDashboard({
                                                 )}
                                             </tr>
                                         </thead>
+                                        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleProdDragEnd}>
+                                        <SortableContext items={orderedProdTasks.map(t => t._id || t.id)} strategy={verticalListSortingStrategy}>
                                         <tbody className="divide-y divide-[#434656]/70">
-                                            {sortedTasks.map((task, index) => {
+                                            {orderedProdTasks.map((task, index) => {
                                                 const taskId = getTaskId(task);
                                                 const isEditing = editingTaskId === taskId;
                                                 const state = getTaskState(task);
-                                                const availableCapacity = getAvailableCapacity(task, index, sortedTasks, totalBatch);
+                                                const availableCapacity = getAvailableCapacity(task, index, orderedProdTasks, totalBatch);
                                                 const taskAssignments = assignmentsByTaskId[String(taskId)] || [];
                                                 // For the Lead column: use userName directly from assignment data (avoids ObjectId vs string mismatch)
                                                 const singleAssigneeName = taskAssignments.length === 1 ? taskAssignments[0].userName : null;
@@ -1936,8 +2056,8 @@ export default function ProductionDashboard({
 
                                                 return (
                                                     <Fragment key={taskId}>
-                                                        <tr
-                                                            key={taskId}
+                                                        <SortableProdRow
+                                                            task={task}
                                                             className={`transition-colors ${
                                                                 state === 'active' ? 'bg-[#2e5bff]/8' : 'hover:bg-[#2d3449]/25'
                                                             } ${state === 'pending' ? 'opacity-70' : ''}`}
@@ -2034,10 +2154,10 @@ export default function ProductionDashboard({
                                                                     </button>
                                                                 </td>
                                                             )}
-                                                        </tr>
+                                                        </SortableProdRow>
                                                         {expandedTasks[taskId] && (
                                                             <tr className="bg-[#10192d]">
-                                                                <td colSpan={showActionsColumn ? 5 : 4} className="px-6 py-5">
+                                                                <td colSpan={showActionsColumn ? 6 : 5} className="px-6 py-5">
                                                                     <div className="rounded-2xl border border-[#3f485d] bg-[#0d1529] p-4">
                                                                         <div className="mb-4">
                                                                             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#c4c5d9]">Split Allocation</p>
@@ -2230,6 +2350,8 @@ export default function ProductionDashboard({
                                                 );
                                             })}
                                         </tbody>
+                                        </SortableContext>
+                                        </DndContext>
                                     </table>
                                     <div className="flex items-center justify-between bg-[#131b2e] px-6 py-3 text-[11px] text-[#c4c5d9]">
                                         <p>Current Lead: {activeStations > 0 ? `${activeStations} active stations` : 'No active stations'}</p>
@@ -2241,11 +2363,11 @@ export default function ProductionDashboard({
                                 </div>
 
                                 <div className="space-y-4 p-4 lg:hidden">
-                                    {sortedTasks.map((task, index) => {
+                                    {orderedProdTasks.map((task, index) => {
                                         const taskId = getTaskId(task);
                                         const isEditing = editingTaskId === taskId;
                                         const state = getTaskState(task);
-                                        const availableCapacity = getAvailableCapacity(task, index, sortedTasks, totalBatch);
+                                        const availableCapacity = getAvailableCapacity(task, index, orderedProdTasks, totalBatch);
                                         const assignee = users?.find((user) => getUserId(user) === (task.assigneeId || task.assigneeId?._id));
 
                                         return (

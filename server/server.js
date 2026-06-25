@@ -3,6 +3,8 @@ dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const pathModule = require('path');
 require('dotenv').config({ path: pathModule.resolve(__dirname, '../.env'), override: true });
 const express = require('express');
+const http = require('http');
+const { Server: SocketIOServer } = require('socket.io');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -50,6 +52,30 @@ if (NODE_ENV === 'production' && !JWT_SECRET) {
 }
 
 const app = express();
+const httpServer = http.createServer(app);
+
+// Socket.IO — real-time task reordering
+const io = new SocketIOServer(httpServer, {
+    cors: {
+        origin: [
+            'https://ipms-enarxi.vercel.app',
+            'https://tracker.enarxi.com',
+            'http://localhost:5173',
+            'http://localhost:3000',
+            'http://127.0.0.1:5173',
+            'http://127.0.0.1:3000',
+        ],
+        credentials: true,
+    },
+});
+
+io.on('connection', (socket) => {
+    socket.on('join:tasks', () => socket.join('tasks:global'));
+    socket.on('join:project', (projectId) => {
+        if (projectId) socket.join(`project:${projectId}`);
+    });
+});
+
 app.set('trust proxy', 1);
 const staticAllowedOrigins = [
     'https://ipms-enarxi.vercel.app',
@@ -3058,7 +3084,7 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
             // Employees/Interns only see their own tasks
             query.assigneeId = req.user._id;
         }
-        const tasks = await Task.find(query).populate('projectId', 'name projectCode');
+        const tasks = await Task.find(query).sort({ order: 1, createdAt: 1 }).populate('projectId', 'name projectCode');
         const isEmployeeOrIntern = [roles.JUNIOR_ENGINEER, roles.INTERN].includes(req.user.role);
 
         res.json(tasks.map(t => ({
@@ -3090,12 +3116,39 @@ app.get('/api/tasks', authMiddleware, async (req, res) => {
             isFullProductStage: t.isFullProductStage || false,
             productionPhase: t.productionPhase || '',
             sequence: t.sequence || 0,
+            order: t.order ?? 0,
             unitsCompleted: t.unitsCompleted || 0,
             unitsCurrentlyHere: t.unitsCurrentlyHere || 0
         })));
     } catch (err) {
         console.error('❌ [Load Tasks]: Error:', err);
         res.status(500).json({ message: 'Failed to load tasks', error: err.message });
+    }
+});
+
+// Reorder tasks — Manager drag-and-drop (must be before /:taskId routes)
+app.put('/api/tasks/reorder', authMiddleware, requireRole(roles.MANAGER, roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {
+    try {
+        const items = req.body; // [{ taskId, order }]
+        if (!Array.isArray(items) || items.length === 0)
+            return res.status(400).json({ message: 'Expected array of { taskId, order }' });
+
+        await Task.bulkWrite(
+            items.map(({ taskId, order }) => ({
+                updateOne: {
+                    filter: { _id: taskId },
+                    update: { $set: { order: Number(order) } },
+                },
+            }))
+        );
+
+        // Push new order to every connected client in real time
+        io.to('tasks:global').emit('tasks:reordered', items);
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ [Reorder Tasks]:', err);
+        res.status(500).json({ message: 'Failed to reorder tasks', error: err.message });
     }
 });
 
@@ -4505,8 +4558,8 @@ const startServer = async () => {
         // ─────────────────────────────────────────────────────────────
 
         const bindHost = NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0';
-        app.listen(PORT, bindHost, () => {
-            console.log(`\n🚀 Server running on http://${bindHost}:${PORT}`);
+        httpServer.listen(PORT, bindHost, () => {
+            console.log(`\n🚀 Server running on http://${bindHost}:${PORT} (Socket.IO enabled)`);
 
             if (NODE_ENV !== 'production') {
                 startBOMAutomation();

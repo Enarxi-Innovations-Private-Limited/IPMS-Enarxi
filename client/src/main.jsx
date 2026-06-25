@@ -5,12 +5,15 @@ import './index.css';
 import './responsive.css';
 import App from './App.jsx';
 import { AppNotificationProvider } from './components/common/AppNotificationProvider.jsx';
+import { SocketProvider } from './context/SocketContext.jsx';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <AppNotificationProvider>
-        <App />
+        <SocketProvider>
+          <App />
+        </SocketProvider>
       </AppNotificationProvider>
     </BrowserRouter>
   </StrictMode>

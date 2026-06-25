@@ -1,20 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
 import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
 import ProductionDashboard from './ProductionDashboard.jsx';
+import { useSocket } from '../../context/SocketContext.jsx';
 
-// Draggable Task Component
+// Sortable table row for drag-to-reorder
+function SortableTaskRow({ task, children }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task._id || task.id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        background: isDragging ? 'rgba(16,185,129,0.05)' : undefined,
+        zIndex: isDragging ? 10 : undefined,
+        position: 'relative',
+    };
+    return (
+        <tr ref={setNodeRef} style={style} className="hover:bg-slate-800/20 transition-colors group">
+            <td className="pl-3 pr-0 py-5 w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+                <span className="material-symbols-outlined text-[18px] text-slate-600 hover:text-emerald-400 select-none transition-colors">
+                    drag_indicator
+                </span>
+            </td>
+            {children}
+        </tr>
+    );
+}
 
 
 export default function ManagerProjectsPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { socket } = useSocket();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const saveTimerRef = useRef(null);
     const [users, setUsers] = useState([]); // All users available to manager (filtered by department backend side)
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
@@ -232,6 +270,48 @@ export default function ManagerProjectsPage() {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Socket.IO — receive reorder events from other clients
+    useEffect(() => {
+        const sock = socket?.current;
+        if (!sock) return;
+        sock.emit('join:tasks');
+        const handleReordered = (items) => {
+            const orderMap = Object.fromEntries(items.map(i => [String(i.taskId), i.order]));
+            setTasks(prev => [...prev].sort((a, b) => {
+                const oa = orderMap[String(a._id ?? a.id)] ?? (a.order ?? 0);
+                const ob = orderMap[String(b._id ?? b.id)] ?? (b.order ?? 0);
+                return oa - ob;
+            }));
+        };
+        sock.on('tasks:reordered', handleReordered);
+        return () => sock.off('tasks:reordered', handleReordered);
+    }, [socket]);
+
+    // DnD sensors
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+    // Drag end — optimistic reorder within the current project's task list
+    const handleTaskDragEnd = ({ active, over }) => {
+        if (!over || active.id === over.id) return;
+        setTasks(prev => {
+            const oldIdx = prev.findIndex(t => (t._id ?? t.id) === active.id);
+            const newIdx = prev.findIndex(t => (t._id ?? t.id) === over.id);
+            if (oldIdx === -1 || newIdx === -1) return prev;
+            const reordered = arrayMove(prev, oldIdx, newIdx);
+            clearTimeout(saveTimerRef.current);
+            setIsSaving(true);
+            saveTimerRef.current = setTimeout(async () => {
+                try {
+                    const payload = reordered.map((t, i) => ({ taskId: t._id ?? t.id, order: i }));
+                    await api.put('/tasks/reorder', payload);
+                } catch { /* silent */ } finally {
+                    setIsSaving(false);
+                }
+            }, 600);
+            return reordered;
+        });
+    };
 
     useEffect(() => {
         if (!loading && projects.length > 0) {
@@ -867,6 +947,9 @@ export default function ManagerProjectsPage() {
                                         <table className="w-full text-left border-collapse hidden lg:table">
                                             <thead className="sticky top-0 bg-[#0a0f1d] z-10">
                                                 <tr className="bg-slate-900/50 border-b border-slate-800">
+                                                    <th className="w-8 pl-3 pr-0">
+                                                        {isSaving && <span className="material-symbols-outlined text-[14px] text-emerald-400 animate-spin">progress_activity</span>}
+                                                    </th>
                                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
                                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
                                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
@@ -874,6 +957,8 @@ export default function ManagerProjectsPage() {
                                                     <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Actions</th>
                                                 </tr>
                                             </thead>
+                                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                                            <SortableContext items={paginatedTasks.map(t => t._id ?? t.id)} strategy={verticalListSortingStrategy}>
                                             <tbody className="divide-y divide-slate-800">
                                                 {paginatedTasks.length > 0 ? (
                                                     paginatedTasks.map((task) => {
@@ -884,7 +969,7 @@ export default function ManagerProjectsPage() {
                                                         const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
 
                                                         return (
-                                                            <tr key={task.id} className="hover:bg-slate-800/20 transition-colors group">
+                                                            <SortableTaskRow key={task._id ?? task.id} task={task}>
                                                                 <td className="px-6 py-5">
                                                                     <div className={`font-bold text-sm ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
                                                                         {task.title}
@@ -1058,17 +1143,19 @@ export default function ManagerProjectsPage() {
                                                                         </button>
                                                                     </div>
                                                                 </td>
-                                                            </tr>
+                                                            </SortableTaskRow>
                                                         );
                                                     })
                                                 ) : (
                                                     <tr>
-                                                        <td colSpan="5" className="px-6 py-10 text-center text-slate-500 text-sm">
+                                                        <td colSpan="6" className="px-6 py-10 text-center text-slate-500 text-sm">
                                                             No tasks found matching current filters.
                                                         </td>
                                                     </tr>
                                                 )}
                                             </tbody>
+                                            </SortableContext>
+                                            </DndContext>
                                         </table>
 
                                         {/* Mobile Card View */}
