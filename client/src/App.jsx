@@ -38,6 +38,7 @@ import ClassificationsPage from './components/inventory/ClassificationsPage.jsx'
 import StockLocationsPage from './components/inventory/StockLocationsPage.jsx';
 import StockUploadsPage from './components/inventory/StockUploadsPage.jsx';
 import POApprovalsPage from './components/inventory/POApprovalsPage.jsx';
+import ManagerItemMasterPage from './components/inventory/ManagerItemMasterPage.jsx';
 import StoreDashboard from './components/inventory/StoreDashboard.jsx';
 import PurchaseDashboard from './components/inventory/PurchaseDashboard.jsx';
 import PurchasingHub from './components/inventory/PurchasingHub.jsx';
@@ -395,6 +396,14 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['MANAGER']}>
             <InventoryAudit currentPage="inv-ledger" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/engineer/inventory/item-master"
+        element={
+          <ProtectedRoute allowedRoles={['MANAGER']}>
+            <ManagerItemMasterPage />
           </ProtectedRoute>
         }
       />

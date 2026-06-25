@@ -19,6 +19,14 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
     const [selectedMR, setSelectedMR] = useState(null);
     const [viewingMR, setViewingMR] = useState(null);
     const [viewingDetails, setViewingDetails] = useState(null);
+    const [itemsLoading, setItemsLoading] = useState(false);
+
+    // Unknown-item request state
+    const [showUnknownPanel, setShowUnknownPanel] = useState(false);
+    const [unknownItems, setUnknownItems] = useState([{ name: '', description: '' }]);
+    const [classifications, setClassifications] = useState([]);
+    const [vendors, setVendors] = useState([]);
+    const [locations, setLocations] = useState([]);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -48,6 +56,28 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
         fetchData();
     }, []);
 
+    // Re-fetch all reference data every time the modal opens so newly created items always appear
+    useEffect(() => {
+        if (!showModal) return;
+        setShowUnknownPanel(false);
+        setUnknownItems([{ name: '', description: '' }]);
+        setItemsLoading(true);
+        Promise.all([
+            inventoryService.getItems(),
+            inventoryService.getClassifications(),
+            inventoryService.getVendors(),
+            inventoryService.getLocations(),
+        ])
+            .then(([itemRes, classRes, vendorRes, locationRes]) => {
+                setItems(itemRes.data || []);
+                setClassifications(classRes.data || []);
+                setVendors(vendorRes.data || []);
+                setLocations(locationRes.data || []);
+            })
+            .catch(() => {})
+            .finally(() => setItemsLoading(false));
+    }, [showModal]);
+
     const handleAddItem = () => {
         setFormData({ ...formData, items: [...formData.items, { itemCode: '', quantity: 1 }] });
     };
@@ -58,9 +88,20 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
         setFormData({ ...formData, items: newItems });
     };
 
-    const handleBulkUpload = (e) => {
+    const handleBulkUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        e.target.value = '';
+
+        // Always fetch the latest item list before validating so newly-created items are visible
+        let latestItems = items;
+        try {
+            const freshRes = await inventoryService.getItems();
+            latestItems = freshRes.data || items;
+            setItems(latestItems);
+        } catch {
+            // fall back to whatever we already have
+        }
 
         const reader = new FileReader();
         reader.onload = (evt) => {
@@ -71,28 +112,213 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
 
             const normalize = (s) => (s || '').toString().trim().toUpperCase();
 
+            const notFound = [];
             const importedItems = parsed.map(row => {
-                const code = normalize(row.ItemCode || row['Item Code'] || row['itemCode']);
+                const rawCode = (row.ItemCode || row['Item Code'] || row['itemCode'] || '').toString().trim();
+                const code = normalize(rawCode);
                 const qty = parseFloat(row.Quantity || row.Qty || row['quantity'] || 0);
-                
-                // Only include if item exists in our master list
-                const itemExists = items.some(i => normalize(i.itemCode) === code);
-                return itemExists && qty > 0 ? { itemCode: code, quantity: qty } : null;
+
+                if (!code || qty <= 0) return null;
+
+                // Match case-insensitively — store the exact code from our master list
+                const matched = latestItems.find(i => normalize(i.itemCode) === code);
+                if (!matched) {
+                    notFound.push(rawCode);
+                    return null;
+                }
+                return { itemCode: matched.itemCode, quantity: qty };
             }).filter(Boolean);
 
+            // Add recognised items to the component requirements
             if (importedItems.length > 0) {
                 setFormData(prev => ({
                     ...prev,
                     items: [...prev.items.filter(i => i.itemCode !== ''), ...importedItems]
                 }));
-                notifySuccess(`Imported ${importedItems.length} items from Excel.`);
+            }
+
+            // Auto-route unrecognised codes straight into the "Items Not in System" panel
+            if (notFound.length > 0) {
+                const newUnknown = notFound.map(code => ({ name: code, description: '' }));
+                setUnknownItems(newUnknown);
+                setShowUnknownPanel(true);
+
+                if (importedItems.length > 0) {
+                    notifySuccess(
+                        `${importedItems.length} component(s) added. ` +
+                        `${notFound.length} unrecognised item(s) moved to "Items Not in System" below — ` +
+                        `review the names and download the creation request for your Super Admin.`
+                    );
+                } else {
+                    notifySuccess(
+                        `${notFound.length} item(s) from your upload aren't in the Item Master yet. ` +
+                        `They've been added to "Items Not in System" below — ` +
+                        `download the creation request and forward to your Super Admin.`
+                    );
+                }
+            } else if (importedItems.length > 0) {
+                notifySuccess(`${importedItems.length} component(s) imported successfully.`);
             } else {
-                notifyError('No valid items found in Excel. Check Item Codes and Quantities.');
+                notifyError('No valid rows found. Ensure the file has "Item Code" and "Quantity" columns.');
             }
         };
         reader.readAsBinaryString(file);
-        // Reset input
-        e.target.value = '';
+    };
+
+    // Unknown-item helpers
+    const handleUnknownItemChange = (index, field, value) => {
+        const next = [...unknownItems];
+        next[index] = { ...next[index], [field]: value };
+        setUnknownItems(next);
+    };
+
+    const handleAddUnknownRow = () => setUnknownItems([...unknownItems, { name: '', description: '' }]);
+
+    const handleRemoveUnknownRow = (index) => {
+        const next = unknownItems.filter((_, i) => i !== index);
+        setUnknownItems(next.length ? next : [{ name: '', description: '' }]);
+    };
+
+    // ── Download helpers (all close over state) ──
+
+    const _makeImportSheet = (filledRows) => {
+        // Exact format the MasterDataManagement bulk importer reads:
+        // Base columns + one column per active vendor (vendorCode as header, cell = SKU)
+        const activeVendors = vendors.filter(v => v.isActive !== false);
+        const vendorCols = activeVendors.map(v => v.vendorCode);
+        const headers = [
+            'Classification *',
+            'Item Code  (leave blank to auto-generate)',
+            'Item Name *',
+            'Package  (e.g. SMD, THT, DIP-8, TO-92)',
+            'UOM *  (Nos / Kg / Meters / Liters)',
+            'Description',
+            ...vendorCols,
+        ];
+        const dataRows = filledRows.map(r => [
+            '',        // Classification — admin fills
+            '',        // Item Code — auto-generate
+            r.name.trim(),
+            '',        // Package — admin fills
+            '',        // UOM — admin fills
+            r.description.trim(),
+            ...vendorCols.map(() => ''),  // one blank per vendor for SKU
+        ]);
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+        const baseCols = [{ wch: 28 }, { wch: 32 }, { wch: 34 }, { wch: 30 }, { wch: 24 }, { wch: 38 }];
+        sheet['!cols'] = [...baseCols, ...vendorCols.map(() => ({ wch: 22 }))];
+        return sheet;
+    };
+
+    const _makeClassSheet = () => {
+        const sheet = XLSX.utils.aoa_to_sheet([
+            ['Classification Name', 'Prefix', 'Tracks Serial Numbers', 'Department'],
+            ...classifications.map(c => [c.name, c.prefix, c.tracksSerial ? 'Yes' : 'No', c.department || '']),
+        ]);
+        sheet['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 22 }, { wch: 20 }];
+        return sheet;
+    };
+
+    const _makeVendorSheet = () => {
+        const sheet = XLSX.utils.aoa_to_sheet([
+            ['Vendor Code  (use as column header above)', 'Vendor Name', 'Contact Person', 'Email', 'Local Source'],
+            ...vendors
+                .filter(v => v.isActive !== false)
+                .map(v => [v.vendorCode, v.name, v.contactPerson || '', v.email || '', v.isLocalSource ? 'Yes' : 'No']),
+        ]);
+        sheet['!cols'] = [{ wch: 36 }, { wch: 30 }, { wch: 24 }, { wch: 28 }, { wch: 14 }];
+        return sheet;
+    };
+
+    const _makeLocationSheet = () => {
+        const sheet = XLSX.utils.aoa_to_sheet([
+            ['Location Code', 'Location Name', 'Label / Zone', 'Address', 'Default Location'],
+            ...locations
+                .filter(l => l.isActive !== false)
+                .map(l => [l.locationCode, l.name, l.label || '', l.address || '', l.isDefault ? 'Yes' : '']),
+        ]);
+        sheet['!cols'] = [{ wch: 18 }, { wch: 28 }, { wch: 20 }, { wch: 32 }, { wch: 16 }];
+        return sheet;
+    };
+
+    const _makeMasterSheet = () => {
+        const activeVendors = vendors.filter(v => v.isActive !== false);
+        const vendorCols = activeVendors.map(v => v.vendorCode);
+        const headers = ['Item Code', 'Item Name', 'Classification', 'Package', 'UOM', 'Description', ...vendorCols];
+        const rows = items
+            .filter(i => i.isActive !== false)
+            .map(i => {
+                const skuByVendorCode = {};
+                (i.skuMappings || []).forEach(m => {
+                    const code = m.vendorCode || m.vendorId?.vendorCode || '';
+                    if (code && m.sku) skuByVendorCode[code] = m.sku;
+                });
+                return [
+                    i.itemCode,
+                    i.name,
+                    i.classification?.name || i.classificationId?.name || '',
+                    i.package || '',
+                    i.uom || '',
+                    i.description || '',
+                    ...vendorCols.map(vc => skuByVendorCode[vc] || ''),
+                ];
+            });
+        const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        const baseCols = [{ wch: 18 }, { wch: 34 }, { wch: 24 }, { wch: 16 }, { wch: 10 }, { wch: 38 }];
+        sheet['!cols'] = [...baseCols, ...vendorCols.map(() => ({ wch: 20 }))];
+        return sheet;
+    };
+
+    /**
+     * "Download for Admin" — clean Excel for forwarding via Teams.
+     * Admin opens Sheet 1, fills Classification + UOM + vendor SKUs, then bulk-imports directly.
+     */
+    const downloadForAdmin = () => {
+        const filledRows = unknownItems.filter(r => r.name.trim());
+        if (filledRows.length === 0) {
+            notifyError('Add at least one item name before downloading.');
+            return;
+        }
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, _makeImportSheet(filledRows), 'New Items (Admin Import)');
+        XLSX.utils.book_append_sheet(wb, _makeClassSheet(), 'Classification Reference');
+        XLSX.utils.book_append_sheet(wb, _makeVendorSheet(), 'Vendor Reference');
+        XLSX.utils.book_append_sheet(wb, _makeLocationSheet(), 'Stock Location Reference');
+
+        const date = new Date().toISOString().slice(0, 10);
+        const filename = `New_Item_Request_For_Admin_${date}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        notifySuccess(
+            `Downloaded ${filledRows.length} item(s). ` +
+            `Forward "${filename}" to your Super Admin via Teams — ` +
+            `they fill Classification, UOM & vendor SKUs on Sheet 1, then bulk-import directly.`
+        );
+    };
+
+    /**
+     * "With Item Master" — same as above plus the full existing active item master as an extra sheet.
+     * Useful when the admin needs context about what already exists.
+     */
+    const downloadWithMasterReference = () => {
+        const filledRows = unknownItems.filter(r => r.name.trim());
+        if (filledRows.length === 0) {
+            notifyError('Add at least one item name before downloading.');
+            return;
+        }
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, _makeImportSheet(filledRows), 'New Items (Admin Import)');
+        XLSX.utils.book_append_sheet(wb, _makeClassSheet(), 'Classification Reference');
+        XLSX.utils.book_append_sheet(wb, _makeVendorSheet(), 'Vendor Reference');
+        XLSX.utils.book_append_sheet(wb, _makeLocationSheet(), 'Stock Location Reference');
+        XLSX.utils.book_append_sheet(wb, _makeMasterSheet(), 'Existing Item Master');
+
+        const date = new Date().toISOString().slice(0, 10);
+        XLSX.writeFile(wb, `New_Item_Request_With_Reference_${date}.xlsx`);
+        notifySuccess(
+            `Downloaded with full reference (${items.filter(i => i.isActive !== false).length} existing items + ` +
+            `${vendors.filter(v => v.isActive !== false).length} vendors + ` +
+            `${locations.filter(l => l.isActive !== false).length} stock locations).`
+        );
     };
 
     const handleViewDetails = async (req) => {
@@ -106,15 +332,31 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
     };
 
     const downloadTemplate = () => {
-        const data = [
-            { "Item Code": "RES-10K", "Quantity": 100 },
-            { "Item Code": "CAP-0.1UF", "Quantity": 50 }
+        // Sheet 1: blank template with two example rows using real item codes where possible
+        const examples = items.slice(0, 2).map(i => ({ "Item Code": i.itemCode, "Quantity": 1 }));
+        if (examples.length === 0) examples.push({ "Item Code": "ENTER-ITEM-CODE", "Quantity": 1 });
+        const templateSheet = XLSX.utils.json_to_sheet(examples);
+
+        // Sheet 2: full item master reference so users can copy-paste exact codes
+        const referenceRows = [
+            ["Item Code", "Item Name", "Classification", "Package", "UOM"],
+            ...items
+                .filter(i => i.isActive !== false)
+                .map(i => [
+                    i.itemCode,
+                    i.name,
+                    i.classification?.name || i.classificationId?.name || '',
+                    i.package || '',
+                    i.uom || ''
+                ])
         ];
-        const ws = XLSX.utils.json_to_sheet(data);
+        const referenceSheet = XLSX.utils.aoa_to_sheet(referenceRows);
+
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Template");
+        XLSX.utils.book_append_sheet(wb, templateSheet, "Request");
+        XLSX.utils.book_append_sheet(wb, referenceSheet, "Item Master Reference");
         XLSX.writeFile(wb, "Material_Request_Template.xlsx");
-        notifySuccess("Template downloaded. Fill 'Item Code' and 'Quantity' columns.");
+        notifySuccess(`Template downloaded. Use the "Item Master Reference" sheet for valid item codes.`);
     };
 
     const handleSubmit = async (e) => {
@@ -296,8 +538,19 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                             {/* Item Table */}
                             <div className="space-y-4">
                                 <div className="flex justify-between items-center">
-                                    <h3 className="text-[12px] font-bold text-slate-500 uppercase">Component Requirements</h3>
-                                    <button 
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="text-[12px] font-bold text-slate-500 uppercase">Component Requirements</h3>
+                                        {itemsLoading && (
+                                            <span className="flex items-center gap-1 text-[11px] text-slate-400">
+                                                <span className="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                                                Refreshing items…
+                                            </span>
+                                        )}
+                                        {!itemsLoading && (
+                                            <span className="text-[11px] text-slate-400">{items.length} items available</span>
+                                        )}
+                                    </div>
+                                    <button
                                         type="button"
                                         onClick={handleAddItem}
                                         className="text-[#002045] text-[12px] font-bold uppercase flex items-center gap-1 hover:underline"
@@ -372,6 +625,126 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                                         </tbody>
                                     </table>
                                 </div>
+                            </div>
+
+                            {/* ── Items Not in System ── */}
+                            <div className="space-y-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowUnknownPanel(p => !p)}
+                                    className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 transition-colors text-left"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-amber-500 text-[20px]">help_outline</span>
+                                        <div>
+                                            <p className="text-[12px] font-bold text-amber-800 uppercase tracking-wider">Items Not in System?</p>
+                                            <p className="text-[11px] text-amber-600 mt-0.5">Can't find a component above? List it here and send a creation request to your Super Admin.</p>
+                                        </div>
+                                    </div>
+                                    <span className={`material-symbols-outlined text-amber-500 text-[18px] transition-transform duration-200 ${showUnknownPanel ? 'rotate-180' : ''}`}>
+                                        expand_more
+                                    </span>
+                                </button>
+
+                                {showUnknownPanel && (
+                                    <div className="border border-amber-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                                        {/* Panel Header */}
+                                        <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[12px] font-bold text-amber-800 uppercase tracking-wider">New Item Creation Request</p>
+                                                <p className="text-[11px] text-amber-600 mt-0.5">
+                                                    Fill in what you know. Download the form and share with your Super Admin — they complete the technical fields and bulk-import directly.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {/* Rows */}
+                                        <div className="divide-y divide-amber-50">
+                                            {unknownItems.map((row, idx) => (
+                                                <div key={idx} className="px-5 py-4 flex gap-3 items-start">
+                                                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                                                                Item Name <span className="text-red-500">*</span>
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. 100nF 0402 Ceramic Capacitor"
+                                                                value={row.name}
+                                                                onChange={e => handleUnknownItemChange(idx, 'name', e.target.value)}
+                                                                className="w-full h-10 px-3 border border-slate-200 rounded-lg text-[13px] text-slate-700 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 bg-white"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">
+                                                                Description / Notes
+                                                            </label>
+                                                            <input
+                                                                type="text"
+                                                                placeholder="e.g. X5R, 10V, for power supply filter"
+                                                                value={row.description}
+                                                                onChange={e => handleUnknownItemChange(idx, 'description', e.target.value)}
+                                                                className="w-full h-10 px-3 border border-slate-200 rounded-lg text-[13px] text-slate-700 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-200 bg-white"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleRemoveUnknownRow(idx)}
+                                                        className="mt-6 text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                                                    >
+                                                        <span className="material-symbols-outlined text-[20px]">delete</span>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Panel Footer */}
+                                        <div className="px-5 py-3 bg-amber-50 border-t border-amber-100 flex items-center justify-between gap-3 flex-wrap">
+                                            <button
+                                                type="button"
+                                                onClick={handleAddUnknownRow}
+                                                className="text-[12px] font-bold text-amber-700 uppercase flex items-center gap-1 hover:underline"
+                                            >
+                                                <span className="material-symbols-outlined text-[16px]">add</span>
+                                                Add Another Item
+                                            </button>
+
+                                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                                                {/* Secondary — includes full item master for context */}
+                                                <button
+                                                    type="button"
+                                                    onClick={downloadWithMasterReference}
+                                                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-amber-400 text-amber-700 bg-white hover:bg-amber-50 text-[11px] font-bold uppercase tracking-wider transition-colors"
+                                                >
+                                                    <span className="material-symbols-outlined text-[14px]">download</span>
+                                                    With Item Master
+                                                </button>
+
+                                                {/* Primary — clean, send to admin via Teams */}
+                                                <button
+                                                    type="button"
+                                                    onClick={downloadForAdmin}
+                                                    className="inline-flex items-center gap-1.5 px-5 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[12px] font-bold uppercase tracking-wider transition-colors shadow-sm"
+                                                >
+                                                    <span className="material-symbols-outlined text-[15px]">send</span>
+                                                    Download for Admin
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {/* Workflow note */}
+                                        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100">
+                                            <p className="text-[11px] text-slate-500 flex items-start gap-1.5">
+                                                <span className="material-symbols-outlined text-[13px] mt-0.5 shrink-0">tips_and_updates</span>
+                                                <span>
+                                                    <strong>Download for Admin</strong> — clean 2-sheet Excel (new items + classification guide). Forward via Teams to your Super Admin — they fill Classification &amp; UOM and bulk-import directly.{' '}
+                                                    <strong>With Item Master</strong> — same plus the full existing item master as a reference sheet.
+                                                </span>
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             {/* Additional Notes Section */}

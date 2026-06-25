@@ -38,8 +38,8 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     const [isInventoryOpen, setIsInventoryOpen] = useState(() => {
         const saved = localStorage.getItem('man_inventory_expanded');
         if (saved !== null) return saved === 'true';
-        return currentPage.startsWith('inv-') || 
-               ['inventory', 'material-requests', 'returns', 'inv-dispatches', 'inv-ledger'].includes(currentPage);
+        return currentPage.startsWith('inv-') ||
+               ['inventory', 'material-requests', 'returns', 'inv-dispatches', 'inv-ledger', 'inv-item-master'].includes(currentPage);
     });
 
     const toggleInventory = () => {
@@ -113,6 +113,12 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                 { id: 'inv-dispatches', label: 'My Dispatches', icon: 'local_shipping', path: '/engineer/inventory/dispatches' },
                 { id: 'inv-ledger', label: 'Stock Ledger', icon: 'menu_book', path: '/engineer/inventory/ledger' },
             ]
+        },
+        {
+            name: "REFERENCE DATA",
+            items: [
+                { id: 'inv-item-master', label: 'Item Master', icon: 'category', path: '/engineer/inventory/item-master' },
+            ]
         }
     ];
 
@@ -129,7 +135,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                             </div>
                             <div className="flex flex-col justify-center">
                                 <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
-                                <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
+                                <p className="text-slate-400 text-xs font-normal leading-normal mt-1">Manager Portal</p>
                             </div>
                         </div>
                     </div>
@@ -138,13 +144,13 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                     <nav ref={sidebarRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-6 space-y-6">
                         {/* Main Apps */}
                         <div className="space-y-1">
-                            <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Portal Apps</h2>
+                            <h2 className="px-3 text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">Portal Apps</h2>
                             {navItems.map((item) => (
                                 <a
                                     key={item.id}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
                                         ? 'bg-emerald-500/10 text-[#556070] shadow-sm'
-                                        : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
+                                        : 'text-slate-500 hover:bg-slate-50 hover:text-[#556070]'
                                         }`}
                                     href={item.path}
                                     onClick={(e) => {
@@ -154,7 +160,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                 >
                                     {currentPage === item.id && <div className="absolute left-0 top-2 bottom-2 w-1 bg-emerald-500 rounded-r-full"></div>}
                                     <span
-                                        className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'
+                                        className={`material-symbols-outlined transition-colors ${currentPage === item.id ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-500'
                                             }`}
                                         style={currentPage === item.id ? { fontVariationSettings: "'FILL' 1" } : {}}
                                     >
@@ -169,29 +175,29 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070] hover:bg-slate-50'
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-slate-500 hover:text-[#556070] hover:bg-slate-50'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>inventory_2</span>
+                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-500'}`}>inventory_2</span>
                                     <span className="text-sm font-medium">Inventory System</span>
                                 </div>
-                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 ${isInventoryOpen ? 'rotate-180' : ''}`}>
+                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 text-slate-400 ${isInventoryOpen ? 'rotate-180' : ''}`}>
                                     expand_more
                                 </span>
                             </button>
 
                             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isInventoryOpen ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                                <div className="space-y-6 pl-3 border-l border-border-dark/50 ml-4 py-2">
+                                <div className="space-y-6 pl-3 border-l-2 border-slate-200 ml-4 py-2">
                                     {inventoryMenu.map((group) => (
                                         <div key={group.name} className="space-y-1">
-                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-40">{group.name}</h3>
+                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-slate-400 uppercase mb-2">{group.name}</h3>
                                             {group.items.map((subItem) => (
                                                 <a
                                                     key={subItem.id}
                                                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
-                                                        ? 'text-emerald-400 font-bold'
-                                                        : 'text-text-secondary hover:text-[#556070]'
+                                                        ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                                                        : 'text-slate-500 hover:bg-slate-50 hover:text-[#556070]'
                                                         }`}
                                                     href={subItem.path}
                                                     onClick={(e) => {
@@ -199,7 +205,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                                         navigate(subItem.path);
                                                     }}
                                                 >
-                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>
+                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-600' : 'text-slate-400 group-hover:text-emerald-500'}`}>
                                                         {subItem.icon}
                                                     </span>
                                                     <span className="text-[13px]">{subItem.label}</span>
@@ -222,21 +228,24 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
             ></div>
 
             {/* Mobile Sidebar */}
-            <aside className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''} bg-white border-r border-slate-200`}>
+            <aside
+                className={`mobile-sidebar ${showMobileSidebar ? 'active' : ''}`}
+                style={{ background: '#ffffff', borderRight: '1px solid #e2e8f0' }}
+            >
                 <div className="flex flex-col gap-6 p-4">
                     <div className="flex items-center justify-between px-2 mt-2">
                         <div className="flex gap-3">
-                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-border-dark bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                            <div className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 shadow-lg ring-2 ring-slate-100 bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
                                 <span className="text-[#556070] font-bold text-lg">IP</span>
                             </div>
                             <div className="flex flex-col justify-center">
                                 <h1 className="text-[#556070] text-base font-bold leading-none">IPMS</h1>
-                                <p className="text-text-secondary text-xs font-normal leading-normal mt-1">Manager Portal</p>
+                                <p className="text-[#64748b] text-xs font-normal leading-normal mt-1">Manager Portal</p>
                             </div>
                         </div>
                         <button
                             onClick={() => setShowMobileSidebar(false)}
-                            className="text-text-secondary hover:text-[#556070]"
+                            className="text-slate-400 hover:text-[#556070]"
                         >
                             <span className="material-symbols-outlined">close</span>
                         </button>
@@ -244,13 +253,13 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                     <nav className="flex-1 overflow-y-auto custom-scrollbar px-2 pb-6 space-y-6">
                         {/* Main Apps */}
                         <div className="space-y-1">
-                            <h2 className="px-3 text-[10px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-50">Portal Apps</h2>
+                            <h2 className="px-3 text-[10px] font-black tracking-widest text-slate-400 uppercase mb-2">Portal Apps</h2>
                             {navItems.map((item) => (
                                 <a
                                     key={item.id}
                                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative ${currentPage === item.id
                                         ? 'bg-emerald-500/10 text-[#556070] shadow-sm'
-                                        : 'text-text-secondary hover:bg-slate-50 hover:text-[#556070]'
+                                        : 'text-slate-500 hover:bg-slate-50 hover:text-[#556070]'
                                         }`}
                                     href={item.path}
                                     onClick={(e) => {
@@ -276,29 +285,29 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
-                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-text-secondary hover:text-[#556070] hover:bg-slate-50'
+                                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all group ${isInventoryOpen ? 'text-[#556070]' : 'text-slate-500 hover:text-[#556070] hover:bg-slate-50'
                                     }`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>inventory_2</span>
+                                    <span className={`material-symbols-outlined ${isInventoryOpen ? 'text-emerald-500' : 'text-slate-400 group-hover:text-emerald-500'}`}>inventory_2</span>
                                     <span className="text-sm font-medium">Inventory System</span>
                                 </div>
-                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 ${isInventoryOpen ? 'rotate-180' : ''}`}>
+                                <span className={`material-symbols-outlined text-sm transition-transform duration-300 text-slate-400 ${isInventoryOpen ? 'rotate-180' : ''}`}>
                                     expand_more
                                 </span>
                             </button>
 
                             <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isInventoryOpen ? 'max-h-[1000px] opacity-100 mt-2' : 'max-h-0 opacity-0'}`}>
-                                <div className="space-y-6 pl-3 border-l border-border-dark/50 ml-4 py-2">
+                                <div className="space-y-6 pl-3 border-l-2 border-slate-200 ml-4 py-2">
                                     {inventoryMenu.map((group) => (
                                         <div key={group.name} className="space-y-1">
-                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-text-secondary uppercase mb-2 opacity-40">{group.name}</h3>
+                                            <h3 className="px-3 text-[9px] font-black tracking-widest text-slate-400 uppercase mb-2">{group.name}</h3>
                                             {group.items.map((subItem) => (
                                                 <a
                                                     key={subItem.id}
                                                     className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative ${currentPage === subItem.id
-                                                        ? 'text-emerald-400 font-bold'
-                                                        : 'text-text-secondary hover:text-[#556070]'
+                                                        ? 'bg-emerald-50 text-emerald-700 font-semibold'
+                                                        : 'text-slate-500 hover:bg-slate-50 hover:text-[#556070]'
                                                         }`}
                                                     href={subItem.path}
                                                     onClick={(e) => {
@@ -307,10 +316,11 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                                         setShowMobileSidebar(false);
                                                     }}
                                                 >
-                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-500' : 'group-hover:text-emerald-500'}`}>
+                                                    <span className={`material-symbols-outlined text-lg ${currentPage === subItem.id ? 'text-emerald-600' : 'text-slate-400 group-hover:text-emerald-500'}`}>
                                                         {subItem.icon}
                                                     </span>
                                                     <span className="text-[13px]">{subItem.label}</span>
+                                                    {currentPage === subItem.id && <div className="ml-auto size-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"></div>}
                                                 </a>
                                             ))}
                                         </div>
