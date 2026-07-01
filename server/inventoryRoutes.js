@@ -4157,7 +4157,7 @@ router.delete('/admin/material-requests/:id', async (req, res) => {
             for (const batch of graph.storeBatches) {
                 for (const line of batch.lines || []) {
                     if (line.source === 'PURCHASE_INWARD') continue;
-                    const quantityToRelease = Number(line.pendingQuantity || 0);
+                    const quantityToRelease = Number(line.reservedQuantity || 0);
                     if (quantityToRelease <= 0.0001) continue;
                     reservationReleaseByItem.set(
                         normalizeId(line.itemId),
