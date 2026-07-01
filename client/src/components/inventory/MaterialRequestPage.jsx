@@ -1,12 +1,16 @@
 import { useState, useEffect } from 'react';
 import inventoryService from '../../services/inventoryService';
 import { usePortalLayout } from '../../services/usePortalLayout.js';
+import { getCurrentUser } from '../../services/authService.js';
 import { useNotifier } from '../common/AppNotificationProvider.jsx';
 import BulkAddMRItemsModal from './BulkAddMRItemsModal.jsx';
+import MRDeleteConfirmModal from './MRDeleteConfirmModal.jsx';
 import * as XLSX from 'xlsx';
 
 export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
     const Layout = usePortalLayout();
+    const currentUser = getCurrentUser();
+    const isSuperInventoryAdmin = ['SUPER_ADMIN', 'SUPER_USER'].includes((currentUser?.role || '').toUpperCase());
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const currentPage = propCurrentPage || 'material-requests';
     const [requests, setRequests] = useState([]);
@@ -20,6 +24,10 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
     const [viewingMR, setViewingMR] = useState(null);
     const [viewingDetails, setViewingDetails] = useState(null);
     const [itemsLoading, setItemsLoading] = useState(false);
+    const [deletingRequestId, setDeletingRequestId] = useState(null);
+    const [deletePreviewRequestId, setDeletePreviewRequestId] = useState(null);
+    const [deleteModalRequest, setDeleteModalRequest] = useState(null);
+    const [deleteConfirmValue, setDeleteConfirmValue] = useState('');
 
     // Unknown-item request state
     const [showUnknownPanel, setShowUnknownPanel] = useState(false);
@@ -80,6 +88,104 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
 
     const handleAddItem = () => {
         setFormData({ ...formData, items: [...formData.items, { itemCode: '', quantity: 1 }] });
+    };
+
+    const refreshRequests = async () => {
+        const res = await inventoryService.getMaterialRequests();
+        setRequests(res.data);
+    };
+
+    const closeDeleteModal = (force = false) => {
+        if (!force && deletingRequestId) return;
+        setDeleteModalRequest(null);
+        setDeleteConfirmValue('');
+    };
+
+    const canDeleteRequest = (request) => isSuperInventoryAdmin || request?.status === 'SUBMITTED';
+
+    const openDeleteModal = async (request) => {
+        const requestId = request?.id || request?._id;
+        if (!requestId) return;
+        if (!isSuperInventoryAdmin) return;
+
+        try {
+            setDeletePreviewRequestId(requestId);
+            const res = await inventoryService.getMaterialRequestDetails(requestId);
+            setDeleteModalRequest(res.data);
+            setDeleteConfirmValue('');
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to load material request details.');
+        } finally {
+            setDeletePreviewRequestId(null);
+        }
+    };
+
+    const buildDeleteSuccessMessage = (responseData) => {
+        const counts = responseData?.counts || {};
+        const fragments = [
+            counts.storeBatches ? `${counts.storeBatches} store batch${counts.storeBatches === 1 ? '' : 'es'}` : null,
+            counts.purchaseBatches ? `${counts.purchaseBatches} purchase batch${counts.purchaseBatches === 1 ? '' : 'es'}` : null,
+            counts.purchaseOrders ? `${counts.purchaseOrders} PO${counts.purchaseOrders === 1 ? '' : 's'}` : null,
+            counts.dispatches ? `${counts.dispatches} dispatch${counts.dispatches === 1 ? '' : 'es'}` : null,
+            counts.purchaseInwards ? `${counts.purchaseInwards} inward${counts.purchaseInwards === 1 ? '' : 's'}` : null
+        ].filter(Boolean);
+
+        return fragments.length
+            ? `Deleted ${responseData.requestNumber}. Removed ${fragments.join(', ')}.`
+            : `Deleted ${responseData.requestNumber}.`;
+    };
+
+    const handleDeleteRequest = async (request) => {
+        const requestId = request?.id || request?._id;
+        if (!requestId) return;
+
+        if (isSuperInventoryAdmin) {
+            await openDeleteModal(request);
+            return;
+        }
+
+        const confirmed = window.confirm(`Delete ${request.requestNumber}? This cannot be undone.`);
+        if (!confirmed) return;
+
+        try {
+            setDeletingRequestId(requestId);
+            await inventoryService.deleteMaterialRequest(requestId);
+
+            if ((viewingMR?.id || viewingMR?._id) === requestId) {
+                setViewingMR(null);
+                setViewingDetails(null);
+            }
+
+            await refreshRequests();
+            notifySuccess(`Deleted ${request.requestNumber}.`);
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to delete material request.');
+        } finally {
+            setDeletingRequestId(null);
+        }
+    };
+
+    const handleConfirmDeepDelete = async () => {
+        const requestId = deleteModalRequest?.id || deleteModalRequest?._id;
+        if (!requestId) return;
+
+        try {
+            setDeletingRequestId(requestId);
+            const res = await inventoryService.deleteMaterialRequestDeep(requestId);
+
+            if ((viewingMR?.id || viewingMR?._id) === requestId) {
+                setViewingMR(null);
+                setViewingDetails(null);
+            }
+
+            closeDeleteModal(true);
+            await refreshRequests();
+            notifySuccess(buildDeleteSuccessMessage(res.data));
+        } catch (err) {
+            notifyError(err.response?.data?.message || 'Failed to deep delete material request.');
+        } finally {
+            setDeletingRequestId(null);
+        }
     };
 
     const handleItemChange = (index, field, value) => {
@@ -374,8 +480,7 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
             });
             setShowModal(false);
             // Refresh requests
-            const res = await inventoryService.getMaterialRequests();
-            setRequests(res.data);
+            await refreshRequests();
             notifySuccess('Material request submitted successfully.');
         } catch (err) {
             notifyError(err.response?.data?.message || 'Submission failed');
@@ -430,6 +535,7 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                                             <th className="px-6 py-4 text-xs font-medium uppercase text-text-secondary">Items</th>
                                             <th className="px-6 py-4 text-xs font-medium uppercase text-text-secondary">Status</th>
                                             <th className="px-6 py-4 text-xs font-medium uppercase text-text-secondary">Date</th>
+                                            <th className="px-6 py-4 text-xs font-medium uppercase text-text-secondary text-right">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-border-dark">
@@ -455,6 +561,25 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                                                 </td>
                                                 <td className="px-6 py-4 text-text-secondary text-sm">
                                                     {new Date(req.createdAt).toLocaleDateString()}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {canDeleteRequest(req) ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteRequest(req)}
+                                                            disabled={deletingRequestId === (req.id || req._id) || deletePreviewRequestId === (req.id || req._id)}
+                                                            className="inline-flex items-center gap-1 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                                        >
+                                                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                                                            {deletingRequestId === (req.id || req._id)
+                                                                ? 'Deleting...'
+                                                                : deletePreviewRequestId === (req.id || req._id)
+                                                                    ? 'Loading...'
+                                                                    : 'Delete'}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">Processed</span>
+                                                    )}
                                                 </td>
                                             </tr>
                                         ))}
@@ -792,10 +917,7 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                 onClose={() => setShowBulkModal(false)}
                 requestId={selectedMR?.id || selectedMR?._id}
                 requestNumber={selectedMR?.requestNumber}
-                onComplete={async () => {
-                    const res = await inventoryService.getMaterialRequests();
-                    setRequests(res.data);
-                }}
+                onComplete={refreshRequests}
             />
 
             {/* View Details Modal */}
@@ -902,6 +1024,17 @@ export default function MaterialRequestPage({ currentPage: propCurrentPage }) {
                     </div>
                 </div>
             )}
+
+            <MRDeleteConfirmModal
+                isOpen={Boolean(deleteModalRequest)}
+                request={deleteModalRequest}
+                summary={deleteModalRequest?.deletionSummary}
+                confirmValue={deleteConfirmValue}
+                onConfirmValueChange={setDeleteConfirmValue}
+                onClose={() => closeDeleteModal(false)}
+                onDelete={handleConfirmDeepDelete}
+                deleting={Boolean(deletingRequestId)}
+            />
         </Layout>
     );
 }

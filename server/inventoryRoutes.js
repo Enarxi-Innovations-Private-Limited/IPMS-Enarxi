@@ -582,6 +582,181 @@ function requireAnyRole(req, res, allowedRoles) {
     return true;
 }
 
+const DEEP_DELETE_ROLES = [roles.SUPER_ADMIN, roles.SUPER_USER];
+
+const uniqueIds = (values = []) => [...new Set(values.filter(Boolean).map((value) => String(value)))];
+
+const pushDeleteBlocker = (blockers, condition, message) => {
+    if (condition) blockers.push(message);
+};
+
+const incrementItemRollback = (map, itemId, quantityOnHandDelta = 0, reservedQuantityDelta = 0) => {
+    const key = normalizeId(itemId);
+    if (!key) return;
+
+    if (!map.has(key)) {
+        map.set(key, {
+            itemId: key,
+            quantityOnHandDelta: 0,
+            reservedQuantityDelta: 0
+        });
+    }
+
+    const entry = map.get(key);
+    entry.quantityOnHandDelta += Number(quantityOnHandDelta || 0);
+    entry.reservedQuantityDelta += Number(reservedQuantityDelta || 0);
+};
+
+async function adjustStockBalanceQuantities(itemId, locationId, quantityOnHandDelta = 0, reservedQuantityDelta = 0, session = null) {
+    const onHandDelta = Number(quantityOnHandDelta || 0);
+    const reservedDelta = Number(reservedQuantityDelta || 0);
+    if (Math.abs(onHandDelta) <= 0.0001 && Math.abs(reservedDelta) <= 0.0001) return;
+
+    let balance = await StockBalance.findOne({ itemId, locationId }).session(session);
+    if (!balance) {
+        if (onHandDelta < -0.0001 || reservedDelta < -0.0001) {
+            throw new Error('Stock balance required for rollback was not found.');
+        }
+        balance = new StockBalance({
+            itemId,
+            locationId,
+            quantityOnHand: 0,
+            reservedQuantity: 0
+        });
+    }
+
+    const nextOnHand = Number(balance.quantityOnHand || 0) + onHandDelta;
+    const nextReserved = Number(balance.reservedQuantity || 0) + reservedDelta;
+
+    if (nextOnHand < -0.0001) {
+        throw new Error('Deep delete rollback would drive stock on hand below zero.');
+    }
+    if (nextReserved < -0.0001) {
+        throw new Error('Deep delete rollback would drive reserved stock below zero.');
+    }
+    if (nextReserved - nextOnHand > 0.0001) {
+        throw new Error('Deep delete rollback would leave reserved stock greater than stock on hand.');
+    }
+
+    balance.quantityOnHand = Math.max(0, nextOnHand);
+    balance.reservedQuantity = Math.max(0, nextReserved);
+    await balance.save({ session });
+}
+
+async function buildMaterialRequestDeletionGraph(requestId, session = null) {
+    const request = await MaterialRequest.findById(requestId)
+        .populate('projectId', 'name projectCode')
+        .populate('engineerId', 'name')
+        .populate('lines.itemId', 'name itemCode')
+        .session(session);
+
+    if (!request) return null;
+
+    const materialRequestLineIds = uniqueIds((request.lines || []).map((line) => line._id));
+    const storeBatches = await StoreRequestBatch.find({ materialRequestId: request._id }).session(session);
+    const purchaseBatches = await PurchaseRequestBatch.find({ materialRequestId: request._id }).session(session);
+
+    const storeBatchIds = uniqueIds(storeBatches.map((batch) => batch._id));
+    const purchaseBatchIds = uniqueIds(purchaseBatches.map((batch) => batch._id));
+    const purchaseRequestLineIds = uniqueIds(purchaseBatches.flatMap((batch) => (batch.lines || []).map((line) => line._id)));
+
+    const dispatches = storeBatchIds.length
+        ? await DispatchBatch.find({ storeRequestId: { $in: storeBatchIds } }).session(session)
+        : [];
+    const dispatchIds = uniqueIds(dispatches.map((dispatch) => dispatch._id));
+
+    const purchaseOrderClauses = [];
+    if (purchaseBatchIds.length) purchaseOrderClauses.push({ 'lines.sourceLines.purchaseRequestBatchId': { $in: purchaseBatchIds } });
+    if (materialRequestLineIds.length) purchaseOrderClauses.push({ 'lines.sourceLines.materialRequestLineId': { $in: materialRequestLineIds } });
+    purchaseOrderClauses.push({ 'lines.sourceLines.materialRequestId': request._id });
+
+    const purchaseOrders = await PurchaseOrder.find({ $or: purchaseOrderClauses }).session(session);
+    const purchaseOrderIds = uniqueIds(purchaseOrders.map((po) => po._id));
+    const purchaseOrderLineIds = uniqueIds(purchaseOrders.flatMap((po) => (po.lines || []).map((line) => line._id)));
+
+    const purchaseInwards = purchaseOrderIds.length
+        ? await PurchaseInwardBatch.find({ purchaseOrderId: { $in: purchaseOrderIds } }).session(session)
+        : [];
+    const purchaseInwardIds = uniqueIds(purchaseInwards.map((inward) => inward._id));
+
+    const purchaseOrderAllocations = purchaseOrderLineIds.length || purchaseOrderIds.length
+        ? await PurchaseOrderLineAllocation.find({
+            $or: [
+                purchaseOrderIds.length ? { purchaseOrderId: { $in: purchaseOrderIds } } : null,
+                purchaseOrderLineIds.length ? { purchaseOrderLineId: { $in: purchaseOrderLineIds } } : null,
+                purchaseRequestLineIds.length ? { purchaseRequestLineId: { $in: purchaseRequestLineIds } } : null
+            ].filter(Boolean)
+        }).session(session)
+        : [];
+
+    const purchasePlanLines = purchaseRequestLineIds.length
+        ? await PurchasePlanLine.find({ purchaseRequestLineId: { $in: purchaseRequestLineIds } }).session(session)
+        : [];
+
+    const stockMovements = [];
+    if (dispatchIds.length) {
+        stockMovements.push(...await StockMovement.find({
+            referenceType: 'DispatchBatch',
+            referenceId: { $in: dispatchIds }
+        }).session(session));
+    }
+    if (purchaseInwardIds.length) {
+        stockMovements.push(...await StockMovement.find({
+            referenceType: 'PurchaseInwardBatch',
+            referenceId: { $in: purchaseInwardIds }
+        }).session(session));
+    }
+
+    const projectReturns = dispatchIds.length
+        ? await ProjectReturnBatch.find({ sourceDispatchIds: { $in: dispatchIds } })
+            .select('returnNumber status sourceDispatchIds')
+            .session(session)
+        : [];
+
+    return {
+        request,
+        materialRequestLineIds,
+        storeBatches,
+        purchaseBatches,
+        dispatches,
+        purchaseOrders,
+        purchaseInwards,
+        purchaseOrderAllocations,
+        purchasePlanLines,
+        stockMovements,
+        projectReturns
+    };
+}
+
+function buildMaterialRequestDeletionSummary(graph) {
+    if (!graph?.request) return null;
+
+    const blockers = [];
+    pushDeleteBlocker(
+        blockers,
+        (graph.projectReturns || []).length > 0,
+        `Blocked by ${graph.projectReturns.length} linked project return record(s).`
+    );
+
+    return {
+        canDeepDelete: blockers.length === 0,
+        blockers,
+        requestStatus: graph.request.status,
+        counts: {
+            lines: (graph.request.lines || []).length,
+            storeBatches: (graph.storeBatches || []).length,
+            purchaseBatches: (graph.purchaseBatches || []).length,
+            purchaseOrders: (graph.purchaseOrders || []).length,
+            purchaseInwards: (graph.purchaseInwards || []).length,
+            dispatches: (graph.dispatches || []).length,
+            stockMovements: (graph.stockMovements || []).length,
+            purchasePlanLines: (graph.purchasePlanLines || []).length,
+            purchaseOrderAllocations: (graph.purchaseOrderAllocations || []).length,
+            projectReturns: (graph.projectReturns || []).length
+        }
+    };
+}
+
 async function reserveItemQuantity(itemId, quantity, session = null) {
     if (quantity <= 0) return;
 
@@ -2568,6 +2743,12 @@ router.get('/bridge/material-requests/:id', async (req, res) => {
             })),
             _count: { lines: (request.lines || []).length }
         };
+
+        if (DEEP_DELETE_ROLES.includes(req.user.role)) {
+            const deletionGraph = await buildMaterialRequestDeletionGraph(request._id);
+            mapped.deletionSummary = buildMaterialRequestDeletionSummary(deletionGraph);
+        }
+
         res.json(mapped);
     } catch (err) {
         res.status(404).json({ message: 'Request not found' });
@@ -3861,6 +4042,225 @@ router.post('/projects/material-request/:id/add-items-bulk', async (req, res) =>
     } catch (err) {
         console.error('? [Bulk Add Items Error]:', err);
         res.status(400).json({ message: err.message });
+    }
+});
+
+router.delete('/admin/material-requests/:id', async (req, res) => {
+    const session = await mongoose.startSession();
+    try {
+        if (!requireAnyRole(req, res, DEEP_DELETE_ROLES)) return;
+        if (req.query.mode && req.query.mode !== 'deep') {
+            return res.status(400).json({ message: 'Unsupported delete mode.' });
+        }
+
+        let deleteSummary = null;
+        let requestNumber = '';
+
+        await session.withTransaction(async () => {
+            const graph = await buildMaterialRequestDeletionGraph(req.params.id, session);
+            if (!graph?.request) {
+                throw new Error('Material Request not found.');
+            }
+
+            const preview = buildMaterialRequestDeletionSummary(graph);
+            if (!preview.canDeepDelete) {
+                throw new Error(preview.blockers[0] || 'This material request cannot be deep deleted.');
+            }
+
+            requestNumber = graph.request.requestNumber;
+            const rollbackByItem = new Map();
+
+            const purchaseInwardLineMap = new Map();
+            for (const batch of graph.storeBatches) {
+                for (const line of batch.lines || []) {
+                    if (!line.purchaseInwardLineId) continue;
+                    const key = normalizeId(line.purchaseInwardLineId);
+                    if (!purchaseInwardLineMap.has(key)) purchaseInwardLineMap.set(key, []);
+                    purchaseInwardLineMap.get(key).push(line);
+                }
+            }
+
+            const dispatchQuantityByStoreLineId = new Map();
+            for (const dispatch of graph.dispatches) {
+                for (const line of dispatch.lines || []) {
+                    const key = normalizeId(line.storeRequestLineId);
+                    if (!key) continue;
+                    dispatchQuantityByStoreLineId.set(
+                        key,
+                        (dispatchQuantityByStoreLineId.get(key) || 0) + Number(line.dispatchedQuantity || 0)
+                    );
+                }
+            }
+
+            for (const inward of graph.purchaseInwards) {
+                for (const inwardLine of inward.lines || []) {
+                    const linkedStoreLines = purchaseInwardLineMap.get(normalizeId(inwardLine._id)) || [];
+                    const dispatchedFromInward = linkedStoreLines.reduce(
+                        (sum, line) => sum + Number(dispatchQuantityByStoreLineId.get(normalizeId(line._id)) || 0),
+                        0
+                    );
+                    const receivedQuantity = Number(inwardLine.receivedQuantity || 0);
+                    const quantityStillInStock = receivedQuantity - dispatchedFromInward;
+                    if (quantityStillInStock < -0.0001) {
+                        throw new Error(`Rollback data mismatch for inward ${inward.inwardNumber}.`);
+                    }
+                    const reservedToRemove = linkedStoreLines.reduce(
+                        (sum, line) => sum + Number(line.pendingQuantity || 0),
+                        0
+                    );
+
+                    await adjustStockBalanceQuantities(
+                        inwardLine.itemId,
+                        inwardLine.locationId,
+                        -Math.max(0, quantityStillInStock),
+                        -reservedToRemove,
+                        session
+                    );
+
+                    incrementItemRollback(
+                        rollbackByItem,
+                        inwardLine.itemId,
+                        -Math.max(0, quantityStillInStock),
+                        -reservedToRemove
+                    );
+                }
+            }
+
+            const dispatchMovementMap = new Map();
+            for (const movement of graph.stockMovements) {
+                if (movement.referenceType !== 'DispatchBatch') continue;
+                const key = normalizeId(movement.referenceId);
+                if (!dispatchMovementMap.has(key)) dispatchMovementMap.set(key, []);
+                dispatchMovementMap.get(key).push(movement);
+            }
+
+            for (const dispatch of graph.dispatches) {
+                const movements = dispatchMovementMap.get(normalizeId(dispatch._id)) || [];
+                if (!movements.length && (dispatch.lines || []).length) {
+                    throw new Error(`Missing dispatch stock history for ${dispatch.dispatchNumber}.`);
+                }
+
+                for (const movement of movements) {
+                    const restoreQuantity = Math.abs(Number(movement.quantityChange || 0));
+                    await adjustStockBalanceQuantities(
+                        movement.itemId,
+                        movement.locationId,
+                        restoreQuantity,
+                        0,
+                        session
+                    );
+                    incrementItemRollback(rollbackByItem, movement.itemId, restoreQuantity, 0);
+                }
+            }
+
+            const reservationReleaseByItem = new Map();
+            for (const batch of graph.storeBatches) {
+                for (const line of batch.lines || []) {
+                    if (line.source === 'PURCHASE_INWARD') continue;
+                    const quantityToRelease = Number(line.pendingQuantity || 0);
+                    if (quantityToRelease <= 0.0001) continue;
+                    reservationReleaseByItem.set(
+                        normalizeId(line.itemId),
+                        (reservationReleaseByItem.get(normalizeId(line.itemId)) || 0) + quantityToRelease
+                    );
+                }
+            }
+
+            for (const [itemId, quantity] of reservationReleaseByItem.entries()) {
+                await releaseItemReservation(itemId, quantity, session);
+                incrementItemRollback(rollbackByItem, itemId, 0, -quantity);
+            }
+
+            const stockMovementIds = uniqueIds(graph.stockMovements.map((movement) => movement._id));
+            const purchaseOrderAllocationIds = uniqueIds(graph.purchaseOrderAllocations.map((allocation) => allocation._id));
+            const purchasePlanLineIds = uniqueIds(graph.purchasePlanLines.map((line) => line._id));
+            const purchaseInwardIds = uniqueIds(graph.purchaseInwards.map((inward) => inward._id));
+            const dispatchIds = uniqueIds(graph.dispatches.map((dispatch) => dispatch._id));
+            const purchaseOrderIds = uniqueIds(graph.purchaseOrders.map((po) => po._id));
+            const purchaseBatchIds = uniqueIds(graph.purchaseBatches.map((batch) => batch._id));
+            const storeBatchIds = uniqueIds(graph.storeBatches.map((batch) => batch._id));
+
+            if (stockMovementIds.length) await StockMovement.deleteMany({ _id: { $in: stockMovementIds } }).session(session);
+            if (purchaseOrderAllocationIds.length) await PurchaseOrderLineAllocation.deleteMany({ _id: { $in: purchaseOrderAllocationIds } }).session(session);
+            if (purchasePlanLineIds.length) await PurchasePlanLine.deleteMany({ _id: { $in: purchasePlanLineIds } }).session(session);
+            if (purchaseInwardIds.length) await PurchaseInwardBatch.deleteMany({ _id: { $in: purchaseInwardIds } }).session(session);
+            if (dispatchIds.length) await DispatchBatch.deleteMany({ _id: { $in: dispatchIds } }).session(session);
+            if (purchaseOrderIds.length) await PurchaseOrder.deleteMany({ _id: { $in: purchaseOrderIds } }).session(session);
+            if (purchaseBatchIds.length) await PurchaseRequestBatch.deleteMany({ _id: { $in: purchaseBatchIds } }).session(session);
+            if (storeBatchIds.length) await StoreRequestBatch.deleteMany({ _id: { $in: storeBatchIds } }).session(session);
+            await MaterialRequest.deleteOne({ _id: graph.request._id }).session(session);
+
+            deleteSummary = {
+                requestNumber,
+                counts: preview.counts,
+                stockRollback: [...rollbackByItem.values()]
+            };
+        });
+
+        await logInvActivity('INV_MR_DEEP_DELETE', `Deep deleted MR ${requestNumber}`, req.user._id, req.user.name, req.params.id, requestNumber);
+        await logAudit('MaterialRequest', req.params.id, 'DELETE', null, null, req, {
+            remarks: `Deep deleted ${requestNumber}`,
+            requestNumber,
+            summary: deleteSummary
+        });
+
+        res.json({
+            message: `Material request ${requestNumber} deleted successfully.`,
+            ...deleteSummary
+        });
+    } catch (err) {
+        console.error('[Deep Delete MR Error]:', err);
+        const status = err.message === 'Material Request not found.' ? 404 : 400;
+        res.status(status).json({ message: err.message || 'Failed to deep delete material request.' });
+    } finally {
+        await session.endSession();
+    }
+});
+
+router.delete('/projects/material-request/:id', async (req, res) => {
+    try {
+        const request = await MaterialRequest.findById(req.params.id);
+        if (!request) return res.status(404).json({ message: 'Material Request not found.' });
+
+        const project = await Project.findById(request.projectId).select('managerId teamIds');
+        if (!project) return res.status(404).json({ message: 'Associated project not found.' });
+
+        const isAdmin = ['SUPER_ADMIN', 'SUPER_USER', 'STORE_MANAGER'].includes(req.user.role);
+        const isProjectManager = project.managerId?.toString() === req.user._id.toString();
+        const isRequestOwner = request.engineerId?.toString() === req.user._id.toString();
+
+        if (!isAdmin && !isProjectManager && !isRequestOwner) {
+            return res.status(403).json({ message: 'Access denied: You cannot delete this material request.' });
+        }
+
+        if (request.status !== 'SUBMITTED') {
+            return res.status(400).json({ message: 'Only submitted material requests can be deleted.' });
+        }
+
+        const hasProcessedLines = request.lines.some((line) => line.status !== 'SUBMITTED');
+        if (hasProcessedLines) {
+            return res.status(400).json({ message: 'This material request already has routed or processed lines and cannot be deleted.' });
+        }
+
+        const [storeBatchExists, purchaseBatchExists] = await Promise.all([
+            StoreRequestBatch.exists({ materialRequestId: request._id }),
+            PurchaseRequestBatch.exists({ materialRequestId: request._id })
+        ]);
+
+        if (storeBatchExists || purchaseBatchExists) {
+            return res.status(400).json({ message: 'This material request has already entered store or purchase processing and cannot be deleted.' });
+        }
+
+        const before = request.toObject();
+        await request.deleteOne();
+
+        await logInvActivity('INV_MR_DELETE', `Material Request ${request.requestNumber} deleted`, req.user._id, req.user.name, request._id, request.requestNumber);
+        await logAudit('MaterialRequest', request._id, 'DELETE', before, null, req, { requestNumber: request.requestNumber });
+
+        res.json({ message: 'Material request deleted successfully.', id: request._id });
+    } catch (err) {
+        console.error('[Delete MR Error]:', err);
+        res.status(500).json({ message: err.message || 'Failed to delete material request.' });
     }
 });
 
