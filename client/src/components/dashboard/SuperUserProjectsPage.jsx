@@ -22,7 +22,7 @@ export default function SuperUserProjectsPage() {
     const [loadingProjectExtensionRequests, setLoadingProjectExtensionRequests] = useState(false);
     const [reviewingExtensionRequestId, setReviewingExtensionRequestId] = useState(null);
     const currentUser = getCurrentUser();
-    const isSuperAdmin = String(currentUser?.role || '').toUpperCase() === 'SUPER_ADMIN';
+    const isSuperAdmin = ['SUPER_ADMIN', 'SUPER_USER'].includes(String(currentUser?.role || '').toUpperCase());
 
     const isProjectDelayed = (project) => {
         if (!project || project.status === 'COMPLETED' || !project.deadline) return false;

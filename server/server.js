@@ -261,7 +261,7 @@ function isManagerLikeRole(role) {
 }
 
 function isSuperAdminRole(role) {
-    return role === roles.SUPER_ADMIN;
+    return role === roles.SUPER_ADMIN || role === roles.SUPER_USER;
 }
 
 function serializeDeadlineExtensionRequest(request) {
