@@ -1985,21 +1985,21 @@ export default function ManagerProjectsPage() {
                 showRejectModal && taskToReject && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRejectModal(false)}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-to-r from-red-900/50 to-orange-900/50">
+                        <div className="relative bg-[#0F172A] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="px-6 py-4 border-b border-slate-700 bg-gradient-to-r from-red-950/80 to-red-900/40">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-red-400">cancel</span>
+                                    <span className="material-symbols-outlined text-red-500">cancel</span>
                                     Reject Task Approval
                                 </h2>
                             </div>
                             <form onSubmit={confirmReject} className="p-6 space-y-4">
                                 <div>
                                     <p className="text-white font-medium mb-1">Task: {taskToReject.title}</p>
-                                    <p className="text-text-secondary text-sm">Please provide a reason for rejecting this task approval request.</p>
+                                    <p className="text-slate-400 text-sm">Please provide a reason for rejecting this task approval request.</p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-text-secondary text-sm mb-2">
+                                    <label className="block text-slate-300 text-sm mb-2 font-medium">
                                         Rejection Reason <span className="text-red-500">*</span>
                                     </label>
                                     <textarea
@@ -2007,7 +2007,7 @@ export default function ManagerProjectsPage() {
                                         onChange={(e) => setRejectionReason(e.target.value)}
                                         required
                                         rows={4}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none resize-none placeholder-slate-600"
+                                        className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none resize-none placeholder-slate-500"
                                         placeholder="Explain why the task is being rejected..."
                                     />
                                 </div>
@@ -2016,13 +2016,13 @@ export default function ManagerProjectsPage() {
                                     <button
                                         type="button"
                                         onClick={() => setShowRejectModal(false)}
-                                        className="px-4 py-2 rounded-lg border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                        className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
-                                        className="px-6 py-2 rounded-lg font-medium bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg shadow-red-900/20"
+                                        className="px-6 py-2 rounded-lg font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg shadow-red-900/30"
                                     >
                                         Reject Task
                                     </button>

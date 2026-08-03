@@ -1,12 +1,75 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import inventoryService from '../../services/inventoryService';
+import { getCurrentUser } from '../../services/authService';
 import { usePortalLayout } from '../../services/usePortalLayout';
+
+const ROLE_ROUTE_MAP = {
+    SUPER_USER: {
+        stock: '/super/inventory',
+        routing: '/super/inventory/routing',
+        materialRequests: '/super/material-requests',
+        inward: '/super/inventory/inward',
+        purchaseOrders: '/super/inventory/purchase-orders',
+        poApprovals: '/super/inventory/po-approvals',
+        ledger: '/super/inventory/audit',
+    },
+    SUPER_ADMIN: {
+        stock: '/super/inventory',
+        routing: '/super/inventory/routing',
+        materialRequests: '/super/material-requests',
+        inward: '/super/inventory/inward',
+        purchaseOrders: '/super/inventory/purchase-orders',
+        poApprovals: '/super/inventory/po-approvals',
+        ledger: '/super/inventory/audit',
+    },
+    MANAGER: {
+        stock: '/engineer/inventory',
+        routing: '/engineer/material-requests',
+        materialRequests: '/engineer/material-requests',
+        inward: '/engineer/inventory',
+        purchaseOrders: '/engineer/inventory',
+        poApprovals: '/engineer/inventory',
+        ledger: '/engineer/inventory/ledger',
+    },
+    ENGINEER: {
+        stock: '/engineer/inventory',
+        routing: '/engineer/material-requests',
+        materialRequests: '/engineer/material-requests',
+        inward: '/engineer/inventory',
+        purchaseOrders: '/engineer/inventory',
+        poApprovals: '/engineer/inventory',
+        ledger: '/engineer/inventory/ledger',
+    },
+    STORE_MANAGER: {
+        stock: '/store/stock',
+        routing: '/store/requests',
+        materialRequests: '/store/requests',
+        inward: '/store/inward',
+        purchaseOrders: '/store/requests',
+        poApprovals: '/store/approvals',
+        ledger: '/store/ledger',
+    },
+    PURCHASE_MANAGER: {
+        stock: '/purchase/stock',
+        routing: '/purchase/requests',
+        materialRequests: '/purchase/requests',
+        inward: '/purchase/stock',
+        purchaseOrders: '/purchase/orders',
+        poApprovals: '/purchase/approvals',
+        ledger: '/purchase/stock',
+    }
+};
 
 export default function InventoryDashboard() {
     const Layout = usePortalLayout();
+    const navigate = useNavigate();
+    const currentUser = getCurrentUser();
+    const role = String(currentUser?.role || '').toUpperCase();
+    const routes = ROLE_ROUTE_MAP[role] || ROLE_ROUTE_MAP.SUPER_ADMIN;
+
     const [stats, setStats] = useState({
         totalSkus: 0,
-        totalValue: 0,
         lowStockCount: 0,
         pendingMRs: 0,
         pendingPOs: 0
@@ -27,35 +90,40 @@ export default function InventoryDashboard() {
 
                 const stock = stockRes.data;
                 const totalSkus = stock.length;
-                const totalValue = stock.reduce((sum, item) => sum + (item.quantityOnHand * (item.avgPurchasePrice || 100)), 0); 
-                const lowStockCount = stock.filter(item => item.quantityOnHand < 5).length;
+                const lowStockCount = stock.filter((item) => item.quantityOnHand < 5).length;
 
-                const pendingMRs = mrRes.data.filter(mr => mr.status === 'SUBMITTED').length;
-                const pendingPOs = poRes.data.filter(po => po.status === 'PENDING_ADMIN_APPROVAL').length;
+                const pendingMRs = mrRes.data.filter((mr) => mr.status === 'SUBMITTED').length;
+                const pendingPOs = poRes.data.filter((po) => po.status === 'PENDING_ADMIN_APPROVAL').length;
 
                 setStats({
                     totalSkus,
-                    totalValue,
                     lowStockCount,
                     pendingMRs,
                     pendingPOs
                 });
-                setRecentMovements(ledgerRes.data.slice(0, 5)); // Show latest 5
+                setRecentMovements(ledgerRes.data.slice(0, 5));
             } catch (err) {
                 console.error('Failed to load dashboard data:', err);
             } finally {
                 setLoading(false);
             }
         };
+
         fetchDashboardData();
     }, []);
 
     const statCards = [
-        { label: 'Total Components', value: stats.totalSkus, icon: 'inventory_2', color: 'text-primary', bg: 'bg-primary/10' },
-        { label: 'Inventory Value', value: `₹${stats.totalValue.toLocaleString()}`, icon: 'payments', color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-        { label: 'Critical Low Stock', value: stats.lowStockCount, icon: 'warning', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-        { label: 'Awaiting Routing', value: stats.pendingMRs, icon: 'fork_right', color: 'text-blue-400', bg: 'bg-blue-400/10' },
-        { label: 'POs for Approval', value: stats.pendingPOs, icon: 'assignment_late', color: 'text-red-400', bg: 'bg-red-400/10' },
+        { label: 'Total Components', value: stats.totalSkus, icon: 'inventory_2', color: 'text-primary', bg: 'bg-primary/10', path: routes.stock },
+        { label: 'Critical Low Stock', value: stats.lowStockCount, icon: 'warning', color: 'text-amber-500', bg: 'bg-amber-500/10', path: routes.stock },
+        { label: 'Awaiting Routing', value: stats.pendingMRs, icon: 'fork_right', color: 'text-blue-400', bg: 'bg-blue-400/10', path: routes.routing },
+        { label: 'POs for Approval', value: stats.pendingPOs, icon: 'assignment_late', color: 'text-red-400', bg: 'bg-red-400/10', path: routes.poApprovals },
+    ];
+
+    const quickActions = [
+        { label: 'Create MR', icon: 'add_shopping_cart', color: 'text-primary', bg: 'bg-primary/10', hoverBorder: 'hover:border-primary', path: routes.materialRequests },
+        { label: 'Record Inward', icon: 'input', color: 'text-emerald-500', bg: 'bg-emerald-500/10', hoverBorder: 'hover:border-emerald-500', path: routes.inward },
+        { label: 'Review POs', icon: 'assignment', color: 'text-amber-500', bg: 'bg-amber-500/10', hoverBorder: 'hover:border-amber-500', path: routes.purchaseOrders },
+        { label: 'View Ledger', icon: 'history', color: 'text-blue-400', bg: 'bg-blue-400/10', hoverBorder: 'hover:border-blue-400', path: routes.ledger },
     ];
 
     return (
@@ -68,15 +136,20 @@ export default function InventoryDashboard() {
                     </div>
 
                     {loading ? (
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-12">
-                            {[...Array(5)].map((_, i) => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
+                            {[...Array(4)].map((_, i) => (
                                 <div key={i} className="h-32 bg-white border border-slate-200 rounded-2xl animate-pulse"></div>
                             ))}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-12">
-                            {statCards.map((card, i) => (
-                                <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl relative overflow-hidden group hover:border-primary/50 transition-all">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-12">
+                            {statCards.map((card) => (
+                                <button
+                                    key={card.label}
+                                    type="button"
+                                    onClick={() => navigate(card.path)}
+                                    className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xl relative overflow-hidden group hover:border-primary/50 transition-all text-left cursor-pointer"
+                                >
                                     <div className="flex items-center justify-between mb-4">
                                         <div className={`size-10 rounded-xl ${card.bg} flex items-center justify-center`}>
                                             <span className={`material-symbols-outlined ${card.color}`}>{card.icon}</span>
@@ -84,48 +157,35 @@ export default function InventoryDashboard() {
                                     </div>
                                     <p className="text-2xl font-black text-[#556070]">{card.value}</p>
                                     <p className="text-text-secondary text-[10px] font-bold uppercase tracking-widest mt-1">{card.label}</p>
-                                </div>
+                                </button>
                             ))}
                         </div>
                     )}
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                        {/* Quick Actions */}
                         <div className="bg-white border border-slate-200 rounded-3xl p-8">
                             <h3 className="text-xl font-bold text-[#556070] mb-6">Quick Operations</h3>
                             <div className="grid grid-cols-2 gap-4">
-                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-primary transition-all text-left">
-                                    <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                                        <span className="material-symbols-outlined">add_shopping_cart</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-[#556070]">Create MR</span>
-                                </button>
-                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-emerald-500 transition-all text-left">
-                                    <div className="size-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                                        <span className="material-symbols-outlined">input</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-[#556070]">Record Inward</span>
-                                </button>
-                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-amber-500 transition-all text-left">
-                                    <div className="size-10 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-500">
-                                        <span className="material-symbols-outlined">assignment</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-[#556070]">Review POs</span>
-                                </button>
-                                <button className="flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl hover:border-blue-400 transition-all text-left">
-                                    <div className="size-10 rounded-lg bg-blue-400/10 flex items-center justify-center text-blue-400">
-                                        <span className="material-symbols-outlined">history</span>
-                                    </div>
-                                    <span className="text-sm font-bold text-[#556070]">View Ledger</span>
-                                </button>
+                                {quickActions.map((action) => (
+                                    <button
+                                        key={action.label}
+                                        type="button"
+                                        onClick={() => navigate(action.path)}
+                                        className={`flex items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl ${action.hoverBorder} transition-all text-left`}
+                                    >
+                                        <div className={`size-10 rounded-lg ${action.bg} flex items-center justify-center ${action.color}`}>
+                                            <span className="material-symbols-outlined">{action.icon}</span>
+                                        </div>
+                                        <span className="text-sm font-bold text-[#556070]">{action.label}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
-                        {/* Recent Activity Mini-Ledger */}
                         <div className="bg-white border border-slate-200 rounded-3xl p-8 overflow-hidden">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="text-xl font-bold text-[#556070]">Recent Movements</h3>
-                                <button className="text-xs text-primary font-bold hover:underline">See All</button>
+                                <button type="button" onClick={() => navigate(routes.ledger)} className="text-xs text-primary font-bold hover:underline">See All</button>
                             </div>
                             <div className="space-y-4">
                                 {recentMovements.length === 0 ? (
@@ -138,7 +198,7 @@ export default function InventoryDashboard() {
                                                     {log.quantityChange > 0 ? 'IN' : 'OUT'}
                                                 </div>
                                                 <div>
-                                            <div className="text-[#556070] text-xs font-bold">{log.itemId?.name || 'Component'}</div>
+                                                    <div className="text-[#556070] text-xs font-bold">{log.itemId?.name || 'Component'}</div>
                                                     <div className="text-text-secondary text-[10px]">{new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • {log.movementType?.replace(/_/g, ' ')}</div>
                                                 </div>
                                             </div>

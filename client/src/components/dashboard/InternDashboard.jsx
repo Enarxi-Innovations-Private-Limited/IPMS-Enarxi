@@ -387,7 +387,7 @@ export default function InternDashboard() {
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => openQueryModal(t)}
-                                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+                                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 rounded-lg text-sm font-semibold transition-colors"
                                   >
                                     <span className="material-symbols-outlined text-base">help</span>
                                     Raise
@@ -405,7 +405,7 @@ export default function InternDashboard() {
 
                                 {t.queries && t.queries.length > 0 && (
                                   <div className="text-xs">
-                                    <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
+                                    <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-700' : 'text-green-700'}`}>
                                       {t.queries.filter(q => q.status === 'PENDING').length} pending
                                     </span>
                                     {' / '}

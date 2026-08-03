@@ -476,14 +476,14 @@ export default function InternTasksPage() {
                                                     <div className="flex flex-col gap-2 min-w-[150px]">
                                                         <button
                                                             onClick={() => openQueryModal(t)}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 rounded-lg text-sm font-medium transition-colors"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 rounded-lg text-sm font-semibold transition-colors"
                                                         >
                                                             <span className="material-symbols-outlined text-base">help</span>
                                                             Raise Query
                                                         </button>
                                                         {t.queries && t.queries.length > 0 && (
                                                             <div className="text-xs">
-                                                                <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-400' : 'text-green-400'}`}>
+                                                                <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-700' : 'text-green-700'}`}>
                                                                     {t.queries.filter(q => q.status === 'PENDING').length} pending
                                                                 </span>
                                                                 {' / '}
@@ -491,7 +491,7 @@ export default function InternTasksPage() {
                                                             </div>
                                                         )}
                                                         {t.queries && t.queries.filter(q => q.status === 'RESOLVED').length > 0 && (
-                                                            <div className="text-xs text-green-400">
+                                                            <div className="text-xs text-green-700 font-medium">
                                                                 ✓ {t.queries.filter(q => q.status === 'RESOLVED').length} resolved
                                                             </div>
                                                         )}
