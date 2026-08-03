@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { clearAuth, getCurrentUser } from '../../services/authService.js';
+import { canAccessInventory, clearAuth, getCurrentUser } from '../../services/authService.js';
 import api from '../../services/api.js';
 import NotificationBell from './NotificationBell';
 import GlobalSearch from './GlobalSearch';
@@ -8,6 +8,7 @@ import GlobalSearch from './GlobalSearch';
 export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
     const navigate = useNavigate();
     const user = getCurrentUser();
+    const showInventorySection = canAccessInventory(user);
     const [showProfileDropdown, setShowProfileDropdown] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
     const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -172,6 +173,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         </div>
 
                         {/* Inventory Section (Accordion) */}
+                        {showInventorySection && (
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
@@ -217,6 +219,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                 </div>
                             </div>
                         </div>
+                        )}
                     </nav>
                 </div>
             </aside>
@@ -282,6 +285,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                         </div>
 
                         {/* Inventory Section (Accordion) */}
+                        {showInventorySection && (
                         <div className="space-y-1">
                             <button
                                 onClick={toggleInventory}
@@ -328,6 +332,7 @@ export default function ManagerLayout({ children, currentPage = 'dashboard' }) {
                                 </div>
                             </div>
                         </div>
+                        )}
                     </nav>
                 </div>
             </aside>

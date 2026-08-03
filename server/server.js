@@ -1,7 +1,16 @@
 const dns = require('dns');
 dns.setServers(['8.8.8.8', '8.8.4.4']); // Fix for Atlas SRV lookup
 const pathModule = require('path');
-require('dotenv').config({ path: pathModule.resolve(__dirname, '../.env'), override: true });
+const fsModule = require('fs');
+const dotenv = require('dotenv');
+const rootEnvPath = pathModule.resolve(__dirname, '../.env');
+dotenv.config({ path: rootEnvPath, override: false });
+if ((process.env.NODE_ENV || 'development').trim().toLowerCase() !== 'production') {
+    const devEnvPath = pathModule.resolve(__dirname, '../.env.development.local');
+    if (fsModule.existsSync(devEnvPath)) {
+        dotenv.config({ path: devEnvPath, override: true });
+    }
+}
 const express = require('express');
 const http = require('http');
 const { Server: SocketIOServer } = require('socket.io');
@@ -15,10 +24,11 @@ const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const connectDB = require('./db');
-const { User, Project, Task, ProductionAssignment, ProductionDispatch, Activity, Notification } = require('./models');
+const { User, Project, Task, ProductionAssignment, ProductionDispatch, Activity, Notification, ProjectDeadlineExtensionRequest } = require('./models');
 const inventoryRoutes = require('./inventoryRoutes');
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const BOM_AUTOSPAWN = !['0', 'false', 'no', 'off'].includes(String(process.env.BOM_AUTOSPAWN ?? 'true').trim().toLowerCase());
 const PORT = Number(process.env.PORT || 5000);
 const CLIENT_URL = (process.env.CLIENT_URL || '').trim();
 const BOM_URL = (process.env.BOM_URL || 'http://127.0.0.1:8100').trim();
@@ -54,26 +64,28 @@ if (NODE_ENV === 'production' && !JWT_SECRET) {
 const app = express();
 const httpServer = http.createServer(app);
 
+function isLocalDevelopmentOrigin(origin) {
+    if (!origin) return false;
+    try {
+        const parsed = new URL(origin);
+        return ['localhost', '127.0.0.1'].includes(parsed.hostname)
+            && ['http:', 'https:'].includes(parsed.protocol);
+    } catch {
+        return false;
+    }
+}
+
 // Socket.IO — real-time task reordering
 const io = new SocketIOServer(httpServer, {
     cors: {
-        origin: [
-            'https://ipms-enarxi.vercel.app',
-            'https://tracker.enarxi.com',
-            'http://localhost:5173',
-            'http://localhost:3000',
-            'http://127.0.0.1:5173',
-            'http://127.0.0.1:3000',
-        ],
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.has(origin) || isLocalDevelopmentOrigin(origin)) {
+                return callback(null, true);
+            }
+            return callback(new Error(`Socket.IO CORS blocked origin: ${origin}`));
+        },
         credentials: true,
     },
-});
-
-io.on('connection', (socket) => {
-    socket.on('join:tasks', () => socket.join('tasks:global'));
-    socket.on('join:project', (projectId) => {
-        if (projectId) socket.join(`project:${projectId}`);
-    });
 });
 
 app.set('trust proxy', 1);
@@ -98,7 +110,7 @@ const allowedOrigins = new Set([
 app.use(cors({
     origin: function (origin, callback) {
         if (!origin) return callback(null, true);
-        if (allowedOrigins.has(origin)) return callback(null, true);
+        if (allowedOrigins.has(origin) || isLocalDevelopmentOrigin(origin)) return callback(null, true);
         console.log('CORS blocked origin:', origin);
         return callback(null, false);
     },
@@ -229,6 +241,128 @@ function serializeUser(user) {
     };
 }
 
+function escapeRegExp(value) {
+    return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getStartOfDay(value = new Date()) {
+    const date = new Date(value);
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function isProjectOverdue(project, referenceDate = new Date()) {
+    if (!project?.deadline) return false;
+    return new Date(project.deadline).getTime() < getStartOfDay(referenceDate).getTime();
+}
+
+function isManagerLikeRole(role) {
+    return role === roles.MANAGER || role === roles.ENGINEER;
+}
+
+function isSuperAdminRole(role) {
+    return role === roles.SUPER_ADMIN;
+}
+
+function serializeDeadlineExtensionRequest(request) {
+    if (!request) return null;
+    return {
+        id: request._id,
+        _id: request._id,
+        projectId: request.projectId,
+        projectName: request.projectName,
+        projectCode: request.projectCode,
+        currentDeadline: request.currentDeadline,
+        requestedDeadline: request.requestedDeadline,
+        reason: request.reason,
+        status: request.status,
+        requestedBy: request.requestedBy?._id || request.requestedBy,
+        requestedByName: request.requestedByName,
+        reviewedBy: request.reviewedBy?._id || request.reviewedBy || null,
+        reviewedByName: request.reviewedByName || '',
+        reviewedAt: request.reviewedAt,
+        rejectionReason: request.rejectionReason || '',
+        createdAt: request.createdAt,
+        updatedAt: request.updatedAt,
+    };
+}
+
+function getOverdueAssignmentGuardMessage() {
+    return 'Project deadline has passed. Request super admin approval to extend the deadline before assigning tasks.';
+}
+
+async function ensureProjectAssignmentAllowed(project, user) {
+    if (!project || !user) return;
+    if (!isManagerLikeRole(user.role)) return;
+    if (!isProjectOverdue(project)) return;
+    const error = new Error(getOverdueAssignmentGuardMessage());
+    error.statusCode = 409;
+    throw error;
+}
+
+function extractBearerToken(authorizationHeader) {
+    if (!authorizationHeader || !authorizationHeader.startsWith('Bearer ')) return '';
+    return authorizationHeader.slice('Bearer '.length).trim();
+}
+
+async function getUserFromAppToken(token) {
+    if (!token) throw new Error('Unauthorized');
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (!user) throw new Error('User not found');
+    user.role = (user.role || '').toUpperCase().replace(/\s+/g, '_');
+    return user;
+}
+
+function normalizeAllowedOrigin(origin) {
+    try {
+        const normalized = new URL(String(origin || '').trim());
+        return normalized.origin;
+    } catch {
+        return '';
+    }
+}
+
+function getTrustedMicrosoftOrigin(candidateOrigin, req) {
+    const normalizedCandidate = normalizeAllowedOrigin(candidateOrigin);
+    if (normalizedCandidate && allowedOrigins.has(normalizedCandidate)) {
+        return normalizedCandidate;
+    }
+
+    const fallbackOrigin = normalizeAllowedOrigin(getExternalBaseUrl(req));
+    if (fallbackOrigin && allowedOrigins.has(fallbackOrigin)) {
+        return fallbackOrigin;
+    }
+
+    return fallbackOrigin || '';
+}
+
+function canUserJoinTasksFeed(user) {
+    const allowedRoles = new Set([
+        roles.SUPER_ADMIN,
+        roles.SUPER_USER,
+        roles.MANAGER,
+        roles.ENGINEER
+    ]);
+    return allowedRoles.has((user?.role || '').toUpperCase());
+}
+
+async function canUserAccessProject(user, projectId) {
+    if (!isValidObjectId(projectId) || !user?._id) return false;
+
+    const normalizedRole = (user.role || '').toUpperCase();
+    if ([roles.SUPER_ADMIN, roles.SUPER_USER].includes(normalizedRole)) return true;
+
+    const project = await Project.findById(projectId).select('managerId teamIds');
+    if (!project) return false;
+
+    const userId = String(user._id);
+    if (project.managerId && String(project.managerId) === userId) return true;
+
+    const teamIds = Array.isArray(project.teamIds) ? project.teamIds.map((id) => String(id)) : [];
+    return teamIds.includes(userId);
+}
+
 function getExternalBaseUrl(req) {
     const normalizedClientUrl = CLIENT_URL.replace(/\/+$/, '');
     if (NODE_ENV !== 'production' && CLIENT_URL) {
@@ -275,6 +409,31 @@ function verifyMicrosoftState(state) {
     }
     return payload;
 }
+
+io.use(async (socket, next) => {
+    try {
+        const bearerHeader = Array.isArray(socket.handshake.headers.authorization)
+            ? socket.handshake.headers.authorization[0]
+            : socket.handshake.headers.authorization;
+        const authToken = socket.handshake.auth?.token || extractBearerToken(bearerHeader);
+        socket.data.user = await getUserFromAppToken(authToken);
+        next();
+    } catch (error) {
+        next(new Error('Unauthorized'));
+    }
+});
+
+io.on('connection', (socket) => {
+    socket.on('join:tasks', () => {
+        if (!canUserJoinTasksFeed(socket.data.user)) return;
+        socket.join('tasks:global');
+    });
+
+    socket.on('join:project', async (projectId) => {
+        if (!await canUserAccessProject(socket.data.user, projectId)) return;
+        socket.join(`project:${projectId}`);
+    });
+});
 
 async function ensureMaterialRequestIndexes() {
     try {
@@ -757,28 +916,13 @@ app.use((req, res, next) => {
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
-    let token;
-    const authHeader = req.headers.authorization;
-    
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-    } else if (req.query.token) {
-        token = req.query.token;
-    }
-
+    const token = extractBearerToken(req.headers.authorization);
     if (!token) {
         console.warn(`🚫 [Auth] No token — ${req.method} ${req.path}`);
         return res.status(401).json({ message: 'Unauthorized' });
     }
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        const user = await User.findById(decoded.id);
-        if (!user) {
-            console.warn(`🚫 [Auth] User not found for token — ${req.method} ${req.path}`);
-            return res.status(401).json({ message: 'User not found' });
-        }
-        req.user = user;
-        req.user.role = (user.role || '').toUpperCase().replace(/\s+/g, '_'); // normalize case and spaces
+        req.user = await getUserFromAppToken(token);
         next();
     } catch (err) {
         console.error(`🚫 [Auth] Invalid token — ${err.message} — ${req.method} ${req.path}`);
@@ -830,11 +974,14 @@ const logActivity = async (type, message, userId, userName, targetId, targetName
 
 // ============ AUTH ROUTES ============
 app.post('/api/auth/login', async (req, res) => {
-    const { employeeId, password } = req.body;
+    const employeeId = String(req.body?.employeeId || '').trim();
+    const password = String(req.body?.password || '');
     if (!employeeId || !password) {
         return res.status(400).json({ message: 'Employee ID and password are required' });
     }
-    const user = await User.findOne({ employeeId });
+    const user = await User.findOne({
+        employeeId: { $regex: new RegExp(`^${escapeRegExp(employeeId)}$`, 'i') }
+    });
     if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
         return res.status(401).json({ message: 'Invalid credentials' });
     }
@@ -850,7 +997,7 @@ app.get('/api/auth/microsoft/start', async (req, res) => {
         return res.status(500).send('Microsoft Entra ID is not configured on the server.');
     }
 
-    const origin = req.query.origin || req.headers.origin || `${req.protocol}://${req.get('host')}`;
+    const origin = getTrustedMicrosoftOrigin(req.query.origin || req.headers.origin, req);
     const state = createMicrosoftState(origin);
     const authorizationEndpoint = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`;
     const params = new URLSearchParams({
@@ -867,6 +1014,7 @@ app.get('/api/auth/microsoft/start', async (req, res) => {
 
 app.get('/api/auth/microsoft/callback', async (req, res) => {
     const closePopup = (payload) => {
+        const targetOrigin = getTrustedMicrosoftOrigin(payload.origin, req);
         const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
         return res.send(`<!doctype html>
 <html>
@@ -874,8 +1022,9 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
     <script>
       (function () {
         var payload = ${scriptPayload};
+        var targetOrigin = ${JSON.stringify(targetOrigin)};
         if (window.opener) {
-          window.opener.postMessage(payload, payload.origin || '*');
+          window.opener.postMessage(payload, targetOrigin);
         }
         window.close();
       })();
@@ -891,7 +1040,6 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
             return closePopup({
                 type: 'MICROSOFT_AUTH_RESULT',
                 success: false,
-                origin: '*',
                 error: errorDescription || error,
             });
         }
@@ -900,7 +1048,6 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
             return closePopup({
                 type: 'MICROSOFT_AUTH_RESULT',
                 success: false,
-                origin: '*',
                 error: 'Missing Microsoft authorization response data.',
             });
         }
@@ -951,7 +1098,6 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
         return closePopup({
             type: 'MICROSOFT_AUTH_RESULT',
             success: false,
-            origin: '*',
             error: err.message || 'Microsoft authentication failed.',
         });
     }
@@ -1038,6 +1184,189 @@ app.put('/api/notifications/read-all', authMiddleware, async (req, res) => {
     } catch (err) {
         console.error('❌ [Mark All Read]: Error:', err);
         res.status(500).json({ message: 'Failed to mark all as read', error: err.message });
+    }
+});
+
+app.get('/api/project-deadline-extension-requests', authMiddleware, async (req, res) => {
+    try {
+        const { status, projectId } = req.query;
+        const query = {};
+
+        if (status) query.status = status;
+        if (projectId) {
+            if (!isValidObjectId(projectId)) {
+                return res.status(400).json({ message: 'Invalid project ID' });
+            }
+            query.projectId = projectId;
+        }
+
+        if (isSuperAdminRole(req.user.role)) {
+            // Super admins can see all deadline extension requests.
+        } else if (isManagerLikeRole(req.user.role)) {
+            const managedProjects = await Project.find({ managerId: req.user._id }).select('_id');
+            const managedProjectIds = managedProjects.map((project) => project._id.toString());
+            if (typeof query.projectId === 'string') {
+                if (!managedProjectIds.includes(query.projectId)) {
+                    return res.status(403).json({ message: 'Only the assigned primary manager can view extension requests for this project.' });
+                }
+            } else {
+                query.projectId = { $in: managedProjects.map((project) => project._id) };
+            }
+        } else {
+            return res.status(403).json({ message: 'Not authorized to view deadline extension requests.' });
+        }
+
+        const requests = await ProjectDeadlineExtensionRequest.find(query).sort({ createdAt: -1 });
+        res.json(requests.map(serializeDeadlineExtensionRequest));
+    } catch (err) {
+        console.error('❌ [Deadline Extension Requests List]: Error:', err);
+        res.status(500).json({ message: 'Failed to load deadline extension requests', error: err.message });
+    }
+});
+
+app.post('/api/projects/:projectId/deadline-extension-requests', authMiddleware, async (req, res) => {
+    try {
+        const { projectId } = req.params;
+        const requestedDeadlineRaw = String(req.body?.requestedDeadline || '').trim();
+        const reason = String(req.body?.reason || '').trim();
+
+        if (!isValidObjectId(projectId)) {
+            return res.status(400).json({ message: 'Invalid project ID' });
+        }
+        if (!isManagerLikeRole(req.user.role)) {
+            return res.status(403).json({ message: 'Only the assigned primary manager can request deadline extensions.' });
+        }
+        if (!requestedDeadlineRaw) {
+            return res.status(400).json({ message: 'Requested deadline is required.' });
+        }
+        if (!reason) {
+            return res.status(400).json({ message: 'Reason is required for a deadline extension request.' });
+        }
+
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
+            return res.status(403).json({ message: 'Only the assigned primary manager can request deadline extensions.' });
+        }
+        if (!isProjectOverdue(project)) {
+            return res.status(400).json({ message: 'Deadline extension requests are only available after the project deadline has passed.' });
+        }
+
+        const requestedDeadline = new Date(requestedDeadlineRaw);
+        if (Number.isNaN(requestedDeadline.getTime())) {
+            return res.status(400).json({ message: 'Requested deadline is invalid.' });
+        }
+        if (requestedDeadline.getTime() <= getStartOfDay(new Date()).getTime()) {
+            return res.status(400).json({ message: 'Requested deadline must be a future date.' });
+        }
+        if (project.deadline && requestedDeadline.getTime() <= new Date(project.deadline).getTime()) {
+            return res.status(400).json({ message: 'Requested deadline must be later than the current project deadline.' });
+        }
+
+        const existingPending = await ProjectDeadlineExtensionRequest.findOne({ projectId, status: 'PENDING' });
+        if (existingPending) {
+            return res.status(409).json({ message: 'A deadline extension request is already pending for this project.' });
+        }
+
+        const extensionRequest = await ProjectDeadlineExtensionRequest.create({
+            projectId: project._id,
+            projectName: project.name,
+            projectCode: project.projectCode || '',
+            currentDeadline: project.deadline,
+            requestedDeadline,
+            reason,
+            requestedBy: req.user._id,
+            requestedByName: req.user.name || '',
+        });
+
+        const superAdmins = await User.find({ role: roles.SUPER_ADMIN }).select('_id');
+        await Promise.all(superAdmins.map((admin) => Notification.create({
+            recipientId: admin._id,
+            type: 'APPROVAL_REQUEST',
+            message: `Deadline extension requested for project [${project.projectCode || project.name}] by ${req.user.name}.`,
+            relatedId: project._id
+        })));
+
+        await logActivity('PROJECT_UPDATED', `Deadline extension requested for project "${project.name}"`, req.user._id, req.user.name, project._id, project.name);
+
+        res.status(201).json({
+            message: 'Deadline extension request submitted for super admin approval.',
+            request: serializeDeadlineExtensionRequest(extensionRequest)
+        });
+    } catch (err) {
+        console.error('❌ [Deadline Extension Request Create]: Error:', err);
+        res.status(500).json({ message: 'Failed to create deadline extension request', error: err.message });
+    }
+});
+
+app.put('/api/project-deadline-extension-requests/:requestId/review', authMiddleware, async (req, res) => {
+    try {
+        const { requestId } = req.params;
+        const approved = Boolean(req.body?.approved);
+        const rejectionReason = String(req.body?.rejectionReason || '').trim();
+
+        if (!isValidObjectId(requestId)) {
+            return res.status(400).json({ message: 'Invalid request ID' });
+        }
+        if (!isSuperAdminRole(req.user.role)) {
+            return res.status(403).json({ message: 'Only super admins can review deadline extension requests.' });
+        }
+
+        const extensionRequest = await ProjectDeadlineExtensionRequest.findById(requestId);
+        if (!extensionRequest) return res.status(404).json({ message: 'Deadline extension request not found.' });
+        if (extensionRequest.status !== 'PENDING') {
+            return res.status(400).json({ message: 'This deadline extension request has already been reviewed.' });
+        }
+        if (!approved && !rejectionReason) {
+            return res.status(400).json({ message: 'Rejection reason is required when rejecting a deadline extension request.' });
+        }
+
+        const project = await Project.findById(extensionRequest.projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found.' });
+
+        extensionRequest.status = approved ? 'APPROVED' : 'REJECTED';
+        extensionRequest.reviewedBy = req.user._id;
+        extensionRequest.reviewedByName = req.user.name || '';
+        extensionRequest.reviewedAt = new Date();
+        extensionRequest.rejectionReason = approved ? '' : rejectionReason;
+
+        if (approved) {
+            project.deadline = extensionRequest.requestedDeadline;
+            await project.save();
+        }
+
+        await extensionRequest.save();
+
+        if (project.managerId) {
+            await Notification.create({
+                recipientId: project.managerId,
+                type: 'PROJECT_UPDATE',
+                message: approved
+                    ? `Deadline extension approved for project [${project.projectCode || project.name}].`
+                    : `Deadline extension rejected for project [${project.projectCode || project.name}].`,
+                relatedId: project._id
+            });
+        }
+
+        await logActivity(
+            'PROJECT_UPDATED',
+            approved
+                ? `Deadline extension approved for project "${project.name}"`
+                : `Deadline extension rejected for project "${project.name}"`,
+            req.user._id,
+            req.user.name,
+            project._id,
+            project.name
+        );
+
+        res.json({
+            message: approved ? 'Deadline extension approved.' : 'Deadline extension rejected.',
+            request: serializeDeadlineExtensionRequest(extensionRequest),
+            projectDeadline: project.deadline,
+        });
+    } catch (err) {
+        console.error('❌ [Deadline Extension Request Review]: Error:', err);
+        res.status(500).json({ message: 'Failed to review deadline extension request', error: err.message });
     }
 });
 
@@ -1791,6 +2120,9 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
         }
 
         if (status) {
+            if (project.status === 'COMPLETED' && status !== 'COMPLETED' && !isSuperAdminRole(req.user.role)) {
+                return res.status(403).json({ message: 'Only super admins can reopen completed projects.' });
+            }
             console.log('Changing status from', project.status, 'to', status);
             project.status = status;
         }
@@ -2306,6 +2638,9 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
 
         if (status) {
             console.log(`Updating project ${projectId} status to ${status} by ${req.user.name}`);
+            if (project.status === 'COMPLETED' && status !== 'COMPLETED' && !isSuperAdminRole(req.user.role)) {
+                return res.status(403).json({ message: 'Only super admins can reopen completed projects.' });
+            }
             if ((req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) && status === 'COMPLETED') {
                 project.status = 'WAITING_APPROVAL';
                 // Notify Super Users
@@ -2687,6 +3022,7 @@ app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMi
         if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Only the assigned manager can create production worker allocations.' });
         }
+        await ensureProjectAssignmentAllowed(project, req.user);
 
         const task = await Task.findOne({ _id: taskId, ...getProductionTaskQuery(projectId, project) });
         if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
@@ -2762,7 +3098,7 @@ app.post('/api/projects/:projectId/production/tasks/:taskId/assignments', authMi
         });
     } catch (err) {
         console.error('❌ [Production Assignment Create]: Error:', err);
-        res.status(500).json({ message: 'Failed to create production assignment', error: err.message });
+        res.status(err.statusCode || 500).json({ message: err.message || 'Failed to create production assignment', error: err.message });
     }
 });
 
@@ -2783,6 +3119,7 @@ app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignme
         if (!project.managerId || project.managerId.toString() !== req.user._id.toString()) {
             return res.status(403).json({ message: 'Only the assigned manager can update production worker allocations.' });
         }
+        await ensureProjectAssignmentAllowed(project, req.user);
 
         const task = await Task.findOne({ _id: taskId, ...getProductionTaskQuery(projectId, project) });
         if (!task) return res.status(404).json({ message: 'Production phase task not found.' });
@@ -2850,7 +3187,7 @@ app.put('/api/projects/:projectId/production/tasks/:taskId/assignments/:assignme
         });
     } catch (err) {
         console.error('❌ [Production Assignment Update]: Error:', err);
-        res.status(500).json({ message: 'Failed to update production assignment', error: err.message });
+        res.status(err.statusCode || 500).json({ message: err.message || 'Failed to update production assignment', error: err.message });
     }
 });
 
@@ -3233,6 +3570,10 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
             ? null
             : (assigneeId || (['EMPLOYEE', 'INTERN'].includes(req.user.role) ? req.user._id : null));
 
+        if (finalAssigneeId && isManagerLikeRole(req.user.role)) {
+            await ensureProjectAssignmentAllowed(project, req.user);
+        }
+
         // Set assignedAt if assignee is provided
         const assignedAt = finalAssigneeId ? new Date() : null;
 
@@ -3348,7 +3689,7 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         });
     } catch (err) {
         console.error('❌ Error creating task:', err);
-        res.status(500).json({ message: 'Failed to create task', error: err.message });
+        res.status(err.statusCode || 500).json({ message: err.message || 'Failed to create task', error: err.message });
     }
 });
 
@@ -3438,6 +3779,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
+        const taskProject = task.projectId ? await Project.findById(task.projectId) : null;
 
         if (task.isProductionTask) {
             return res.status(400).json({ message: 'Production task status must be updated from the production dashboard.' });
@@ -3448,6 +3790,12 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         const { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy, rejectionReason } = req.body;
         console.log('Updating task:', taskId, { title, description, status, assigneeId, deadline, selfAssignedBy, selfAssignedAt, completedBy });
+
+        const incomingAssigneeId = assigneeId === undefined ? undefined : (assigneeId || null);
+        const isAssignmentMutation = incomingAssigneeId !== undefined || selfAssignedBy !== undefined || selfAssignedAt !== undefined;
+        if (isAssignmentMutation && incomingAssigneeId && taskProject) {
+            await ensureProjectAssignmentAllowed(taskProject, req.user);
+        }
 
         if (title) task.title = title;
         if (description !== undefined) task.description = description;
@@ -3669,7 +4017,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         res.json({ id: task._id, title: task.title, description: task.description, status: task.status, projectId: task.projectId, assigneeId: task.assigneeId });
     } catch (err) {
         console.error('❌ [Update Task]: Error:', err);
-        res.status(500).json({ message: 'Failed to update task', error: err.message });
+        res.status(err.statusCode || 500).json({ message: err.message || 'Failed to update task', error: err.message });
     }
 });
 
@@ -4306,6 +4654,10 @@ const startBOMAutomation = async () => {
         return;
     }
 
+    if (!BOM_AUTOSPAWN) {
+        console.log('â„¹ï¸ [BOM] Auto-spawn disabled by BOM_AUTOSPAWN=false.');
+        return;
+    }
     const { spawn } = require('child_process');
     const path = require('path');
     const fs = require('fs');

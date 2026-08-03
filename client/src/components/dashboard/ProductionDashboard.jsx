@@ -51,9 +51,7 @@ const PHASE_ICONS = {
 const formatDate = (value) => {
     if (!value) return 'Not set';
     const date = new Date(value);
-    return Number.isNaN(date.getTime())
-        ? 'Not set'
-        : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return Number.isNaN(date.getTime()) ? 'Not set' : date.toLocaleDateString();
 };
 
 const getProjectId = (project) => project?.id || project?._id;
@@ -1172,9 +1170,8 @@ export default function ProductionDashboard({
                                                 min={new Date().toISOString().slice(0, 10)}
                                                 max={project?.deadline ? new Date(project.deadline).toISOString().slice(0, 10) : undefined}
                                                 onChange={(event) => setFullProductDraft((prev) => ({ ...prev, deadline: event.target.value }))}
-                                                className="w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 pr-12 text-sm text-[#efefff] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
+                                                className="date-input-dark w-full rounded-xl border-2 border-[#2563eb]/55 bg-[#0b1326] px-4 py-3 pr-12 text-sm text-[#efefff] transition-all focus:border-[#2563eb] focus:outline-none focus:ring-4 focus:ring-[#2563eb]/10"
                                                 aria-label="Stage deadline"
-                                                style={{ colorScheme: 'dark' }}
                                             />
                                             <span className="material-symbols-outlined pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[#7f8aa4]">
                                                 calendar_today
@@ -1385,8 +1382,7 @@ export default function ProductionDashboard({
                                                                                                             type="date"
                                                                                                             value={assignmentDraft.deadline}
                                                                                                             onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
-                                                                                                            className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                                            style={{ colorScheme: 'dark' }}
+                                                                                                            className="date-input-dark w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                                         />
                                                                                                         <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
                                                                                                             calendar_today
@@ -1479,8 +1475,7 @@ export default function ProductionDashboard({
                                                                                                     type="date"
                                                                                                     value={newAssignmentDrafts[taskId]?.deadline || ''}
                                                                                                     onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
-                                                                                                    className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                                    style={{ colorScheme: 'dark' }}
+                                                                                                    className="date-input-dark w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                                 />
                                                                                                 <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
                                                                                                     calendar_today
@@ -2211,8 +2206,7 @@ export default function ProductionDashboard({
                                                                                                 type="date"
                                                                                                 value={assignmentDraft.deadline}
                                                                                                 onChange={(e) => setAssignmentDrafts((prev) => ({ ...prev, [assignmentId]: { ...assignmentDraft, deadline: e.target.value } }))}
-                                                                                                className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                                style={{ colorScheme: 'dark' }}
+                                                                                                className="date-input-dark w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                             />
                                                                                             <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
                                                                                                 calendar_today
@@ -2313,8 +2307,7 @@ export default function ProductionDashboard({
                                                                                         type="date"
                                                                                         value={newAssignmentDrafts[taskId]?.deadline || ''}
                                                                                         onChange={(e) => setNewAssignmentDrafts((prev) => ({ ...prev, [taskId]: { ...(prev[taskId] || {}), deadline: e.target.value } }))}
-                                                                                        className="w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
-                                                                                        style={{ colorScheme: 'dark' }}
+                                                                                        className="date-input-dark w-full rounded-lg border border-[#434656] bg-[#0b1326] px-3 py-2 pr-10 text-sm text-[#dae2fd] outline-none focus:border-[#2e5bff]"
                                                                                     />
                                                                                     <span className="material-symbols-outlined pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#8ea4c9]">
                                                                                         calendar_today

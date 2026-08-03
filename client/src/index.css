@@ -105,6 +105,56 @@ body {
   opacity: 0.6;
 }
 
+/* Global dark-surface form readability:
+   keep typed text and placeholders visible on dark cards, modals, and panels. */
+[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-background-dark"] textarea,
+[class*="bg-background-dark"] select,
+[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-surface-dark"] textarea,
+[class*="bg-surface-dark"] select,
+[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-slate-900"] textarea,
+[class*="bg-slate-900"] select,
+[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-slate-950"] textarea,
+[class*="bg-slate-950"] select,
+[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0a0f1d]"] textarea,
+[class*="bg-[#0a0f1d]"] select,
+[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0F172A]"] textarea,
+[class*="bg-[#0F172A]"] select,
+[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0b1326]"] textarea,
+[class*="bg-[#0b1326]"] select,
+[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#131b2e]"] textarea,
+[class*="bg-[#131b2e]"] select {
+  color: #f1f5f9 !important;
+  caret-color: #f8fafc;
+}
+
+[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-background-dark"] textarea::placeholder,
+[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-surface-dark"] textarea::placeholder,
+[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-slate-900"] textarea::placeholder,
+[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-slate-950"] textarea::placeholder,
+[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0a0f1d]"] textarea::placeholder,
+[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0F172A]"] textarea::placeholder,
+[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0b1326]"] textarea::placeholder,
+[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#131b2e]"] textarea::placeholder {
+  color: #8ea4c9 !important;
+  opacity: 1;
+}
+
 /* Keep button text readable on primary/semantic buttons */
 .light-theme button.text-white,
 .light-theme button .text-white,
@@ -214,9 +264,46 @@ body {
   }
 }
 
-/* Date Picker Dark Theme */
+/* Date picker normalization */
 input[type="date"] {
-  color-scheme: dark;
+  -webkit-appearance: none;
+  appearance: none;
+  color: inherit;
+  background-color: inherit;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: inherit;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.date-input-light {
+  color-scheme: light;
+}
+
+.date-input-light::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+.date-input-dark {
+  /* Keep the field visually dark, but use a light native picker for readability. */
+  color-scheme: light;
+  color: #f8fafc;
+  background-color: inherit;
+}
+
+.date-input-dark::-webkit-calendar-picker-indicator {
+  filter: invert(0.92) sepia(0.08) saturate(0.7) hue-rotate(180deg) brightness(1.05);
 }
 
 /* Hide Number Input Spin Arrows */

@@ -23,6 +23,7 @@ const VendorSchema = new mongoose.Schema({
     phone: String,
     defaultPaymentTerms: String,
     defaultDeliveryTerms: String,
+    priceTaxBasis: { type: String, enum: ['INCLUSIVE', 'EXCLUSIVE', 'UNKNOWN'], default: 'UNKNOWN' },
     isLocalSource: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true }
 }, { timestamps: true });

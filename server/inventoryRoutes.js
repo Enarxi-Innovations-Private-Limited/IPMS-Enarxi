@@ -24,6 +24,8 @@ const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const normalizeId = (value) => (value ? String(value) : '');
 const ACTIVE_PURCHASE_QUEUE_STATUSES = ['OPEN', 'PARTIALLY_ORDERED', 'PENDING', 'IN_PO'];
 const purchasePlanningQuoteJobs = new Map();
+const PURCHASE_VENDOR_TAX_BASIS = ['INCLUSIVE', 'EXCLUSIVE', 'UNKNOWN'];
+const BOM_PRICE_GST_PERCENT = 18;
 
 const getPurchaseOrderNextAllowedActions = (status) => {
     switch (status) {
@@ -80,6 +82,12 @@ const normalizeVendorPayload = (payload = {}) => {
     const vendorCode = String(payload.vendorCode ?? payload.code ?? '')
         .trim()
         .toUpperCase();
+    const rawPriceTaxBasis = String(payload.priceTaxBasis || '')
+        .trim()
+        .toUpperCase();
+    if (rawPriceTaxBasis && !PURCHASE_VENDOR_TAX_BASIS.includes(rawPriceTaxBasis)) {
+        throw new Error('priceTaxBasis must be INCLUSIVE, EXCLUSIVE, or UNKNOWN.');
+    }
 
     return {
         vendorCode,
@@ -93,6 +101,7 @@ const normalizeVendorPayload = (payload = {}) => {
         phone: String(payload.phone || '').trim(),
         defaultPaymentTerms: String(payload.defaultPaymentTerms || '').trim(),
         defaultDeliveryTerms: String(payload.defaultDeliveryTerms || '').trim(),
+        priceTaxBasis: rawPriceTaxBasis || 'UNKNOWN',
         isLocalSource: Boolean(payload.isLocalSource),
         isActive: payload.isActive === undefined ? true : Boolean(payload.isActive),
     };
@@ -188,6 +197,41 @@ const normalizeItemMatchKey = (value) =>
         .replace(/\b(RESISTOR|CAPACITOR|COMPONENT)\b/g, '')
         .replace(/[^A-Z0-9]/g, '');
 
+const normalizeVendorPriceForComparison = (price, priceTaxBasis) => {
+    const numericPrice = toNumber(price);
+    if (numericPrice <= 0) return null;
+    if (priceTaxBasis === 'INCLUSIVE') return numericPrice;
+    if (priceTaxBasis === 'EXCLUSIVE') return Number((numericPrice * (1 + BOM_PRICE_GST_PERCENT / 100)).toFixed(4));
+    return null;
+};
+
+const getPurchasePlanningAnalysisState = ({ resolved = false, reason = '', cartStatus = '', analysisAttempted = true } = {}) => {
+    if (!analysisAttempted) return 'NOT_ANALYZED';
+    if (resolved && String(cartStatus || '').trim().toUpperCase() === 'VERIFIED') return 'VERIFIED';
+
+    switch (String(reason || '').trim()) {
+        case 'no_sku':
+            return 'NO_SKU';
+        case 'no_quote':
+        case 'vendor_unmapped':
+            return 'NO_QUOTE';
+        case 'vendor_tax_basis_missing':
+            return 'TAX_BASIS_MISSING';
+        case 'result_binding_failed':
+            return 'BINDING_FAILED';
+        case 'partial_fulfillment':
+            return 'PARTIAL';
+        case 'cart_failed':
+            return 'FAILED';
+        default:
+            break;
+    }
+
+    if (String(cartStatus || '').trim().toUpperCase() === 'PARTIAL') return 'PARTIAL';
+    if (String(cartStatus || '').trim().toUpperCase() === 'FAILED') return 'FAILED';
+    return resolved ? 'VERIFIED' : 'FAILED';
+};
+
 const resolveVendorByBomKey = (bomKey, vendorByKey) => {
     const normalized = normalizeVendorKey(bomKey);
     if (!normalized) return null;
@@ -227,19 +271,29 @@ const selectBestBomOffer = (item, vendorByKey, vendorSkuMapByItemId) => {
     });
 
     const offers = [];
+    let sawUnknownTaxBasis = false;
     Object.entries(prices).forEach(([vendorNameOrCode, priceRaw]) => {
         const vendor = resolveVendorByBomKey(vendorNameOrCode, vendorByKey);
         if (!vendor) return;
         const matchedSku = candidateByVendorId.get(normalizeId(vendor._id));
         if (!matchedSku?.sku) return;
-        const rate = parsePrice(priceRaw);
-        if (rate === null || rate <= 0) return;
+        const fetchedPrice = parsePrice(priceRaw);
+        if (fetchedPrice === null || fetchedPrice <= 0) return;
+        const priceTaxBasis = vendor.priceTaxBasis || 'UNKNOWN';
+        const comparisonPrice = normalizeVendorPriceForComparison(fetchedPrice, priceTaxBasis);
+        if (comparisonPrice === null) {
+            sawUnknownTaxBasis = true;
+            return;
+        }
 
         offers.push({
             vendorId: normalizeId(vendor._id),
             vendorName: vendor.name,
             vendorCode: vendor.vendorCode || '',
-            rate,
+            rate: fetchedPrice,
+            fetchedPrice,
+            comparisonPrice,
+            priceTaxBasis,
             matchedSku: matchedSku.sku,
             sourceVendorKey: vendorNameOrCode
         });
@@ -252,10 +306,11 @@ const selectBestBomOffer = (item, vendorByKey, vendorSkuMapByItemId) => {
         ]);
         const hasVendorInBom = Array.from(bomVendorKeys).some((key) => resolveVendorByBomKey(key, vendorByKey));
         if (!hasVendorInBom) return { resolved: false, reason: 'vendor_unmapped' };
+        if (sawUnknownTaxBasis) return { resolved: false, reason: 'vendor_tax_basis_missing' };
         return { resolved: false, reason: 'no_quote' };
     }
 
-    offers.sort((a, b) => a.rate - b.rate);
+    offers.sort((a, b) => a.comparisonPrice - b.comparisonPrice);
     const best = offers[0];
     return {
         resolved: true,
@@ -265,13 +320,19 @@ const selectBestBomOffer = (item, vendorByKey, vendorSkuMapByItemId) => {
         vendorName: best.vendorName,
         vendorCode: best.vendorCode,
         rate: best.rate,
+        fetchedPrice: best.fetchedPrice,
+        comparisonPrice: best.comparisonPrice,
+        priceTaxBasis: best.priceTaxBasis,
         matchedSku: best.matchedSku,
         quoteMeta: {
             source: 'BOM_AUTOMATION',
             quoteId: String(item?.component || itemCode || itemName || ''),
             quotedAt: new Date().toISOString(),
             resolvedBy: 'LOWEST_PRICE',
-            sourceVendorKey: best.sourceVendorKey
+            sourceVendorKey: best.sourceVendorKey,
+            fetchedPrice: best.fetchedPrice,
+            comparisonPrice: best.comparisonPrice,
+            priceTaxBasis: best.priceTaxBasis
         }
     };
 };
@@ -294,16 +355,21 @@ const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vend
             const vendorId = normalizeId(vendor._id);
             const matchedSku = candidateByVendorId.get(vendorId)?.sku || '';
             const quantity = toNumber(allocation?.qty);
-            const rate = toNumber(allocation?.unit_price);
-            if (quantity <= 0 || rate <= 0 || !matchedSku) return null;
+            const fetchedPrice = toNumber(allocation?.unit_price);
+            const priceTaxBasis = vendor.priceTaxBasis || 'UNKNOWN';
+            const comparisonPrice = toNumber(allocation?.comparison_unit_price) || normalizeVendorPriceForComparison(fetchedPrice, priceTaxBasis);
+            if (quantity <= 0 || fetchedPrice <= 0 || !comparisonPrice || !matchedSku) return null;
             return {
                 vendorId,
                 vendorName: vendor.name,
                 vendorCode: vendor.vendorCode || '',
                 matchedSku,
                 quantity,
-                rate,
-                total: toNumber(allocation?.total) || quantity * rate,
+                rate: fetchedPrice,
+                fetchedPrice,
+                comparisonPrice,
+                priceTaxBasis,
+                total: toNumber(allocation?.total) || quantity * fetchedPrice,
                 cartUrl: vendorCartUrls[getCanonicalBomVendorKey(vendor.name, vendor.vendorCode, vendor._id)] || item?.cart_url || ''
             };
         })
@@ -336,7 +402,9 @@ const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vend
             cartStatus: 'FAILED',
             cartMessage: quoteOnlyDecision.reason === 'no_quote'
                 ? 'No valid vendor quote was returned.'
-                : 'Cart automation could not begin because BOM resolution did not succeed.',
+                : quoteOnlyDecision.reason === 'vendor_tax_basis_missing'
+                    ? 'Vendor GST mode is not reviewed for one or more quoted vendors, so automatic price comparison was skipped.'
+                    : 'Cart automation could not begin because BOM resolution did not succeed.',
             cartVendorUrl: '',
             cartAllocatedQty: 0,
             cartUnfulfilledQty: toNumber(item?.qty),
@@ -363,6 +431,9 @@ const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vend
             matchedSku: allocation.matchedSku,
             quantity: allocation.quantity,
             rate: allocation.rate,
+            fetchedPrice: allocation.fetchedPrice,
+            comparisonPrice: allocation.comparisonPrice,
+            priceTaxBasis: allocation.priceTaxBasis,
             total: allocation.total,
             cartUrl: allocation.cartUrl
         }))
@@ -377,6 +448,9 @@ const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vend
         vendorName: vendorLabel,
         vendorCode: primary.vendorCode,
         rate: primary.rate,
+        fetchedPrice: primary.fetchedPrice,
+        comparisonPrice: primary.comparisonPrice,
+        priceTaxBasis: primary.priceTaxBasis,
         matchedSku: primary.matchedSku,
         quoteMeta,
         cartStatus,
@@ -390,6 +464,53 @@ const buildCartAwareBomDecision = (item, vendorByKey, vendorSkuMapByItemId, vend
         cartUnfulfilledQty,
         cartAllocations: finalAllocations
     };
+};
+
+const pickPrimaryAllocationDetails = (decision) => {
+    if (!decision || typeof decision !== 'object') return {};
+
+    if (decision.vendorId || decision.vendorName || decision.rate || decision.matchedSku) {
+        return {
+            vendorId: decision.vendorId || '',
+            vendorName: decision.vendorName || '',
+            vendorCode: decision.vendorCode || '',
+            rate: decision.rate || 0,
+            fetchedPrice: decision.fetchedPrice || 0,
+            comparisonPrice: decision.comparisonPrice || 0,
+            priceTaxBasis: decision.priceTaxBasis || 'UNKNOWN',
+            matchedSku: decision.matchedSku || '',
+            quoteMeta: decision.quoteMeta || null
+        };
+    }
+
+    const primaryAllocation = Array.isArray(decision.cartAllocations) ? decision.cartAllocations[0] : null;
+    if (!primaryAllocation) {
+        return {};
+    }
+
+    return {
+        vendorId: primaryAllocation.vendorId || '',
+        vendorName: primaryAllocation.vendorName || '',
+        vendorCode: primaryAllocation.vendorCode || '',
+        rate: toNumber(primaryAllocation.rate),
+        fetchedPrice: toNumber(primaryAllocation.fetchedPrice || primaryAllocation.rate),
+        comparisonPrice: toNumber(primaryAllocation.comparisonPrice),
+        priceTaxBasis: primaryAllocation.priceTaxBasis || 'UNKNOWN',
+        matchedSku: primaryAllocation.matchedSku || '',
+        quoteMeta: decision.quoteMeta || null
+    };
+};
+
+const attachPurchasePlanningAnalysisMeta = (payload, overrides = {}) => {
+    const enriched = {
+        ...payload,
+        ...overrides
+    };
+    enriched.analysisAttempted = overrides.analysisAttempted ?? payload.analysisAttempted ?? true;
+    enriched.analysisState = overrides.analysisState
+        || payload.analysisState
+        || getPurchasePlanningAnalysisState(enriched);
+    return enriched;
 };
 
 async function createPurchaseRequestBatchNumber(session = null) {
@@ -572,6 +693,26 @@ const authMiddleware = async (req, res, next) => {
 
 // Apply authMiddleware to all inventory routes
 router.use(authMiddleware);
+
+function canUserAccessInventory(user) {
+    const role = String(user?.role || '').trim().toUpperCase();
+    const department = String(user?.department || '').trim().toUpperCase();
+
+    if ([roles.SUPER_ADMIN, roles.SUPER_USER, roles.STORE_MANAGER, roles.PURCHASE_MANAGER].includes(role)) {
+        return true;
+    }
+
+    if ([roles.MANAGER, roles.ENGINEER].includes(role)) {
+        return department === 'HARDWARE';
+    }
+
+    return false;
+}
+
+router.use((req, res, next) => {
+    if (canUserAccessInventory(req.user)) return next();
+    return res.status(403).json({ message: 'Inventory access is restricted for your team.' });
+});
 
 function requireAnyRole(req, res, allowedRoles) {
     const currentRole = (req.user?.role || '').toUpperCase();
@@ -4502,8 +4643,8 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
     }
 
     const [vendors, skuMappings] = await Promise.all([
-        Vendor.find({}, 'name vendorCode'),
-        ItemVendorSku.find({ itemId: { $in: Array.from(itemIds) } }).populate('vendorId', 'name vendorCode')
+        Vendor.find({}, 'name vendorCode priceTaxBasis'),
+        ItemVendorSku.find({ itemId: { $in: Array.from(itemIds) } }).populate('vendorId', 'name vendorCode priceTaxBasis')
     ]);
 
     const vendorByKey = new Map();
@@ -4513,6 +4654,13 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
         vendorByKey.set(normalizeVendorKey(vendor.vendorCode), vendor);
         vendorById.set(normalizeId(vendor._id), vendor);
     });
+    const vendorPriceTaxBasis = vendors.reduce((acc, vendor) => {
+        const canonicalKey = getCanonicalBomVendorKey(vendor.name, vendor.vendorCode, vendor._id);
+        if (canonicalKey) {
+            acc[canonicalKey] = vendor.priceTaxBasis || 'UNKNOWN';
+        }
+        return acc;
+    }, {});
 
     const vendorSkuMapByItemId = new Map();
     skuMappings.forEach((mapping) => {
@@ -4600,7 +4748,8 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
             mapping: {
                 component: 'component',
                 quantity: 'qty',
-                vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI']
+                vendors: ['ROBU', 'EVELTA', 'KTRON', 'SHARVI'],
+                vendor_price_tax_basis: vendorPriceTaxBasis
             }
         })
     });
@@ -4621,43 +4770,49 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
         : {};
 
     const bomItemByLineId = new Map();
-    const bomItemByCodeOrName = new Map();
     bomItemsResult.forEach((entry) => {
         const lineIdKey = normalizeId(entry?.lineId);
-        const codeKey = String(entry?.itemCode || '').trim().toUpperCase();
-        const nameKey = String(entry?.component || '').trim().toUpperCase();
-        const normalizedName = normalizeItemMatchKey(entry?.component || '');
         if (lineIdKey) bomItemByLineId.set(lineIdKey, entry);
-        if (codeKey) bomItemByCodeOrName.set(codeKey, entry);
-        if (nameKey) bomItemByCodeOrName.set(nameKey, entry);
-        if (normalizedName) bomItemByCodeOrName.set(normalizedName, entry);
     });
 
     const results = selectedLines.map((line) => {
         const lineKey = normalizeId(line.lineId);
-        const codeKey = String(line.itemCode || '').trim().toUpperCase();
-        const nameKey = String(line.itemName || '').trim().toUpperCase();
-        const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
-        const itemResult = bomItemByLineId.get(lineKey)
-            || bomItemByCodeOrName.get(codeKey)
-            || bomItemByCodeOrName.get(nameKey)
-            || bomItemByCodeOrName.get(normalizedNameKey);
+        const itemResult = bomItemByLineId.get(lineKey);
 
         if (!itemResult) {
-            return {
+            const fallbackMatch = bomItemsResult.find((entry) => {
+                const entryItemCode = String(entry?.itemCode || '').trim().toUpperCase();
+                const entryName = String(entry?.component || '').trim().toUpperCase();
+                const entryNormalizedName = normalizeItemMatchKey(entry?.component || '');
+                const codeKey = String(line.itemCode || '').trim().toUpperCase();
+                const nameKey = String(line.itemName || '').trim().toUpperCase();
+                const normalizedNameKey = normalizeItemMatchKey(line.itemName || '');
+                return entryItemCode === codeKey || entryName === nameKey || entryNormalizedName === normalizedNameKey;
+            });
+            if (fallbackMatch) {
+                console.warn('[Purchase Planning Binding Warning] Result matched only by item fallback; refusing non-lineId bind.', {
+                    lineId: line.lineId,
+                    itemCode: line.itemCode,
+                    itemName: line.itemName,
+                    fallbackResultLineId: normalizeId(fallbackMatch?.lineId),
+                    fallbackResultItemCode: fallbackMatch?.itemCode || '',
+                    fallbackResultName: fallbackMatch?.component || ''
+                });
+            }
+            return attachPurchasePlanningAnalysisMeta({
                 lineId: line.lineId,
                 itemId: line.itemId,
                 itemCode: line.itemCode,
                 itemName: line.itemName,
                 resolved: false,
-                reason: 'no_quote',
+                reason: 'result_binding_failed',
                 cartStatus: 'FAILED',
-                cartMessage: 'BOM did not return a result for this line.',
+                cartMessage: 'BOM/cart processing completed, but the final result could not be bound back to this purchase line.',
                 cartVendorUrl: '',
                 cartAllocatedQty: 0,
                 cartUnfulfilledQty: line.quantity,
                 cartAllocations: []
-            };
+            }, { analysisState: 'BINDING_FAILED' });
         }
 
         const decision = buildCartAwareBomDecision(
@@ -4668,23 +4823,33 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
         );
 
         if (!decision.resolved) {
-            return {
+            const primaryDetails = pickPrimaryAllocationDetails(decision);
+            return attachPurchasePlanningAnalysisMeta({
                 lineId: line.lineId,
                 itemId: line.itemId,
                 itemCode: line.itemCode,
                 itemName: line.itemName,
                 resolved: false,
                 reason: decision.reason,
+                vendorId: primaryDetails.vendorId || '',
+                vendorName: primaryDetails.vendorName || '',
+                vendorCode: primaryDetails.vendorCode || '',
+                rate: primaryDetails.rate || 0,
+                fetchedPrice: primaryDetails.fetchedPrice || 0,
+                comparisonPrice: primaryDetails.comparisonPrice || 0,
+                priceTaxBasis: primaryDetails.priceTaxBasis || 'UNKNOWN',
+                matchedSku: primaryDetails.matchedSku || '',
+                quoteMeta: primaryDetails.quoteMeta || null,
                 cartStatus: decision.cartStatus || 'FAILED',
                 cartMessage: decision.cartMessage || '',
                 cartVendorUrl: decision.cartVendorUrl || '',
                 cartAllocatedQty: toNumber(decision.cartAllocatedQty),
                 cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty || line.quantity),
                 cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
-            };
+            });
         }
 
-        return {
+        return attachPurchasePlanningAnalysisMeta({
             lineId: line.lineId,
             itemId: line.itemId,
             itemCode: line.itemCode,
@@ -4694,6 +4859,9 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
             vendorName: decision.vendorName,
             vendorCode: decision.vendorCode,
             rate: decision.rate,
+            fetchedPrice: decision.fetchedPrice || 0,
+            comparisonPrice: decision.comparisonPrice || 0,
+            priceTaxBasis: decision.priceTaxBasis || 'UNKNOWN',
             matchedSku: decision.matchedSku,
             quoteMeta: decision.quoteMeta,
             cartStatus: decision.cartStatus || 'VERIFIED',
@@ -4702,7 +4870,7 @@ async function executePurchasePlanningAutoQuote({ batchId, lineIds }) {
             cartAllocatedQty: toNumber(decision.cartAllocatedQty),
             cartUnfulfilledQty: toNumber(decision.cartUnfulfilledQty),
             cartAllocations: Array.isArray(decision.cartAllocations) ? decision.cartAllocations : []
-        };
+        }, { analysisState: 'VERIFIED' });
     });
 
     const summary = {

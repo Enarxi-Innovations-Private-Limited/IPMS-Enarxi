@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
 import { getCurrentUser, getToken, isTokenExpired, saveAuth } from '../../services/authService.js';
@@ -25,6 +25,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [error, setError] = useState('');
+  const microsoftPopupRef = useRef(null);
+  const microsoftPopupTimerRef = useRef(null);
   useEffect(() => {
 
     const token = getToken();
@@ -39,6 +41,14 @@ export default function LoginPage() {
     const handleMicrosoftMessage = (event) => {
       const data = event.data;
       if (!data || data.type !== 'MICROSOFT_AUTH_RESULT') return;
+      if (event.origin !== window.location.origin) return;
+      if (microsoftPopupRef.current && event.source !== microsoftPopupRef.current) return;
+
+      if (microsoftPopupTimerRef.current) {
+        window.clearInterval(microsoftPopupTimerRef.current);
+        microsoftPopupTimerRef.current = null;
+      }
+      microsoftPopupRef.current = null;
 
       if (!data.success) {
         setMicrosoftLoading(false);
@@ -53,7 +63,12 @@ export default function LoginPage() {
     };
 
     window.addEventListener('message', handleMicrosoftMessage);
-    return () => window.removeEventListener('message', handleMicrosoftMessage);
+    return () => {
+      window.removeEventListener('message', handleMicrosoftMessage);
+      if (microsoftPopupTimerRef.current) {
+        window.clearInterval(microsoftPopupTimerRef.current);
+      }
+    };
   }, [navigate]);
 
   const handleSubmit = async (e) => {
@@ -88,9 +103,12 @@ export default function LoginPage() {
       return;
     }
 
-    const popupTimer = window.setInterval(() => {
+    microsoftPopupRef.current = popup;
+    microsoftPopupTimerRef.current = window.setInterval(() => {
       if (popup.closed) {
-        window.clearInterval(popupTimer);
+        window.clearInterval(microsoftPopupTimerRef.current);
+        microsoftPopupTimerRef.current = null;
+        microsoftPopupRef.current = null;
         setMicrosoftLoading(false);
       }
     }, 500);

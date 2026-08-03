@@ -6,6 +6,7 @@ const ProductionDispatch = require('./ProductionDispatch');
 const Activity = require('./Activity');
 const Notification = require('./Notification');
 const Inventory = require('./Inventory');
+const ProjectDeadlineExtensionRequest = require('./ProjectDeadlineExtensionRequest');
 
 module.exports = {
     User,
@@ -15,5 +16,6 @@ module.exports = {
     ProductionDispatch,
     Activity,
     Notification,
+    ProjectDeadlineExtensionRequest,
     ...Inventory
 };

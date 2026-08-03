@@ -20,9 +20,7 @@ const getTaskId = (task) => task?.id || task?._id;
 const formatDate = (value) => {
     if (!value) return 'Not set';
     const date = new Date(value);
-    return Number.isNaN(date.getTime())
-        ? 'Not set'
-        : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    return Number.isNaN(date.getTime()) ? 'Not set' : date.toLocaleDateString();
 };
 
 const getDaysLeftLabel = (deadline) => {

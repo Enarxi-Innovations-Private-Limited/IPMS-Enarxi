@@ -42,7 +42,7 @@ import ManagerItemMasterPage from './components/inventory/ManagerItemMasterPage.
 import StoreDashboard from './components/inventory/StoreDashboard.jsx';
 import PurchaseDashboard from './components/inventory/PurchaseDashboard.jsx';
 import PurchasingHub from './components/inventory/PurchasingHub.jsx';
-import { clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
+import { canAccessInventory, clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
   SUPER_ADMIN: '/super',
@@ -362,7 +362,7 @@ function App() {
       <Route
         path="/engineer/inventory"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <StockOverview currentPage="inventory" />
           </ProtectedRoute>
         }
@@ -370,7 +370,7 @@ function App() {
       <Route
         path="/engineer/material-requests"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <MaterialRequestPage currentPage="material-requests" />
           </ProtectedRoute>
         }
@@ -378,7 +378,7 @@ function App() {
       <Route
         path="/engineer/inventory/returns"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <ProjectReturn currentPage="returns" />
           </ProtectedRoute>
         }
@@ -386,7 +386,7 @@ function App() {
       <Route
         path="/engineer/inventory/dispatches"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <StoreDispatchPage currentPage="inv-dispatches" />
           </ProtectedRoute>
         }
@@ -394,7 +394,7 @@ function App() {
       <Route
         path="/engineer/inventory/ledger"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <InventoryAudit currentPage="inv-ledger" />
           </ProtectedRoute>
         }
@@ -402,7 +402,7 @@ function App() {
       <Route
         path="/engineer/inventory/item-master"
         element={
-          <ProtectedRoute allowedRoles={['MANAGER']}>
+          <ProtectedRoute allowedRoles={['MANAGER']} allowIf={canAccessInventory}>
             <ManagerItemMasterPage />
           </ProtectedRoute>
         }

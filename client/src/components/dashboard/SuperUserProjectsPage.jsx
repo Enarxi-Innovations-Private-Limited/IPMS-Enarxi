@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
+import { getCurrentUser } from '../../services/authService.js';
 import SuperUserLayout from '../common/SuperUserLayout.jsx';
 import BulkProjectUploadModal from './BulkProjectUploadModal.jsx';
 import ProductionDashboard from './ProductionDashboard.jsx';
@@ -15,6 +16,13 @@ export default function SuperUserProjectsPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('ALL');
     const [filterDepartment, setFilterDepartment] = useState('ALL');
+    const [deadlineExtensionQueue, setDeadlineExtensionQueue] = useState([]);
+    const [selectedProjectExtensionRequests, setSelectedProjectExtensionRequests] = useState([]);
+    const [loadingDeadlineExtensionQueue, setLoadingDeadlineExtensionQueue] = useState(false);
+    const [loadingProjectExtensionRequests, setLoadingProjectExtensionRequests] = useState(false);
+    const [reviewingExtensionRequestId, setReviewingExtensionRequestId] = useState(null);
+    const currentUser = getCurrentUser();
+    const isSuperAdmin = String(currentUser?.role || '').toUpperCase() === 'SUPER_ADMIN';
 
     const isProjectDelayed = (project) => {
         if (!project || project.status === 'COMPLETED' || !project.deadline) return false;
@@ -107,6 +115,9 @@ export default function SuperUserProjectsPage() {
     useEffect(() => {
         loadProjects();
         loadUsers();
+        if (isSuperAdmin) {
+            loadDeadlineExtensionQueue();
+        }
     }, []);
 
     const loadProjects = async () => {
@@ -129,6 +140,81 @@ export default function SuperUserProjectsPage() {
             setManagers(res.data.filter(u => u.role?.toUpperCase() === 'MANAGER'));
         } catch (err) {
             console.error('Failed to load users:', err);
+        }
+    };
+
+    const loadDeadlineExtensionQueue = async () => {
+        if (!isSuperAdmin) return;
+        try {
+            setLoadingDeadlineExtensionQueue(true);
+            const res = await api.get('/project-deadline-extension-requests', {
+                params: { status: 'PENDING' }
+            });
+            setDeadlineExtensionQueue(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to load deadline extension queue:', err);
+        } finally {
+            setLoadingDeadlineExtensionQueue(false);
+        }
+    };
+
+    const loadProjectExtensionRequests = async (projectId) => {
+        if (!isSuperAdmin || !projectId) {
+            setSelectedProjectExtensionRequests([]);
+            return;
+        }
+        try {
+            setLoadingProjectExtensionRequests(true);
+            const res = await api.get('/project-deadline-extension-requests', {
+                params: { projectId }
+            });
+            setSelectedProjectExtensionRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to load project extension requests:', err);
+            setSelectedProjectExtensionRequests([]);
+        } finally {
+            setLoadingProjectExtensionRequests(false);
+        }
+    };
+
+    const handleDeadlineExtensionReview = async (request, approved) => {
+        if (!isSuperAdmin || !request?.id) return;
+
+        let rejectionReason = '';
+        if (!approved) {
+            rejectionReason = window.prompt('Enter the rejection reason for this deadline extension request:')?.trim() || '';
+            if (!rejectionReason) {
+                setError('Rejection reason is required to reject a deadline extension request.');
+                return;
+            }
+        }
+
+        try {
+            setReviewingExtensionRequestId(request.id);
+            await api.put(`/project-deadline-extension-requests/${request.id}/review`, {
+                approved,
+                rejectionReason
+            });
+            await Promise.all([
+                loadProjects(),
+                loadDeadlineExtensionQueue(),
+                loadProjectExtensionRequests(request.projectId)
+            ]);
+
+            if (selectedProject?.id === request.projectId) {
+                try {
+                    const projectRes = await api.get(`/projects/${request.projectId}`);
+                    setSelectedProject(projectRes.data);
+                } catch (refreshErr) {
+                    console.error('Failed to refresh selected project after review:', refreshErr);
+                }
+            }
+            setError('');
+        } catch (err) {
+            console.error('Failed to review deadline extension request:', err);
+            setError(err.response?.data?.message || 'Failed to review deadline extension request');
+        } finally {
+            setReviewingExtensionRequestId(null);
         }
     };
 
@@ -403,6 +489,7 @@ export default function SuperUserProjectsPage() {
     const openDetailsModal = async (project) => {
         setSelectedProject(project);
         setShowDetailsModal(true);
+        loadProjectExtensionRequests(project.id);
         try {
             const res = await api.get(`/projects/${project.id}`);
             setSelectedProject(res.data);
@@ -539,6 +626,86 @@ export default function SuperUserProjectsPage() {
                         <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-6">
                             {error}
                             <button onClick={() => setError('')} className="float-right">×</button>
+                        </div>
+                    )}
+
+                    {isSuperAdmin && (
+                        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-900">Deadline Extension Approval Queue</h3>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        Managers cannot assign tasks on overdue projects until you approve a new future deadline.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={loadDeadlineExtensionQueue}
+                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-medium text-amber-700 transition hover:bg-amber-100"
+                                >
+                                    <span className="material-symbols-outlined text-base">refresh</span>
+                                    Refresh Queue
+                                </button>
+                            </div>
+
+                            {loadingDeadlineExtensionQueue ? (
+                                <p className="mt-4 text-sm text-slate-500">Loading pending requests...</p>
+                            ) : deadlineExtensionQueue.length > 0 ? (
+                                <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                                    {deadlineExtensionQueue.map((request) => (
+                                        <div key={request.id} className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <p className="text-sm font-semibold text-slate-900">{request.projectName || 'Project'}</p>
+                                                    <p className="mt-1 text-xs text-slate-500">
+                                                        Manager: {request.requestedByName || 'Unknown'}
+                                                    </p>
+                                                </div>
+                                                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700">
+                                                    Pending
+                                                </span>
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                                                <div className="rounded-lg bg-slate-50 p-3">
+                                                    <p className="font-semibold text-slate-500">Current Deadline</p>
+                                                    <p className="mt-1 text-sm text-slate-900">
+                                                        {request.currentDeadline ? new Date(request.currentDeadline).toLocaleDateString('en-GB') : 'Not set'}
+                                                    </p>
+                                                </div>
+                                                <div className="rounded-lg bg-emerald-50 p-3">
+                                                    <p className="font-semibold text-emerald-700">Requested Deadline</p>
+                                                    <p className="mt-1 text-sm text-emerald-900">
+                                                        {request.requestedDeadline ? new Date(request.requestedDeadline).toLocaleDateString('en-GB') : 'Not set'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 rounded-lg bg-slate-50 p-3">
+                                                <p className="text-xs font-semibold text-slate-500">Reason</p>
+                                                <p className="mt-1 text-sm text-slate-700">{request.reason}</p>
+                                            </div>
+                                            <div className="mt-4 flex flex-wrap gap-3">
+                                                <button
+                                                    onClick={() => handleDeadlineExtensionReview(request, true)}
+                                                    disabled={reviewingExtensionRequestId === request.id}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">check_circle</span>
+                                                    Approve
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeadlineExtensionReview(request, false)}
+                                                    disabled={reviewingExtensionRequestId === request.id}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">cancel</span>
+                                                    Reject
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="mt-4 text-sm text-slate-500">No pending deadline extension requests.</p>
+                            )}
                         </div>
                     )}
 
@@ -779,7 +946,7 @@ export default function SuperUserProjectsPage() {
                                         type="date"
                                         required
                                         min={new Date().toISOString().split('T')[0]}
-                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="date-input-light w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.startDate}
                                         onChange={(e) => setCreateForm({ ...createForm, startDate: e.target.value })}
                                     />
@@ -790,7 +957,7 @@ export default function SuperUserProjectsPage() {
                                         type="date"
                                         required
                                         min={createForm.startDate || new Date().toISOString().split('T')[0]}
-                                        className="w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="date-input-light w-full bg-slate-50 border-slate-200 rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         value={createForm.endDate}
                                         onChange={(e) => setCreateForm({ ...createForm, endDate: e.target.value })}
                                     />
@@ -1086,6 +1253,67 @@ export default function SuperUserProjectsPage() {
 
                                     {/* Right Column: Sidebar */}
                                     <div className="w-full lg:w-96 space-y-6 shrink-0 mt-1">
+                                        {isSuperAdmin && (
+                                            <div className="space-y-4">
+                                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Deadline Extension Requests</h4>
+                                                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
+                                                    <p className="text-sm font-semibold text-amber-300">
+                                                        Overdue projects require super-admin deadline approval before managers can assign tasks again.
+                                                    </p>
+                                                    {loadingProjectExtensionRequests ? (
+                                                        <p className="mt-3 text-xs text-slate-400">Loading request history...</p>
+                                                    ) : selectedProjectExtensionRequests.length > 0 ? (
+                                                        <div className="mt-4 space-y-3">
+                                                            {selectedProjectExtensionRequests.slice(0, 4).map((request) => (
+                                                                <div key={request.id} className="rounded-xl border border-white/5 bg-slate-950/30 p-3">
+                                                                    <div className="flex items-start justify-between gap-3">
+                                                                        <div>
+                                                                            <p className="text-xs font-semibold text-slate-200">
+                                                                                {request.requestedDeadline ? new Date(request.requestedDeadline).toLocaleDateString('en-GB') : 'Not set'}
+                                                                            </p>
+                                                                            <p className="mt-1 text-[11px] text-slate-400">
+                                                                                Requested by {request.requestedByName || 'Unknown'}
+                                                                            </p>
+                                                                        </div>
+                                                                        <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                                                                            request.status === 'APPROVED'
+                                                                                ? 'bg-emerald-500/15 text-emerald-300'
+                                                                                : request.status === 'REJECTED'
+                                                                                    ? 'bg-rose-500/15 text-rose-300'
+                                                                                    : 'bg-amber-500/15 text-amber-300'
+                                                                        }`}>
+                                                                            {request.status}
+                                                                        </span>
+                                                                    </div>
+                                                                    <p className="mt-2 text-xs text-slate-400">{request.reason}</p>
+                                                                    {request.status === 'PENDING' && (
+                                                                        <div className="mt-3 flex gap-2">
+                                                                            <button
+                                                                                onClick={() => handleDeadlineExtensionReview(request, true)}
+                                                                                disabled={reviewingExtensionRequestId === request.id}
+                                                                                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                            >
+                                                                                Approve
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDeadlineExtensionReview(request, false)}
+                                                                                disabled={reviewingExtensionRequestId === request.id}
+                                                                                className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                                                            >
+                                                                                Reject
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="mt-3 text-xs text-slate-400">No deadline extension requests for this project yet.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Stats */}
                                         <div className="space-y-4">
                                             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest">Project Stats</h4>

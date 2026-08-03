@@ -17,6 +17,15 @@ const getNextVendorCode = (vendors = []) => {
     return `VEN-${String(maxNumber + 1).padStart(3, '0')}`;
 };
 
+const TAX_BASIS_OPTIONS = [
+    { value: 'INCLUSIVE', label: 'Inclusive GST' },
+    { value: 'EXCLUSIVE', label: 'Exclusive GST' },
+    { value: 'UNKNOWN', label: 'Unknown' }
+];
+
+const getTaxBasisLabel = (value) =>
+    TAX_BASIS_OPTIONS.find((option) => option.value === value)?.label || 'Unknown';
+
 export default function VendorManagement() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
@@ -27,7 +36,8 @@ export default function VendorManagement() {
         email: '',
         phone: '',
         gstin: '',
-        address: ''
+        address: '',
+        priceTaxBasis: 'UNKNOWN'
     };
     const [vendors, setVendors] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -43,7 +53,7 @@ export default function VendorManagement() {
         fetchVendors();
     }, []);
 
-    const fetchVendors = async () => {
+    async function fetchVendors() {
         try {
             setLoading(true);
             const res = await inventoryService.getVendors();
@@ -53,7 +63,7 @@ export default function VendorManagement() {
         } finally {
             setLoading(false);
         }
-    };
+    }
 
     const resetModal = () => {
         setShowModal(false);
@@ -76,7 +86,8 @@ export default function VendorManagement() {
             email: vendor.email || '',
             phone: vendor.phone || '',
             gstin: vendor.gstin || '',
-            address: vendor.address || ''
+            address: vendor.address || '',
+            priceTaxBasis: vendor.priceTaxBasis || 'UNKNOWN'
         });
         setShowModal(true);
     };
@@ -93,6 +104,10 @@ export default function VendorManagement() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
+            if (formData.priceTaxBasis === 'UNKNOWN') {
+                notifyError('Select whether this vendor price is Inclusive GST or Exclusive GST before saving.');
+                return;
+            }
             if (editingVendorId) {
                 await inventoryService.updateVendor(editingVendorId, formData);
                 notifySuccess('Vendor updated successfully.');
@@ -171,7 +186,10 @@ export default function VendorManagement() {
                                         {vendor.phone || 'N/A'}
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
-                                        <span className="text-[10px] text-text-secondary font-bold uppercase">GST: {vendor.gstin || 'UNREGISTERED'}</span>
+                                        <div className="space-y-1">
+                                            <div className="text-[10px] text-text-secondary font-bold uppercase">GST: {vendor.gstin || 'UNREGISTERED'}</div>
+                                            <div className="text-[10px] text-text-secondary font-bold uppercase">Price Basis: {getTaxBasisLabel(vendor.priceTaxBasis || 'UNKNOWN')}</div>
+                                        </div>
                                         <div className="flex items-center gap-4">
                                             <button
                                                 onClick={() => openEditModal(vendor)}
@@ -247,6 +265,23 @@ export default function VendorManagement() {
                                         onChange={(e) => setFormData({...formData, gstin: e.target.value})}
                                     />
                                 </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Price Tax Basis</label>
+                                <select
+                                    className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[#556070] focus:border-primary outline-none"
+                                    value={formData.priceTaxBasis}
+                                    onChange={(e) => setFormData({ ...formData, priceTaxBasis: e.target.value })}
+                                    required
+                                >
+                                    <option value="UNKNOWN" disabled>Select tax basis</option>
+                                    {TAX_BASIS_OPTIONS.filter((option) => option.value !== 'UNKNOWN').map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                    ))}
+                                </select>
+                                <p className="mt-1 text-[11px] text-text-secondary">
+                                    Inclusive GST uses fetched price as-is. Exclusive GST adds 18% only for BOM comparison.
+                                </p>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>

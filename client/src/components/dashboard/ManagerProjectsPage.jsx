@@ -76,6 +76,12 @@ export default function ManagerProjectsPage() {
     const [showAssignDeadlineModal, setShowAssignDeadlineModal] = useState(false);
     const [pendingAssignment, setPendingAssignment] = useState(null); // { taskId, assigneeId, task }
     const [assignDeadline, setAssignDeadline] = useState('');
+    const [showDeadlineExtensionModal, setShowDeadlineExtensionModal] = useState(false);
+    const [deadlineExtensionReason, setDeadlineExtensionReason] = useState('');
+    const [deadlineExtensionDate, setDeadlineExtensionDate] = useState('');
+    const [deadlineExtensionRequests, setDeadlineExtensionRequests] = useState([]);
+    const [loadingDeadlineExtensionRequests, setLoadingDeadlineExtensionRequests] = useState(false);
+    const [submittingDeadlineExtension, setSubmittingDeadlineExtension] = useState(false);
 
     // Add Member State
     const [showAddMember, setShowAddMember] = useState(false);
@@ -117,6 +123,15 @@ export default function ManagerProjectsPage() {
     const isFullProductProductionProject = (project) => project?.projectType === 'FULL_PRODUCT_PRODUCTION';
     const isBoardProjectView = (project, tasksForProject = []) =>
         isProductionOnlyProject(project, tasksForProject) || isFullProductProductionProject(project);
+
+    const isProjectOverdue = (project) => {
+        if (!project?.deadline) return false;
+        const deadline = new Date(project.deadline);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        deadline.setHours(0, 0, 0, 0);
+        return deadline < today;
+    };
 
     useEffect(() => {
         if (notification) {
@@ -255,6 +270,59 @@ export default function ManagerProjectsPage() {
         }
     };
 
+    const loadDeadlineExtensionRequests = async (projectId) => {
+        if (!projectId) return;
+        try {
+            setLoadingDeadlineExtensionRequests(true);
+            const res = await api.get('/project-deadline-extension-requests', { params: { projectId } });
+            setDeadlineExtensionRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to load deadline extension requests:', err);
+            setDeadlineExtensionRequests([]);
+        } finally {
+            setLoadingDeadlineExtensionRequests(false);
+        }
+    };
+
+    const openDeadlineExtensionModal = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setDeadlineExtensionDate(tomorrow.toISOString().slice(0, 10));
+        setDeadlineExtensionReason('');
+        setShowDeadlineExtensionModal(true);
+    };
+
+    const handleSubmitDeadlineExtensionRequest = async (e) => {
+        if (e) e.preventDefault();
+        if (!selectedProject) return;
+        if (!deadlineExtensionDate) {
+            setNotification({ message: 'Requested deadline is required.', type: 'error' });
+            return;
+        }
+        if (!deadlineExtensionReason.trim()) {
+            setNotification({ message: 'Reason is required for deadline extension.', type: 'error' });
+            return;
+        }
+
+        try {
+            setSubmittingDeadlineExtension(true);
+            const res = await api.post(`/projects/${selectedProject.id}/deadline-extension-requests`, {
+                requestedDeadline: deadlineExtensionDate,
+                reason: deadlineExtensionReason.trim()
+            });
+            setNotification({ message: res.data?.message || 'Deadline extension request submitted.', type: 'success' });
+            setShowDeadlineExtensionModal(false);
+            await loadDeadlineExtensionRequests(selectedProject.id);
+        } catch (err) {
+            setNotification({
+                message: err.response?.data?.message || 'Failed to submit deadline extension request.',
+                type: 'error'
+            });
+        } finally {
+            setSubmittingDeadlineExtension(false);
+        }
+    };
+
     const handleDeleteTask = async (taskId) => {
         try {
             console.log('Attempting to delete task:', taskId);
@@ -368,6 +436,7 @@ export default function ManagerProjectsPage() {
         setShowDetailsModal(true);
         setShowAddTask(false);
         setShowAddMember(false);
+        loadDeadlineExtensionRequests(project.id);
     };
 
     const openTaskDetail = (task) => {
@@ -511,6 +580,12 @@ export default function ManagerProjectsPage() {
     // Confirm assignment with deadline
     const handleConfirmAssignment = async () => {
         if (!pendingAssignment) return;
+        if (selectedProjectIsOverdue) {
+            setNotification({ message: 'Project deadline has passed. Request super admin approval to extend the deadline before assigning tasks.', type: 'error' });
+            setShowAssignDeadlineModal(false);
+            openDeadlineExtensionModal();
+            return;
+        }
 
         const { taskId, assigneeId, isSelfAssign } = pendingAssignment;
 
@@ -558,6 +633,7 @@ export default function ManagerProjectsPage() {
             setAssignDeadline('');
         } catch (err) {
             console.error("Failed to assign task", err);
+            setNotification({ message: err.response?.data?.message || 'Failed to assign task.', type: 'error' });
             loadData(); // Revert on error
         }
     };
@@ -600,6 +676,11 @@ export default function ManagerProjectsPage() {
     // Function to handle "Assign" click
     const handleAssignClick = (e, task) => {
         e.stopPropagation();
+        if (isProjectOverdue(selectedProject)) {
+            setNotification({ message: 'Project deadline has passed. Request super admin approval to extend the deadline before assigning tasks.', type: 'error' });
+            openDeadlineExtensionModal();
+            return;
+        }
         const rect = e.currentTarget.getBoundingClientRect();
         // Position relative to viewport, handling edge cases
         setUserPickerPosition({ x: rect.left, y: rect.bottom + 5 });
@@ -641,6 +722,8 @@ export default function ManagerProjectsPage() {
         ? tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))
         : [];
     const projectTasks = getProjectTasks();
+    const selectedProjectIsOverdue = isProjectOverdue(selectedProject);
+    const latestDeadlineExtensionRequest = deadlineExtensionRequests[0] || null;
     const totalPages = Math.ceil(projectTasks.length / itemsPerPage);
     const paginatedTasks = projectTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
     const todayDateString = new Date().toISOString().split('T')[0];
@@ -854,6 +937,65 @@ export default function ManagerProjectsPage() {
                             </div>
                         ) : (
                             <>
+                                {selectedProjectIsOverdue && (
+                                    <div className="px-4 pt-4 md:px-8 md:pt-6 shrink-0">
+                                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                <div>
+                                                    <p className="text-sm font-bold text-amber-300">Project deadline has already passed.</p>
+                                                    <p className="mt-1 text-xs text-amber-100/80">
+                                                        Managers cannot assign or self-assign tasks until a super admin approves a deadline extension request.
+                                                    </p>
+                                                    {latestDeadlineExtensionRequest && (
+                                                        <p className="mt-2 text-xs text-amber-100/70">
+                                                            Latest request: <span className="font-semibold">{latestDeadlineExtensionRequest.status}</span>
+                                                            {' '}for {new Date(latestDeadlineExtensionRequest.requestedDeadline).toLocaleDateString('en-GB')}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={openDeadlineExtensionModal}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 transition-colors hover:bg-amber-400"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">event_repeat</span>
+                                                    Request Deadline Extension
+                                                </button>
+                                            </div>
+                                            <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/30 p-3">
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Request History</p>
+                                                {loadingDeadlineExtensionRequests ? (
+                                                    <p className="mt-2 text-xs text-slate-400">Loading requests...</p>
+                                                ) : deadlineExtensionRequests.length > 0 ? (
+                                                    <div className="mt-2 space-y-2">
+                                                        {deadlineExtensionRequests.slice(0, 3).map((request) => (
+                                                            <div key={request.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-slate-900/40 px-3 py-2 text-xs">
+                                                                <div>
+                                                                    <p className="text-slate-200">
+                                                                        Requested <span className="font-semibold">{new Date(request.requestedDeadline).toLocaleDateString('en-GB')}</span>
+                                                                    </p>
+                                                                    <p className="text-slate-400 line-clamp-1">{request.reason}</p>
+                                                                </div>
+                                                                <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                                                                    request.status === 'APPROVED'
+                                                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                                                        : request.status === 'REJECTED'
+                                                                            ? 'bg-rose-500/15 text-rose-300'
+                                                                            : 'bg-amber-500/15 text-amber-300'
+                                                                }`}>
+                                                                    {request.status}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-2 text-xs text-slate-400">No extension requests submitted yet.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Controls: Filter & Search */}
                                 <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
                                     <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
@@ -897,18 +1039,18 @@ export default function ManagerProjectsPage() {
                                                     type="text"
                                                     value={newTaskTitle}
                                                     onChange={(e) => setNewTaskTitle(e.target.value)}
-                                                    className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
-                                                    placeholder="Task Title..."
-                                                />
-                                            </div>
-                                            <div className="flex-[2] relative">
-                                                <input
+                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-100 placeholder:text-[#8ea4c9] focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                            placeholder="Task Title..."
+                                        />
+                                    </div>
+                                    <div className="flex-[2] relative">
+                                        <input
                                                     type="text"
                                                     value={newTaskDescription}
                                                     onChange={(e) => setNewTaskDescription(e.target.value)}
-                                                    className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
-                                                    placeholder="Description (optional)..."
-                                                />
+                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-100 placeholder:text-[#8ea4c9] focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                            placeholder="Description (optional)..."
+                                        />
                                                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
                                                     <div className="relative">
                                                         <div className={`flex items-center gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border transition-colors ${newTaskDeadline ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-400 hover:bg-slate-800'}`}>
@@ -1649,9 +1791,9 @@ export default function ManagerProjectsPage() {
                             setPendingAssignment(null);
                             setAssignDeadline('');
                         }}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className={`px-6 py-4 border-b border-border-dark ${pendingAssignment.isSelfAssign ? 'bg-gradient-to-r from-indigo-900/50 to-purple-900/50' : 'bg-gradient-surface'}`}>
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <div className="relative w-full max-w-md mx-4 rounded-2xl border border-slate-700 bg-[#0F172A] shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                            <div className={`px-6 py-4 border-b border-slate-700 ${pendingAssignment.isSelfAssign ? 'bg-gradient-to-r from-indigo-900/80 to-purple-900/70' : 'bg-slate-900/80'}`}>
+                                <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                                     <span className={`material-symbols-outlined ${pendingAssignment.isSelfAssign ? 'text-indigo-400' : 'text-primary'}`}>
                                         {pendingAssignment.isSelfAssign ? 'person_add' : 'schedule'}
                                     </span>
@@ -1660,19 +1802,36 @@ export default function ManagerProjectsPage() {
                             </div>
                             <div className="p-6 space-y-4">
                                 {/* Task Info */}
-                                <div className="bg-background-dark/50 rounded-lg p-4 border border-border-dark">
-                                    <p className="text-white font-medium">{pendingAssignment.task?.title}</p>
-                                    <p className="text-text-secondary text-sm mt-1">
+                                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                                    <p className="text-slate-100 font-medium">{pendingAssignment.task?.title}</p>
+                                    <p className="text-slate-300 text-sm mt-1">
                                         {pendingAssignment.isSelfAssign
                                             ? <span className="text-indigo-400 font-medium">Taking this task for yourself</span>
-                                            : <>Assigning to: <span className="text-white">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span></>
+                                            : <>Assigning to: <span className="text-slate-100">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span></>
                                         }
                                     </p>
                                 </div>
 
+                                {selectedProjectIsOverdue ? (
+                                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                                        <p className="text-sm font-semibold text-amber-300">
+                                            Assignment is blocked because this project deadline has passed.
+                                        </p>
+                                        <p className="mt-2 text-xs text-amber-100/80">
+                                            Managers must request a super-admin deadline extension before assigning or self-assigning tasks again.
+                                        </p>
+                                        {latestDeadlineExtensionRequest && (
+                                            <p className="mt-2 text-xs text-amber-100/70">
+                                                Latest request: <span className="font-semibold">{latestDeadlineExtensionRequest.status}</span>
+                                                {' '}for {new Date(latestDeadlineExtensionRequest.requestedDeadline).toLocaleDateString('en-GB')}
+                                            </p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
                                 {/* Deadline Input */}
                                 <div>
-                                    <label className="block text-text-secondary text-sm mb-2">
+                                    <label className="block text-slate-300 text-sm mb-2">
                                         Deadline (when should this be completed?)
                                     </label>
                                     <input
@@ -1685,19 +1844,21 @@ export default function ManagerProjectsPage() {
                                         })()}
                                         max={selectedProject?.deadline ? new Date(selectedProject.deadline).toISOString().split('T')[0] : undefined}
                                         onChange={(e) => setAssignDeadline(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="date-input-dark w-full bg-slate-950 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                     />
                                     {selectedProject?.deadline && (
-                                        <p className="text-text-secondary text-xs mt-1">
+                                        <p className="text-slate-300 text-xs mt-1">
                                             📅 Must be between <span className="text-white">{selectedProject.startDate ? new Date(selectedProject.startDate).toLocaleDateString() : 'Today'}</span> and <span className="text-primary font-medium">{new Date(selectedProject.deadline).toLocaleDateString()}</span>
                                         </p>
                                     )}
                                 </div>
 
                                 {/* Info */}
-                                <p className="text-text-secondary text-xs">
+                                <p className="text-slate-300 text-xs">
                                     💡 Performance will be calculated based on when the task is completed vs. this deadline.
                                 </p>
+                                    </>
+                                )}
                             </div>
                             <div className="px-6 py-4 border-t border-border-dark flex justify-between gap-3">
                                 <button
@@ -1706,25 +1867,95 @@ export default function ManagerProjectsPage() {
                                         setPendingAssignment(null);
                                         setAssignDeadline('');
                                     }}
-                                    className="px-4 py-2 rounded-lg border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                    className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleConfirmAssignment}
-                                    disabled={!assignDeadline}
-                                    className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${pendingAssignment.isSelfAssign
-                                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                                        : 'bg-primary hover:bg-primary-dark text-white'
+                                    onClick={selectedProjectIsOverdue ? openDeadlineExtensionModal : handleConfirmAssignment}
+                                    disabled={!selectedProjectIsOverdue && !assignDeadline}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${selectedProjectIsOverdue
+                                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                                        : pendingAssignment.isSelfAssign
+                                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                            : 'bg-primary hover:bg-primary-dark text-white'
                                         }`}
                                 >
-                                    {pendingAssignment.isSelfAssign ? 'Take Task with Deadline' : 'Assign with Deadline'}
+                                    {selectedProjectIsOverdue
+                                        ? 'Request Deadline Extension'
+                                        : pendingAssignment.isSelfAssign ? 'Take Task with Deadline' : 'Assign with Deadline'}
                                 </button>
                             </div>
                         </div>
                     </div>
                 )
             }
+            {showDeadlineExtensionModal && selectedProject && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeadlineExtensionModal(false)}></div>
+                    <div className="relative mx-4 w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700 bg-[#0F172A] shadow-2xl">
+                        <div className="border-b border-slate-800 bg-slate-900/60 px-6 py-4">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                                <span className="material-symbols-outlined text-amber-400">event_repeat</span>
+                                Request Deadline Extension
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-400">
+                                Submit a new deadline and business reason for super-admin approval.
+                            </p>
+                        </div>
+                        <form onSubmit={handleSubmitDeadlineExtensionRequest} className="space-y-4 p-6">
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                                <p className="text-sm font-semibold text-white">{selectedProject.name}</p>
+                                <p className="mt-1 text-xs text-slate-400">
+                                    Current deadline: {selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('en-GB') : 'Not set'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Requested New Deadline
+                                </label>
+                                <input
+                                    type="date"
+                                    value={deadlineExtensionDate}
+                                    min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                                    onChange={(e) => setDeadlineExtensionDate(e.target.value)}
+                                    className="date-input-dark w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Reason for Extension
+                                </label>
+                                <textarea
+                                    value={deadlineExtensionReason}
+                                    onChange={(e) => setDeadlineExtensionReason(e.target.value)}
+                                    rows={4}
+                                    placeholder="Explain why this project deadline must be extended."
+                                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30"
+                                    required
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeadlineExtensionModal(false)}
+                                    className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingDeadlineExtension}
+                                    className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {submittingDeadlineExtension ? 'Submitting...' : 'Submit Request'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             {/* Rejection Reason Modal */}
             {
                 showRejectModal && taskToReject && (

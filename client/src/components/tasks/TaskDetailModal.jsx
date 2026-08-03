@@ -339,7 +339,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                             type="date"
                                             value={deadlineInput}
                                             onChange={(e) => setDeadlineInput(e.target.value)}
-                                            className="bg-background-dark border border-border-dark rounded px-2 py-1 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                            className="date-input-dark bg-background-dark border border-border-dark rounded px-2 py-1 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         />
                                         <button
                                             onClick={handleDeadlineUpdate}

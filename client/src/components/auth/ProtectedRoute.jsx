@@ -13,7 +13,7 @@ const ROLE_ROUTE_MAP = {
   PURCHASE_MANAGER: '/purchase',
 };
 
-export default function ProtectedRoute({ children, allowedRoles }) {
+export default function ProtectedRoute({ children, allowedRoles, allowIf }) {
   const location = useLocation();
 
   const token = getToken();
@@ -26,6 +26,11 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     const redirectTo = ROLE_ROUTE_MAP[user.role] || '/login';
     return <Navigate to={redirectTo} replace />;
+  }
+
+  if (typeof allowIf === 'function' && !allowIf(user)) {
+    const redirectTo = ROLE_ROUTE_MAP[user.role] || '/login';
+    return <Navigate to={redirectTo} replace state={{ from: location }} />;
   }
 
   return children;

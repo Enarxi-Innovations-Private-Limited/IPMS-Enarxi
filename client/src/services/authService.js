@@ -29,6 +29,23 @@ export function getCurrentUser() {
   return getAuth()?.user || null;
 }
 
+export function normalizeDepartment(department) {
+  return String(department || '').trim().toUpperCase();
+}
+
+export function canAccessInventory(user = getCurrentUser()) {
+  if (!user?.role) return false;
+
+  const role = String(user.role).trim().toUpperCase();
+  const department = normalizeDepartment(user.department);
+
+  if (role === 'SUPER_ADMIN' || role === 'SUPER_USER') return true;
+  if (role === 'STORE_MANAGER' || role === 'PURCHASE_MANAGER') return true;
+  if (role === 'MANAGER' || role === 'ENGINEER') return department === 'HARDWARE';
+
+  return false;
+}
+
 function base64UrlDecode(input) {
   // Convert base64url -> base64
   const base64 = input.replace(/-/g, '+').replace(/_/g, '/');

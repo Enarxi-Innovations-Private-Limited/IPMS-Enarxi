@@ -17,9 +17,125 @@ const reasonLabel = {
     no_sku: 'Needs SKU mapping',
     no_quote: 'No quote returned',
     vendor_unmapped: 'Vendor not mapped',
+    vendor_tax_basis_missing: 'Vendor tax mode missing',
     cart_failed: 'Cart failed',
-    partial_fulfillment: 'Partially fulfilled'
+    partial_fulfillment: 'Partially fulfilled',
+    result_binding_failed: 'Binding failed'
 };
+
+const analysisStateLabel = {
+    VERIFIED: 'Resolved',
+    PARTIAL: 'Partially fulfilled',
+    FAILED: 'Cart failed',
+    NO_SKU: 'Needs SKU mapping',
+    NO_QUOTE: 'No quote returned',
+    TAX_BASIS_MISSING: 'Vendor tax mode missing',
+    BINDING_FAILED: 'Binding failed',
+    NOT_ANALYZED: 'Not analyzed'
+};
+
+function createDefaultLineState(quantity = 0) {
+    return {
+        selected: false,
+        vendorId: '',
+        vendorName: '',
+        orderQuantity: String(quantity || 0),
+        rate: '',
+        gstPercent: '18',
+        resolved: false,
+        reason: '',
+        matchedSku: '',
+        quoteMeta: null,
+        cartStatus: '',
+        cartMessage: '',
+        cartVendorUrl: '',
+        cartAllocatedQty: 0,
+        cartUnfulfilledQty: 0,
+        cartAllocations: [],
+        analysisState: 'NOT_ANALYZED',
+        analysisAttempted: false,
+        fetchedPrice: 0,
+        comparisonPrice: 0,
+        priceTaxBasis: 'UNKNOWN'
+    };
+}
+
+function isAnalyzedState(state) {
+    return Boolean(
+        state?.analysisAttempted
+        || state?.analysisState && state.analysisState !== 'NOT_ANALYZED'
+        || state?.reason
+        || state?.cartStatus
+        || state?.resolved
+        || state?.vendorId
+        || state?.matchedSku
+        || state?.rate
+    );
+}
+
+function getStatusPresentation(state) {
+    if (state?.cartStatus === 'PROCESSING') {
+        return {
+            label: 'In progress',
+            className: 'text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.analysisState === 'PARTIAL') {
+        return {
+            label: analysisStateLabel.PARTIAL,
+            className: 'text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.analysisState === 'VERIFIED') {
+        return {
+            label: analysisStateLabel.VERIFIED,
+            className: 'text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.analysisState === 'NO_SKU' || state?.analysisState === 'NO_QUOTE' || state?.analysisState === 'BINDING_FAILED' || state?.analysisState === 'TAX_BASIS_MISSING') {
+        return {
+            label: analysisStateLabel[state.analysisState] || reasonLabel[state?.reason] || 'Analysis blocked',
+            className: 'text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.analysisState === 'FAILED' || state?.reason === 'cart_failed' || state?.cartStatus === 'FAILED') {
+        return {
+            label: analysisStateLabel.FAILED,
+            className: 'text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.vendorId && toNumber(state?.rate) > 0 && state?.matchedSku) {
+        return {
+            label: 'Manual ready',
+            className: 'text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    if (state?.reason) {
+        return {
+            label: reasonLabel[state.reason] || state.reason,
+            className: 'text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700',
+            title: state?.cartMessage || buildAnalysisDebugTitle(state)
+        };
+    }
+
+    return {
+        label: analysisStateLabel.NOT_ANALYZED,
+        className: 'text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600',
+        title: state?.cartMessage || buildAnalysisDebugTitle(state)
+    };
+}
 
 function formatMappedSkus(mappings = []) {
     const values = (mappings || [])
@@ -60,6 +176,38 @@ function resolveVendorFromCell(rawValue, vendorOptions) {
     ) || null;
 }
 
+function buildAnalysisDebugTitle(state) {
+    const parts = [];
+    if (state?.priceTaxBasis && state.priceTaxBasis !== 'UNKNOWN') {
+        parts.push(`Tax mode: ${state.priceTaxBasis}`);
+    }
+    if (toNumber(state?.fetchedPrice) > 0) {
+        parts.push(`Fetched: ${toNumber(state.fetchedPrice).toFixed(2)}`);
+    }
+    if (toNumber(state?.comparisonPrice) > 0) {
+        parts.push(`Compared: ${toNumber(state.comparisonPrice).toFixed(2)}`);
+    }
+    if (state?.cartMessage) {
+        parts.push(state.cartMessage);
+    }
+    return parts.join(' | ');
+}
+
+function resolveVendorFromPartialResult(entry, vendorOptions) {
+    const primaryAllocation = Array.isArray(entry?.allocations) ? entry.allocations[0] : null;
+    return resolveVendorFromCell(
+        entry?.vendorId
+        || entry?.vendorCode
+        || entry?.vendorName
+        || entry?.best_vendor
+        || primaryAllocation?.vendorId
+        || primaryAllocation?.vendorCode
+        || primaryAllocation?.vendorName
+        || primaryAllocation?.vendor,
+        vendorOptions
+    );
+}
+
 export default function PurchasePlanning() {
     const Layout = usePortalLayout();
     const { error: notifyError, success: notifySuccess } = useNotifier();
@@ -82,6 +230,8 @@ export default function PurchasePlanning() {
     const [analysisProgressStatus, setAnalysisProgressStatus] = useState('');
     const restoreJobRef = useRef(false);
     const pendingRestoreRef = useRef(null);
+    const initializedBatchIdRef = useRef('');
+    const combinedSignatureRef = useRef('');
 
     const persistAutoQuoteJob = (payload) => {
         try {
@@ -156,54 +306,45 @@ export default function PurchasePlanning() {
 
     useEffect(() => {
         if (!selectedBatch) return;
-        const next = {};
-        (selectedBatch.lines || []).forEach((line) => {
-            next[line.purchaseRequestLineId] = {
-                selected: false,
-                vendorId: '',
-                vendorName: '',
-                orderQuantity: String(line.pendingQuantity || 0),
-                rate: '',
-                gstPercent: '18',
-                resolved: false,
-                reason: '',
-                matchedSku: '',
-                quoteMeta: null,
-                cartStatus: '',
-                cartMessage: '',
-                cartVendorUrl: '',
-                cartAllocatedQty: 0,
-                cartUnfulfilledQty: 0,
-                cartAllocations: []
-            };
+        const isSameBatch = initializedBatchIdRef.current === selectedBatch.id;
+        setLineStates((prev) => {
+            const next = {};
+            (selectedBatch.lines || []).forEach((line) => {
+                const defaultState = createDefaultLineState(line.pendingQuantity || 0);
+                const previous = prev[line.purchaseRequestLineId];
+                next[line.purchaseRequestLineId] = isSameBatch && isAnalyzedState(previous)
+                    ? {
+                        ...defaultState,
+                        ...previous,
+                        orderQuantity: previous.orderQuantity || defaultState.orderQuantity
+                    }
+                    : defaultState;
+            });
+            return next;
         });
-        setLineStates(next);
+        initializedBatchIdRef.current = selectedBatch.id;
         setAnalysisSummary(null);
     }, [selectedBatch?.id]);
 
     useEffect(() => {
-        const next = {};
-        (combinedRows || []).forEach((row) => {
-            next[row.itemId] = {
-                selected: false,
-                vendorId: '',
-                vendorName: '',
-                orderQuantity: String(row.totalRequiredQuantity || 0),
-                rate: '',
-                gstPercent: '18',
-                resolved: false,
-                reason: '',
-                matchedSku: '',
-                quoteMeta: null,
-                cartStatus: '',
-                cartMessage: '',
-                cartVendorUrl: '',
-                cartAllocatedQty: 0,
-                cartUnfulfilledQty: 0,
-                cartAllocations: []
-            };
+        const signature = (combinedRows || []).map((row) => String(row.itemId)).join('|');
+        const isSameSignature = combinedSignatureRef.current === signature;
+        setCombinedStates((prev) => {
+            const next = {};
+            (combinedRows || []).forEach((row) => {
+                const defaultState = createDefaultLineState(row.totalRequiredQuantity || 0);
+                const previous = prev[row.itemId];
+                next[row.itemId] = isSameSignature && isAnalyzedState(previous)
+                    ? {
+                        ...defaultState,
+                        ...previous,
+                        orderQuantity: previous.orderQuantity || defaultState.orderQuantity
+                    }
+                    : defaultState;
+            });
+            return next;
         });
-        setCombinedStates(next);
+        combinedSignatureRef.current = signature;
         setAnalysisSummary(null);
     }, [combinedRows]);
 
@@ -511,14 +652,18 @@ export default function PurchasePlanning() {
                 selectedIndividualLines.forEach((line) => {
                     const partial = byLineId.get(String(line.purchaseRequestLineId));
                     if (!partial) return;
+                    const vendor = resolveVendorFromPartialResult(partial, vendorOptions);
                     const bestVendor = normalizeVendorDisplayName(partial.best_vendor || partial.allocations?.[0]?.vendor || '');
                     const bestRate = partial.best_price ? String(partial.best_price).replace(/^₹/, '') : '';
                     next[line.purchaseRequestLineId] = {
                         ...next[line.purchaseRequestLineId],
                         selected: true,
+                        vendorId: vendor?.id || next[line.purchaseRequestLineId]?.vendorId || '',
                         vendorName: bestVendor || next[line.purchaseRequestLineId]?.vendorName || '',
                         rate: bestRate || next[line.purchaseRequestLineId]?.rate || '',
                         matchedSku: next[line.purchaseRequestLineId]?.matchedSku || '',
+                        analysisState: 'PROCESSING',
+                        analysisAttempted: true,
                         cartStatus: next[line.purchaseRequestLineId]?.cartStatus || 'PROCESSING',
                         cartMessage: next[line.purchaseRequestLineId]?.cartMessage || 'Pricing captured. Cart automation in progress...'
                     };
@@ -533,13 +678,17 @@ export default function PurchasePlanning() {
             selectedCombinedRows.forEach((row) => {
                 const partial = byItemId.get(String(row.itemId));
                 if (!partial) return;
+                const vendor = resolveVendorFromPartialResult(partial, vendorOptions);
                 const bestVendor = normalizeVendorDisplayName(partial.best_vendor || partial.allocations?.[0]?.vendor || '');
                 const bestRate = partial.best_price ? String(partial.best_price).replace(/^₹/, '') : '';
                 next[row.itemId] = {
                     ...next[row.itemId],
                     selected: true,
+                    vendorId: vendor?.id || next[row.itemId]?.vendorId || '',
                     vendorName: bestVendor || next[row.itemId]?.vendorName || '',
                     rate: bestRate || next[row.itemId]?.rate || '',
+                    analysisState: 'PROCESSING',
+                    analysisAttempted: true,
                     cartStatus: next[row.itemId]?.cartStatus || 'PROCESSING',
                     cartMessage: next[row.itemId]?.cartMessage || 'Pricing captured. Cart automation in progress...'
                 };
@@ -573,8 +722,13 @@ export default function PurchasePlanning() {
                         vendorId: quoted.vendorId || '',
                         vendorName: quoted.vendorName || '',
                         rate: quoted.rate ? String(quoted.rate) : '',
+                        fetchedPrice: toNumber(quoted.fetchedPrice),
+                        comparisonPrice: toNumber(quoted.comparisonPrice),
+                        priceTaxBasis: quoted.priceTaxBasis || 'UNKNOWN',
                         matchedSku: quoted.matchedSku || '',
                         quoteMeta: quoted.quoteMeta || null,
+                        analysisState: quoted.analysisState || (quoted.resolved ? 'VERIFIED' : 'FAILED'),
+                        analysisAttempted: quoted.analysisAttempted !== false,
                         cartStatus: quoted.cartStatus || '',
                         cartMessage: quoted.cartMessage || '',
                         cartVendorUrl: quoted.cartVendorUrl || '',
@@ -602,16 +756,22 @@ export default function PurchasePlanning() {
                 const resolved = rowResults.find((entry) => entry.resolved);
 
                 if (unresolved || !resolved) {
+                    const fallback = unresolved || resolved || {};
                     next[row.itemId] = {
                         ...(next[row.itemId] || {}),
                         selected: true,
                         resolved: false,
                         reason: unresolved?.reason || 'no_quote',
-                        vendorId: '',
-                        vendorName: '',
-                        rate: '',
-                        matchedSku: '',
-                        quoteMeta: null,
+                        vendorId: fallback.vendorId || next[row.itemId]?.vendorId || '',
+                        vendorName: fallback.vendorName || next[row.itemId]?.vendorName || '',
+                        rate: fallback.rate ? String(fallback.rate) : (next[row.itemId]?.rate || ''),
+                        fetchedPrice: toNumber(fallback.fetchedPrice),
+                        comparisonPrice: toNumber(fallback.comparisonPrice),
+                        priceTaxBasis: fallback.priceTaxBasis || 'UNKNOWN',
+                        matchedSku: fallback.matchedSku || next[row.itemId]?.matchedSku || '',
+                        quoteMeta: fallback.quoteMeta || next[row.itemId]?.quoteMeta || null,
+                        analysisState: fallback.analysisState || 'FAILED',
+                        analysisAttempted: fallback.analysisAttempted !== false,
                         cartStatus: unresolved?.cartStatus || 'FAILED',
                         cartMessage: unresolved?.cartMessage || '',
                         cartVendorUrl: unresolved?.cartVendorUrl || '',
@@ -630,8 +790,13 @@ export default function PurchasePlanning() {
                     vendorId: resolved.vendorId || '',
                     vendorName: resolved.vendorName || '',
                     rate: resolved.rate ? String(resolved.rate) : '',
+                    fetchedPrice: toNumber(resolved.fetchedPrice),
+                    comparisonPrice: toNumber(resolved.comparisonPrice),
+                    priceTaxBasis: resolved.priceTaxBasis || 'UNKNOWN',
                     matchedSku: resolved.matchedSku || '',
                     quoteMeta: resolved.quoteMeta || null,
+                    analysisState: resolved.analysisState || 'VERIFIED',
+                    analysisAttempted: resolved.analysisAttempted !== false,
                     cartStatus: resolved.cartStatus || 'VERIFIED',
                     cartMessage: resolved.cartMessage || '',
                     cartVendorUrl: resolved.cartVendorUrl || '',
@@ -1025,6 +1190,7 @@ export default function PurchasePlanning() {
                                                 <tbody className="divide-y divide-border-dark">
                                                     {(selectedBatch?.lines || []).map((line) => {
                                                         const state = lineStates[line.purchaseRequestLineId] || {};
+                                                        const statusPresentation = getStatusPresentation(state);
                                                         return (
                                                             <tr key={line.purchaseRequestLineId} className="hover:bg-slate-50">
                                                                 <td className="px-4 py-3">
@@ -1099,21 +1265,7 @@ export default function PurchasePlanning() {
                                                                     />
                                                                 </td>
                                                                 <td className="px-4 py-3">
-                                                                    {state.cartStatus === 'PARTIAL' ? (
-                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
-                                                                    ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
-                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
-                                                                    ) : state.cartStatus === 'PROCESSING' ? (
-                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
-                                                                    ) : state.vendorId && toNumber(state.rate) > 0 && state.matchedSku ? (
-                                                                        <span className="text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700">Manual ready</span>
-                                                                    ) : state.resolved ? (
-                                                                        <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
-                                                                    ) : state.reason ? (
-                                                                        <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
-                                                                    ) : (
-                                                                        <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
-                                                                    )}
+                                                                    <span title={statusPresentation.title} className={statusPresentation.className}>{statusPresentation.label}</span>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -1147,6 +1299,7 @@ export default function PurchasePlanning() {
                                             <tbody className="divide-y divide-border-dark">
                                                 {combinedRows.map((row) => {
                                                     const state = combinedStates[row.itemId] || {};
+                                                    const statusPresentation = getStatusPresentation(state);
                                                     return (
                                                         <tr key={row.itemId} className="hover:bg-slate-50">
                                                             <td className="px-4 py-3">
@@ -1221,21 +1374,7 @@ export default function PurchasePlanning() {
                                                                 />
                                                             </td>
                                                             <td className="px-4 py-3">
-                                                                {state.cartStatus === 'PARTIAL' ? (
-                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">Partially fulfilled</span>
-                                                                ) : state.reason === 'cart_failed' || state.cartStatus === 'FAILED' ? (
-                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-rose-100 text-rose-700">Cart failed</span>
-                                                                ) : state.cartStatus === 'PROCESSING' ? (
-                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-sky-100 text-sky-700">In progress</span>
-                                                                ) : state.vendorId && toNumber(state.rate) > 0 && state.matchedSku ? (
-                                                                    <span className="text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700">Manual ready</span>
-                                                                ) : state.resolved ? (
-                                                                    <span className="text-[10px] px-2 py-1 rounded bg-emerald-100 text-emerald-700">Resolved</span>
-                                                                ) : state.reason ? (
-                                                                    <span title={state.cartMessage || ''} className="text-[10px] px-2 py-1 rounded bg-amber-100 text-amber-700">{reasonLabel[state.reason] || state.reason}</span>
-                                                                ) : (
-                                                                    <span className="text-[10px] px-2 py-1 rounded bg-slate-100 text-slate-600">Not analyzed</span>
-                                                                )}
+                                                                <span title={statusPresentation.title} className={statusPresentation.className}>{statusPresentation.label}</span>
                                                             </td>
                                                             <td className="px-4 py-3 text-xs text-text-secondary">
                                                                 {(row.requestLines || []).slice(0, 3).map((entry) => (

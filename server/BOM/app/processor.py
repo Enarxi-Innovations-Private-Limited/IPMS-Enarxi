@@ -1205,7 +1205,9 @@ class BOMProcessor:
                         "best_price": item.get("best_price", ""),
                         "allocations": item.get("allocations", []),
                         "unfulfilled": item.get("unfulfilled", item.get("remaining_qty", 0)),
-                        "cart_url": item.get("cart_url", "")
+                        "cart_url": item.get("cart_url", ""),
+                        "processor_invalid": bool(item.get("processor_invalid")),
+                        "processor_invalid_reason": item.get("processor_invalid_reason", "")
                     })
                 return snapshot
 
@@ -1224,6 +1226,27 @@ class BOMProcessor:
                 elapsed = time.time() - phase_start_time
                 max_allowed = base + min((elapsed / min_phase_time) * weight, weight)
                 return min(real_progress, max_allowed)
+
+            vendor_price_tax_basis = mapping.get("vendor_price_tax_basis", {}) or {}
+
+            def _get_vendor_tax_basis(vendor_name):
+                key = "EVELTA" if vendor_name == "ELEVTA" else str(vendor_name or "").strip().upper()
+                basis = str(vendor_price_tax_basis.get(key, "UNKNOWN") or "UNKNOWN").strip().upper()
+                return basis if basis in {"INCLUSIVE", "EXCLUSIVE", "UNKNOWN"} else "UNKNOWN"
+
+            def _get_comparison_price(raw_price, vendor_name):
+                try:
+                    numeric_price = float(raw_price)
+                except Exception:
+                    return None
+                if numeric_price <= 0:
+                    return None
+                basis = _get_vendor_tax_basis(vendor_name)
+                if basis == "INCLUSIVE":
+                    return round(numeric_price, 4)
+                if basis == "EXCLUSIVE":
+                    return round(numeric_price * 1.18, 4)
+                return None
 
             base1 = 0
             weight1 = 50
@@ -1245,6 +1268,9 @@ class BOMProcessor:
                     meta_val = row.get(meta_key, None)
                     if pd.notna(meta_val) and str(meta_val).strip():
                         item_data[meta_key] = str(meta_val).strip()
+                if not item_data.get("lineId"):
+                    item_data["processor_invalid"] = True
+                    item_data["processor_invalid_reason"] = "Missing lineId in injected purchase-planning row."
                 
                 def _vendor_query(vendor):
                     col = mapping["vendor_codes"].get(vendor)
@@ -1307,6 +1333,10 @@ class BOMProcessor:
                         else:
                             price = res.get("price")
                             item_data[vendor] = f"\u20B9{price:.2f}" if price else None
+                            if price:
+                                item_data[f"{vendor}_fetched_price"] = float(price)
+                                item_data[f"{vendor}_comparison_price"] = _get_comparison_price(price, vendor)
+                            item_data[f"{vendor}_price_tax_basis"] = _get_vendor_tax_basis(vendor)
                         
                         # Store MOQ, available stock, and tiers
                         if "moq" in res:
@@ -1330,6 +1360,19 @@ class BOMProcessor:
                                 })
                             except Exception:
                                 pass
+                    normalized_provisional_options = []
+                    for provisional_vendor in selected_vendors:
+                        fetched_price = item_data.get(f"{provisional_vendor}_fetched_price")
+                        comparison_price = item_data.get(f"{provisional_vendor}_comparison_price")
+                        if fetched_price is None or comparison_price is None:
+                            continue
+                        normalized_provisional_options.append({
+                            "vendor": provisional_vendor,
+                            "price": comparison_price,
+                            "fetched_price": fetched_price
+                        })
+                    if normalized_provisional_options:
+                        provisional_options = normalized_provisional_options
                     provisional_options.sort(key=lambda x: x["price"])
                     if provisional_options:
                         item_data["best_vendor"] = provisional_options[0]["vendor"]
@@ -1374,6 +1417,26 @@ class BOMProcessor:
                             print(f"[{v}] Error calculating price for {available} units: {e}")
                             pass
 
+                normalized_vendor_options = []
+                for opt in vendor_options:
+                    fetched_price = opt.get("price")
+                    comparison_price = _get_comparison_price(fetched_price, opt.get("vendor"))
+                    if comparison_price is None:
+                        print(f"[{opt.get('vendor')}] Skipping comparison because GST basis is unknown.")
+                        continue
+                    price_tax_basis = item_data.get(f"{opt['vendor']}_price_tax_basis") or _get_vendor_tax_basis(opt.get("vendor"))
+                    item_data[f"{opt['vendor']}_fetched_price"] = float(fetched_price)
+                    item_data[f"{opt['vendor']}_comparison_price"] = comparison_price
+                    normalized_vendor_options.append({
+                        **opt,
+                        "price": comparison_price,
+                        "raw_price": float(fetched_price),
+                        "comparison_price": comparison_price,
+                        "price_tax_basis": price_tax_basis
+                    })
+                if normalized_vendor_options:
+                    vendor_options = normalized_vendor_options
+
                 # Sort by price (LOWEST FIRST)
                 vendor_options.sort(key=lambda x: x["price"])
 
@@ -1402,16 +1465,18 @@ class BOMProcessor:
                         allocations.append({
                             "vendor": opt["vendor"],
                             "qty": take_qty,
-                            "unit_price": opt["price"],
-                            "total": take_qty * opt["price"]
+                            "unit_price": opt.get("raw_price", opt["price"]),
+                            "comparison_unit_price": opt.get("comparison_price", opt["price"]),
+                            "price_tax_basis": opt.get("price_tax_basis", _get_vendor_tax_basis(opt["vendor"])),
+                            "total": take_qty * opt.get("raw_price", opt["price"])
                         })
                         # Update remaining_qty - subtract what we actually allocated (not what we took from stock)
                         # We use max(0, ...) to ensure we don't go negative if we took extra for MOQ/min total
                         actual_fulfilled = min(take_qty, remaining_qty) 
                         remaining_qty -= actual_fulfilled
                         # Update global totals
-                        vendor_totals[opt["vendor"]] += take_qty * opt["price"]
-                        optimized_total += take_qty * opt["price"]
+                        vendor_totals[opt["vendor"]] += take_qty * opt.get("comparison_price", opt["price"])
+                        optimized_total += take_qty * opt.get("comparison_price", opt["price"])
 
                 item_data["allocations"] = allocations
                 if remaining_qty > 0:
@@ -1420,7 +1485,7 @@ class BOMProcessor:
                 # Backward compatibility/Summary fields for UI
                 if allocations:
                     item_data["best_vendor"] = allocations[0]["vendor"] # Primary vendor
-                    item_data["best_price"] = f"\u20B9{allocations[0]['unit_price']:.2f}"
+                    item_data["best_price"] = f"\u20B9{allocations[0].get('comparison_unit_price', allocations[0]['unit_price']):.2f}"
                     total_item_amt = sum(a["total"] for a in allocations)
                     item_data["total_amt"] = f"\u20B9{total_item_amt:.2f}"
                     item_data["cart_url"] = VENDOR_CART_URLS.get(allocations[0]["vendor"], "")
@@ -1466,6 +1531,9 @@ class BOMProcessor:
                     plan[v_key].append({
                         "component": item["component"],
                         "qty": alloc["qty"],
+                        "lineId": item.get("lineId"),
+                        "itemId": item.get("itemId"),
+                        "itemCode": item.get("itemCode"),
                         "links": item["links"],
                         "best_url": item["links"].get(vendor),
                         "original_item": item # Keep reference to update later
@@ -1527,7 +1595,18 @@ class BOMProcessor:
                             try:
                                 price = float(price_match.group(1).replace(',', ''))
                                 available = item["available_stock"].get(v)
-                                vendor_options.append({"vendor": v, "price": price, "available": available})
+                                comparison_price = _get_comparison_price(price, v)
+                                if comparison_price is None:
+                                    print(f"[{v}] Skipping fallback comparison because GST basis is unknown.")
+                                    continue
+                                vendor_options.append({
+                                    "vendor": v,
+                                    "price": comparison_price,
+                                    "raw_price": price,
+                                    "comparison_price": comparison_price,
+                                    "price_tax_basis": item.get(f"{v}_price_tax_basis") or _get_vendor_tax_basis(v),
+                                    "available": available
+                                })
                             except: pass
                     
                     if not vendor_options:
@@ -1542,7 +1621,14 @@ class BOMProcessor:
                     take_qty = min(can_take, remaining)
                     
                     if take_qty > 0:
-                        new_alloc = {"vendor": best_opt["vendor"], "qty": take_qty, "unit_price": best_opt["price"], "total": take_qty * best_opt["price"]}
+                        new_alloc = {
+                            "vendor": best_opt["vendor"],
+                            "qty": take_qty,
+                            "unit_price": best_opt.get("raw_price", best_opt["price"]),
+                            "comparison_unit_price": best_opt.get("comparison_price", best_opt["price"]),
+                            "price_tax_basis": best_opt.get("price_tax_basis", _get_vendor_tax_basis(best_opt["vendor"])),
+                            "total": take_qty * best_opt.get("raw_price", best_opt["price"])
+                        }
                         item["allocations"].append(new_alloc)
                         
                         v = best_opt["vendor"]
@@ -1551,6 +1637,9 @@ class BOMProcessor:
                         mini_items = [{
                             "component": item["component"],
                             "qty": take_qty,
+                            "lineId": item.get("lineId"),
+                            "itemId": item.get("itemId"),
+                            "itemCode": item.get("itemCode"),
                             "links": item["links"],
                             "best_url": item["links"].get(v),
                             "original_item": item
@@ -1580,6 +1669,9 @@ class BOMProcessor:
         optimized_total = 0
         vendor_totals = {v: 0 for v in selected_vendors}
         for item in processed_items:
+            if item.get("allocations") and not item.get("lineId"):
+                item["processor_invalid"] = True
+                item["processor_invalid_reason"] = "Cart automation produced allocations without a lineId."
             # Remove tiers from items before returning (not needed in response)
             keys_to_remove = [k for k in item.keys() if "_tiers" in k]
             for k in keys_to_remove:
