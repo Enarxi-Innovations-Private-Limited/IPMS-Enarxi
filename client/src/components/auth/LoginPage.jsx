@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api.js';
 import { getCurrentUser, getToken, isTokenExpired, saveAuth } from '../../services/authService.js';
@@ -16,31 +16,6 @@ const ROLE_ROUTE_MAP = {
   PURCHASE_MANAGER: '/purchase',
 };
 
-function isInstalledPwaContext() {
-  if (typeof window === 'undefined') return false;
-
-  const displayModes = [
-    '(display-mode: standalone)',
-    '(display-mode: window-controls-overlay)',
-    '(display-mode: minimal-ui)',
-    '(display-mode: fullscreen)',
-  ];
-
-  const matchesDisplayMode = displayModes.some((query) => {
-    try {
-      return window.matchMedia(query).matches;
-    } catch {
-      return false;
-    }
-  });
-
-  return Boolean(
-    matchesDisplayMode ||
-    window.navigator.standalone ||
-    window.navigator.windowControlsOverlay?.visible
-  );
-}
-
 export default function LoginPage() {
   const navigate = useNavigate();
   const [employeeId, setEmployeeId] = useState('');
@@ -50,8 +25,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [error, setError] = useState('');
-  const microsoftPopupRef = useRef(null);
-  const microsoftPopupTimerRef = useRef(null);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pwaToken = params.get('pwa_token');
@@ -83,61 +57,6 @@ export default function LoginPage() {
     }
   }, [navigate]);
 
-  useEffect(() => {
-    const handleStorageChange = (e) => {
-      if (e.key === 'pms_auth' && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (parsed && parsed.token && parsed.user) {
-            const path = ROLE_ROUTE_MAP[parsed.user.role] || '/';
-            navigate(path, { replace: true });
-          }
-        } catch (err) {
-          console.error('Failed to sync login from storage event:', err);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [navigate]);
-
-  useEffect(() => {
-    const handleMicrosoftMessage = (event) => {
-      const data = event.data;
-      if (!data || data.type !== 'MICROSOFT_AUTH_RESULT') return;
-      if (event.origin !== window.location.origin) return;
-      if (microsoftPopupRef.current && event.source !== microsoftPopupRef.current) return;
-
-      if (microsoftPopupTimerRef.current) {
-        window.clearInterval(microsoftPopupTimerRef.current);
-        microsoftPopupTimerRef.current = null;
-      }
-      microsoftPopupRef.current = null;
-
-      if (!data.success) {
-        setMicrosoftLoading(false);
-        setError(data.error || 'Microsoft sign-in failed.');
-        return;
-      }
-
-      saveAuth(data.token, data.user);
-      setMicrosoftLoading(false);
-      const path = ROLE_ROUTE_MAP[data.user.role] || '/';
-      navigate(path, { replace: true });
-    };
-
-    window.addEventListener('message', handleMicrosoftMessage);
-    return () => {
-      window.removeEventListener('message', handleMicrosoftMessage);
-      if (microsoftPopupTimerRef.current) {
-        window.clearInterval(microsoftPopupTimerRef.current);
-      }
-    };
-  }, [navigate]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -158,28 +77,7 @@ export default function LoginPage() {
   const handleMicrosoftLogin = () => {
     setError('');
     setMicrosoftLoading(true);
-
-    const popup = window.open(
-      `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`,
-      'ipms-microsoft-login',
-      'width=520,height=720,resizable=yes,scrollbars=yes'
-    );
-
-    if (!popup) {
-      setMicrosoftLoading(false);
-      setError('Popup blocked. Allow popups and try Microsoft sign-in again.');
-      return;
-    }
-
-    microsoftPopupRef.current = popup;
-    microsoftPopupTimerRef.current = window.setInterval(() => {
-      if (popup.closed) {
-        window.clearInterval(microsoftPopupTimerRef.current);
-        microsoftPopupTimerRef.current = null;
-        microsoftPopupRef.current = null;
-        setMicrosoftLoading(false);
-      }
-    }, 500);
+    window.location.assign(`/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`);
   };
 
   return (

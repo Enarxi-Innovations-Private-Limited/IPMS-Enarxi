@@ -504,7 +504,8 @@ export default function EmployeeDashboard() {
                                 <span className="text-green-400 text-sm">✓ Approved & Completed</span>
                               ) : (
                                 <select
-                                  className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                  className="bg-[#ECF1FF] border border-slate-300 rounded-lg px-3 py-1.5 text-[#002045] text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                  style={{ color: '#002045' }}
                                   value={statusUpdate[t.id] || t.status}
                                   onChange={(e) => handleStatusChange(t.id, e.target.value)}
                                 >
@@ -518,7 +519,8 @@ export default function EmployeeDashboard() {
                               <div className="flex flex-col gap-2 min-w-[200px]">
                                 <div className="flex gap-2">
                                   <input
-                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    className="flex-1 bg-[#ECF1FF] border border-slate-300 rounded-lg px-3 py-1.5 text-[#002045] placeholder:text-[#002045]/45 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                    style={{ color: '#002045', caretColor: '#002045', WebkitTextFillColor: '#002045' }}
                                     placeholder="Add work update..."
                                     value={commentText[t.id] || ''}
                                     onChange={(e) =>

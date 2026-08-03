@@ -449,7 +449,8 @@ export default function InternTasksPage() {
                                                     <div className="flex flex-col gap-2 min-w-[200px]">
                                                         <div className="flex gap-2">
                                                             <input
-                                                                className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white placeholder-text-secondary/50 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                                                className="flex-1 bg-[#ECF1FF] border border-slate-300 rounded-lg px-3 py-1.5 text-[#002045] placeholder:text-[#002045]/45 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                                                style={{ color: '#002045', caretColor: '#002045', WebkitTextFillColor: '#002045' }}
                                                                 placeholder="Add work update..."
                                                                 value={commentText[t.id] || ''}
                                                                 onChange={(e) =>

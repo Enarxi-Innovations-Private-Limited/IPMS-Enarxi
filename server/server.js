@@ -1024,52 +1024,32 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
         console.error('Failed to verify Microsoft OAuth state:', e.message);
     }
 
-    const closePopup = (payload) => {
+    const redirectToLogin = (payload) => {
         const targetOrigin = getTrustedMicrosoftOrigin(payload.origin || statePayload.origin, req);
+        const redirectUrl = new URL(`${targetOrigin}/login`);
 
-        if (statePayload.pwa) {
-            const redirectUrl = new URL(`${targetOrigin}/login`);
-            if (payload.success) {
-                redirectUrl.searchParams.set('pwa_token', payload.token);
-                redirectUrl.searchParams.set('pwa_user', JSON.stringify(payload.user));
-            } else {
-                redirectUrl.searchParams.set('pwa_error', payload.error || 'Microsoft authentication failed.');
-            }
-            return res.redirect(redirectUrl.toString());
+        if (payload.success) {
+            redirectUrl.searchParams.set('pwa_token', payload.token);
+            redirectUrl.searchParams.set('pwa_user', JSON.stringify(payload.user));
+        } else {
+            redirectUrl.searchParams.set('pwa_error', payload.error || 'Microsoft authentication failed.');
         }
 
-        const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
-        return res.send(`<!doctype html>
-<html>
-  <body>
-    <script>
-      (function () {
-        var payload = ${scriptPayload};
-        var targetOrigin = ${JSON.stringify(targetOrigin)};
-        if (window.opener) {
-          window.opener.postMessage(payload, targetOrigin);
-        }
-        window.close();
-      })();
-    </script>
-  </body>
-</html>`);
+        return res.redirect(redirectUrl.toString());
     };
 
     try {
         const { code, state, error, error_description: errorDescription } = req.query;
 
         if (error) {
-            return closePopup({
-                type: 'MICROSOFT_AUTH_RESULT',
+            return redirectToLogin({
                 success: false,
                 error: errorDescription || error,
             });
         }
 
         if (!code || !state) {
-            return closePopup({
-                type: 'MICROSOFT_AUTH_RESULT',
+            return redirectToLogin({
                 success: false,
                 error: 'Missing Microsoft authorization response data.',
             });
@@ -1084,8 +1064,7 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
         const email = String(profile.mail || profile.userPrincipalName || '').trim().toLowerCase();
 
         if (!email) {
-            return closePopup({
-                type: 'MICROSOFT_AUTH_RESULT',
+            return redirectToLogin({
                 success: false,
                 origin: statePayload.origin || '*',
                 error: 'Microsoft account did not return an email address.',
@@ -1094,8 +1073,7 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
 
         const user = await User.findOne({ email });
         if (!user) {
-            return closePopup({
-                type: 'MICROSOFT_AUTH_RESULT',
+            return redirectToLogin({
                 success: false,
                 origin: statePayload.origin || '*',
                 error: 'No IPMS user is mapped to this Microsoft account email.',
@@ -1109,8 +1087,7 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
         const token = buildAppToken(user);
         await logActivity('LOGIN', `${user.name} logged in with Microsoft`, user._id, user.name, null, null);
 
-        return closePopup({
-            type: 'MICROSOFT_AUTH_RESULT',
+        return redirectToLogin({
             success: true,
             origin: statePayload.origin || '*',
             token,
@@ -1118,8 +1095,7 @@ app.get('/api/auth/microsoft/callback', async (req, res) => {
         });
     } catch (err) {
         console.error('Microsoft auth callback error:', err);
-        return closePopup({
-            type: 'MICROSOFT_AUTH_RESULT',
+        return redirectToLogin({
             success: false,
             error: err.message || 'Microsoft authentication failed.',
         });
