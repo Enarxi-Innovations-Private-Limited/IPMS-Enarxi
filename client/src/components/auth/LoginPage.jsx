@@ -16,6 +16,31 @@ const ROLE_ROUTE_MAP = {
   PURCHASE_MANAGER: '/purchase',
 };
 
+function isInstalledPwaContext() {
+  if (typeof window === 'undefined') return false;
+
+  const displayModes = [
+    '(display-mode: standalone)',
+    '(display-mode: window-controls-overlay)',
+    '(display-mode: minimal-ui)',
+    '(display-mode: fullscreen)',
+  ];
+
+  const matchesDisplayMode = displayModes.some((query) => {
+    try {
+      return window.matchMedia(query).matches;
+    } catch {
+      return false;
+    }
+  });
+
+  return Boolean(
+    matchesDisplayMode ||
+    window.navigator.standalone ||
+    window.navigator.windowControlsOverlay?.visible
+  );
+}
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const [employeeId, setEmployeeId] = useState('');
@@ -38,15 +63,6 @@ export default function LoginPage() {
         const pwaUser = JSON.parse(pwaUserRaw);
         saveAuth(pwaToken, pwaUser);
         window.history.replaceState({}, document.title, window.location.pathname);
-        
-        // Attempt to close the browser tab since we are returning from PWA sign-in
-        setTimeout(() => {
-          try {
-            window.close();
-          } catch (err) {
-            console.log('Failed to close window automatically:', err);
-          }
-        }, 1000);
 
         const path = ROLE_ROUTE_MAP[pwaUser.role] || '/';
         navigate(path, { replace: true });
@@ -143,12 +159,10 @@ export default function LoginPage() {
     setError('');
     setMicrosoftLoading(true);
 
-    const isStandalone = 
-      window.matchMedia('(display-mode: standalone)').matches || 
-      window.navigator.standalone;
+    const isStandalone = isInstalledPwaContext();
 
     if (isStandalone) {
-      window.location.href = `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}&pwa=true`;
+      window.location.assign(`/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}&pwa=true`);
       return;
     }
 

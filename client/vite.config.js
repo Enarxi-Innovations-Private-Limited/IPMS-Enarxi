@@ -44,6 +44,10 @@ export default defineConfig({
         // Cache API calls for offline support
         runtimeCaching: [
           {
+            urlPattern: /^https:\/\/tracker\.enarxi\.com\/api\/auth\/.*/i,
+            handler: 'NetworkOnly',
+          },
+          {
             urlPattern: /^https:\/\/tracker\.enarxi\.com\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
