@@ -38,6 +38,16 @@ export default function LoginPage() {
         const pwaUser = JSON.parse(pwaUserRaw);
         saveAuth(pwaToken, pwaUser);
         window.history.replaceState({}, document.title, window.location.pathname);
+        
+        // Attempt to close the browser tab since we are returning from PWA sign-in
+        setTimeout(() => {
+          try {
+            window.close();
+          } catch (err) {
+            console.log('Failed to close window automatically:', err);
+          }
+        }, 1000);
+
         const path = ROLE_ROUTE_MAP[pwaUser.role] || '/';
         navigate(path, { replace: true });
         return;
@@ -55,6 +65,27 @@ export default function LoginPage() {
       const path = ROLE_ROUTE_MAP[user.role] || '/';
       navigate(path, { replace: true });
     }
+  }, [navigate]);
+
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'pms_auth' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && parsed.token && parsed.user) {
+            const path = ROLE_ROUTE_MAP[parsed.user.role] || '/';
+            navigate(path, { replace: true });
+          }
+        } catch (err) {
+          console.error('Failed to sync login from storage event:', err);
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [navigate]);
 
   useEffect(() => {
