@@ -159,13 +159,6 @@ export default function LoginPage() {
     setError('');
     setMicrosoftLoading(true);
 
-    const isStandalone = isInstalledPwaContext();
-
-    if (isStandalone) {
-      window.location.assign(`/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}&pwa=true`);
-      return;
-    }
-
     const popup = window.open(
       `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`,
       'ipms-microsoft-login',
