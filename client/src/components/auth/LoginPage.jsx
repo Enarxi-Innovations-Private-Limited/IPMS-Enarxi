@@ -28,6 +28,26 @@ export default function LoginPage() {
   const microsoftPopupRef = useRef(null);
   const microsoftPopupTimerRef = useRef(null);
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pwaToken = params.get('pwa_token');
+    const pwaUserRaw = params.get('pwa_user');
+    const pwaError = params.get('pwa_error');
+
+    if (pwaToken && pwaUserRaw) {
+      try {
+        const pwaUser = JSON.parse(pwaUserRaw);
+        saveAuth(pwaToken, pwaUser);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        const path = ROLE_ROUTE_MAP[pwaUser.role] || '/';
+        navigate(path, { replace: true });
+        return;
+      } catch (e) {
+        setError('Failed to process PWA sign-in response.');
+      }
+    } else if (pwaError) {
+      setError(pwaError);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     const token = getToken();
     const user = getCurrentUser();
@@ -91,6 +111,16 @@ export default function LoginPage() {
   const handleMicrosoftLogin = () => {
     setError('');
     setMicrosoftLoading(true);
+
+    const isStandalone = 
+      window.matchMedia('(display-mode: standalone)').matches || 
+      window.navigator.standalone;
+
+    if (isStandalone) {
+      window.location.href = `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}&pwa=true`;
+      return;
+    }
+
     const popup = window.open(
       `/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`,
       'ipms-microsoft-login',

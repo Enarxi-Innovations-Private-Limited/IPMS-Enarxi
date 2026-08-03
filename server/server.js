@@ -390,11 +390,12 @@ function getMicrosoftCallbackUrl(req) {
     return `${getExternalBaseUrl(req)}/api/auth/microsoft/callback`;
 }
 
-function createMicrosoftState(origin) {
+function createMicrosoftState(origin, pwa) {
     return jwt.sign(
         {
             type: 'MICROSOFT_OAUTH_STATE',
             origin,
+            pwa: !!pwa,
             nonce: crypto.randomUUID(),
         },
         JWT_SECRET,
@@ -998,7 +999,8 @@ app.get('/api/auth/microsoft/start', async (req, res) => {
     }
 
     const origin = getTrustedMicrosoftOrigin(req.query.origin || req.headers.origin, req);
-    const state = createMicrosoftState(origin);
+    const pwa = req.query.pwa === 'true';
+    const state = createMicrosoftState(origin, pwa);
     const authorizationEndpoint = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize`;
     const params = new URLSearchParams({
         client_id: MICROSOFT_CLIENT_ID,
@@ -1013,8 +1015,29 @@ app.get('/api/auth/microsoft/start', async (req, res) => {
 });
 
 app.get('/api/auth/microsoft/callback', async (req, res) => {
+    let statePayload = {};
+    try {
+        if (req.query.state) {
+            statePayload = verifyMicrosoftState(req.query.state);
+        }
+    } catch (e) {
+        console.error('Failed to verify Microsoft OAuth state:', e.message);
+    }
+
     const closePopup = (payload) => {
-        const targetOrigin = getTrustedMicrosoftOrigin(payload.origin, req);
+        const targetOrigin = getTrustedMicrosoftOrigin(payload.origin || statePayload.origin, req);
+
+        if (statePayload.pwa) {
+            const redirectUrl = new URL(`${targetOrigin}/login`);
+            if (payload.success) {
+                redirectUrl.searchParams.set('pwa_token', payload.token);
+                redirectUrl.searchParams.set('pwa_user', JSON.stringify(payload.user));
+            } else {
+                redirectUrl.searchParams.set('pwa_error', payload.error || 'Microsoft authentication failed.');
+            }
+            return res.redirect(redirectUrl.toString());
+        }
+
         const scriptPayload = JSON.stringify(payload).replace(/</g, '\\u003c');
         return res.send(`<!doctype html>
 <html>
