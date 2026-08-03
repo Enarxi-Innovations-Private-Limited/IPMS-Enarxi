@@ -328,10 +328,14 @@ export default function ManagerProjectsPage() {
             console.log('Attempting to delete task:', taskId);
             await api.delete(`/tasks/${taskId}`);
             console.log('Task delete API success');
-            setTasks(tasks.filter(t => t.id !== taskId));
+            setTasks(tasks.filter(t => t.id !== taskId && t._id !== taskId));
             setNotification({ message: 'Task Deleted', type: 'success' });
         } catch (err) {
             console.error('Failed to delete task:', err);
+            setNotification({
+                message: err.response?.data?.message || 'Failed to delete task.',
+                type: 'error'
+            });
         }
     };
 
@@ -1268,7 +1272,16 @@ export default function ManagerProjectsPage() {
                                                                         <button
                                                                             onClick={(e) => {
                                                                                 e.stopPropagation();
-                                                                                handleDeleteTask(task.id);
+                                                                                setConfirmModal({
+                                                                                    show: true,
+                                                                                    title: 'Delete Task',
+                                                                                    message: `Are you sure you want to delete the task "${task.title}"? This action cannot be undone.`,
+                                                                                    type: 'danger',
+                                                                                    onConfirm: async () => {
+                                                                                        setConfirmModal(prev => ({ ...prev, show: false }));
+                                                                                        await handleDeleteTask(task.id || task._id);
+                                                                                    }
+                                                                                });
                                                                             }}
                                                                             className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all ml-1"
                                                                             title="Delete Task"
@@ -1371,7 +1384,18 @@ export default function ManagerProjectsPage() {
 
                                                                 {/* Delete Button */}
                                                                 <button
-                                                                    onClick={() => handleDeleteTask(task.id)}
+                                                                    onClick={() => {
+                                                                        setConfirmModal({
+                                                                            show: true,
+                                                                            title: 'Delete Task',
+                                                                            message: `Are you sure you want to delete the task "${task.title}"? This action cannot be undone.`,
+                                                                            type: 'danger',
+                                                                            onConfirm: async () => {
+                                                                                setConfirmModal(prev => ({ ...prev, show: false }));
+                                                                                await handleDeleteTask(task.id || task._id);
+                                                                            }
+                                                                        });
+                                                                    }}
                                                                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
                                                                 >
                                                                     <span className="material-symbols-outlined text-sm">delete</span>

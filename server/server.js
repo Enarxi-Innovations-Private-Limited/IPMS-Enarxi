@@ -3751,7 +3751,7 @@ app.get('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 });
 
 // Delete Task
-app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.ENGINEER), async (req, res) => {
+app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.MANAGER, roles.ENGINEER), async (req, res) => {
     console.log(`Received DELETE request for task: ${req.params.taskId}`);
     try {
         const { taskId } = req.params;
@@ -3767,15 +3767,11 @@ app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, r
         }
         const shouldResyncProductionState = Boolean(task.isFullProductStage && task.projectId);
 
-        // Optionally check ownership/project management here if strictly required,
-        // but requireRole(MANAGER) covers the basic 'Manager can delete' requirement.
-        // For stricter control:
-        if (req.user.role === roles.ENGINEER && task.projectId) {
+        // Optionally check ownership/project management here if strictly required
+        if ([roles.MANAGER, roles.ENGINEER].includes(req.user.role) && task.projectId) {
             const project = await Project.findById(task.projectId);
-            // If manager is not the manager of this project
             if (project && project.managerId && project.managerId.toString() !== req.user._id.toString()) {
-                // Check if they are authorized otherwise? 
-                // For now, allow managers to delete tasks as requested by user flow.
+                return res.status(403).json({ message: 'You are not the manager of this project' });
             }
         }
 
