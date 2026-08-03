@@ -65,8 +65,18 @@ body {
 
 .light-theme [class*="bg-white"] .hover\:text-white:hover,
 .light-theme [class*="bg-slate-50"] .hover\:text-white:hover,
-.light-theme [class*="bg-[#ECF1FF]"] .hover\:text-white:hover {
+.light-theme [class*="bg-[#ECF1FF]"] .hover\:text-white:hover,
+.light-theme [class*="bg-surface-dark"] .hover\:text-white:hover,
+.light-theme [class*="bg-background-dark"] .hover\:text-white:hover {
   color: #1e293b !important;
+}
+
+.light-theme [class*="bg-white"] .group-hover\:text-white,
+.light-theme [class*="bg-slate-50"] .group-hover\:text-white,
+.light-theme [class*="bg-[#ECF1FF]"] .group-hover\:text-white,
+.light-theme [class*="bg-surface-dark"] .group-hover\:text-white,
+.light-theme [class*="bg-background-dark"] .group-hover\:text-white {
+  color: #002045 !important;
 }
 
 /* Additional pass: many pages still use "surface/background dark" tokens on light mode */

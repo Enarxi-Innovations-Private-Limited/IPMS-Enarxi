@@ -462,7 +462,7 @@ export default function EmployeeProjectsPage() {
                             </div>
                             <button
                                 onClick={() => setSelectedProject(null)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-surface-dark transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-text-secondary font-semibold hover:bg-slate-100 bg-white transition-colors"
                             >
                                 <span className="material-symbols-outlined text-lg">arrow_back</span>
                                 Back to Projects
