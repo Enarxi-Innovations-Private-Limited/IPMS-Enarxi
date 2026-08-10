@@ -1,0 +1,27 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# Environment Variables (Secrets)
+.env
+
+# Python Cache
+__pycache__/
+*.pyc
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# User specific state & sessions
+state.json
+temp_robu_session/
+session/
+
+# Generated output files
+output/
+auto/*.png
+auto/*.jpg
+auto/log.txt
+bom.xlsx

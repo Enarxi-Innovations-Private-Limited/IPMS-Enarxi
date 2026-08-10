@@ -61,18 +61,15 @@ const taskTemplates = {
     },
 };
 
-// Get templates for a department
 const getTemplatesForDepartment = (department) => {
     return taskTemplates[department] || {};
 };
 
-// Get template names for a department
 const getTemplateNames = (department) => {
     const templates = taskTemplates[department] || {};
     return Object.keys(templates);
 };
 
-// Get tasks for a specific template
 const getTemplateTasks = (department, templateName) => {
     const templates = taskTemplates[department] || {};
     return templates[templateName] || [];

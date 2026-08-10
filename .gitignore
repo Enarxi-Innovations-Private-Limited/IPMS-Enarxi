@@ -23,13 +23,24 @@ server/dist/
 
 # ==================== Environment Variables ====================
 # NEVER commit these - contain secrets!
-!.env
+.env
+.env.save
+.env.local
+.env.production
+.env.development
+server/.env
+client/.env
+server/BOM/.env
 
 
 # ==================== Uploaded Files ====================
 # User uploaded files - should not be in git
+uploads/
 server/uploads/
 !server/uploads/.gitkeep
+server/BOM/session/
+server/BOM/output/
+server/BOM/venv/
 
 # ==================== Logs ====================
 logs/
@@ -72,6 +83,7 @@ $RECYCLE.BIN/
 *~
 
 # ==================== Temporary Files ====================
+.temp/
 tmp/
 temp/
 *.tmp

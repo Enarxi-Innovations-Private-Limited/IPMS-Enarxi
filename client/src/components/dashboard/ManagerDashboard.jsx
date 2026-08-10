@@ -21,10 +21,10 @@ export default function ManagerDashboard() {
     const [showTaskModal, setShowTaskModal] = useState(false);
 
     const getCurrentPage = () => {
-        if (location.pathname === '/manager' || location.pathname === '/manager/') return 'dashboard';
-        if (location.pathname === '/manager/projects') return 'projects';
-        if (location.pathname === '/manager/tasks') return 'tasks';
-        if (location.pathname === '/manager/team') return 'team';
+        if (location.pathname === '/engineer' || location.pathname === '/engineer/') return 'dashboard';
+        if (location.pathname === '/engineer/projects') return 'projects';
+        if (location.pathname === '/engineer/tasks') return 'tasks';
+        if (location.pathname === '/engineer/team') return 'team';
         return 'dashboard';
     };
 
@@ -81,7 +81,7 @@ export default function ManagerDashboard() {
                     <nav aria-label="Breadcrumb" className="flex mb-6">
                         <ol className="inline-flex items-center space-x-2">
                             <li>
-                                <span className="text-white text-sm font-medium">Dashboard</span>
+                                <span className="text-[#556070] text-sm font-medium">Dashboard</span>
                             </li>
                         </ol>
                     </nav>
@@ -89,16 +89,16 @@ export default function ManagerDashboard() {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">
                                 Welcome back, {user?.name?.split(' ')[0] || 'Manager'}!
                             </h1>
-                            <p className="text-text-secondary text-lg">
+                            <p className="text-[#556070]/80 text-lg">
                                 Manage your team's projects and track progress.
                             </p>
                         </div>
                         <div className="flex gap-3">
                             <button
-                                onClick={() => navigate('/manager/projects')}
+                                onClick={() => navigate('/engineer/projects')}
                                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold shadow-lg shadow-emerald-900/50 hover:shadow-emerald-900/70 hover:scale-[1.02] transition-all"
                             >
                                 <span className="material-symbols-outlined text-lg">folder</span>
@@ -108,8 +108,8 @@ export default function ManagerDashboard() {
                     </div>
 
                     {loading && (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-8 text-center">
-                            <p className="text-text-secondary">Loading dashboard...</p>
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-8 text-center">
+                            <p className="text-[#556070]/80">Loading dashboard...</p>
                         </div>
                     )}
 
@@ -122,49 +122,49 @@ export default function ManagerDashboard() {
                     {!loading && (
                         <>
                             {/* Stats Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                                 <div
-                                    onClick={() => navigate('/manager/projects')}
-                                    className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-emerald-500/50 hover:bg-surface-dark/80 transition-all group"
+                                    onClick={() => navigate('/engineer/projects')}
+                                    className="bg-white border border-slate-200 rounded-2xl px-5 py-5 min-h-[150px] shadow-sm cursor-pointer hover:border-emerald-500/50 hover:shadow-md transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Total Projects</h3>
+                                        <h3 className="text-[#556070]/80 text-sm font-medium uppercase tracking-wider group-hover:text-[#1e293b] transition-colors">Total Projects</h3>
                                         <span className="material-symbols-outlined text-emerald-500">folder</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-white">{projects.length}</p>
-                                    <p className="text-text-secondary text-sm mt-1">{activeProjects} active</p>
+                                    <p className="text-3xl font-bold text-[#556070]">{projects.length}</p>
+                                    <p className="text-[#556070]/80 text-sm mt-1">{activeProjects} active</p>
                                 </div>
                                 <div
-                                    onClick={() => navigate('/manager/tasks')}
-                                    className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 hover:bg-surface-dark/80 transition-all group"
+                                    onClick={() => navigate('/engineer/tasks')}
+                                    className="bg-white border border-slate-200 rounded-2xl px-5 py-5 min-h-[150px] shadow-sm cursor-pointer hover:border-blue-500/50 hover:shadow-md transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Active Tasks</h3>
+                                        <h3 className="text-[#556070]/80 text-sm font-medium uppercase tracking-wider group-hover:text-[#1e293b] transition-colors">Active Tasks</h3>
                                         <span className="material-symbols-outlined text-blue-500">task_alt</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-white">{inProgressTasks}</p>
-                                    <p className="text-text-secondary text-sm mt-1">{completedTasks} completed</p>
+                                    <p className="text-3xl font-bold text-[#556070]">{inProgressTasks}</p>
+                                    <p className="text-[#556070]/80 text-sm mt-1">{completedTasks} completed</p>
                                 </div>
                                 <div
-                                    onClick={() => navigate('/manager/team')}
-                                    className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-purple-500/50 hover:bg-surface-dark/80 transition-all group"
+                                    onClick={() => navigate('/engineer/team')}
+                                    className="bg-white border border-slate-200 rounded-2xl px-5 py-5 min-h-[150px] shadow-sm cursor-pointer hover:border-purple-500/50 hover:shadow-md transition-all group"
                                 >
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Team Members</h3>
+                                        <h3 className="text-[#556070]/80 text-sm font-medium uppercase tracking-wider group-hover:text-[#1e293b] transition-colors">Team Members</h3>
                                         <span className="material-symbols-outlined text-purple-500">group</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-white">{teamMembers}</p>
-                                    <p className="text-text-secondary text-sm mt-1">Employees & Interns</p>
+                                    <p className="text-3xl font-bold text-[#556070]">{teamMembers}</p>
+                                    <p className="text-[#556070]/80 text-sm mt-1">Employees & Interns</p>
                                 </div>
-                                <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                                <div className="bg-white border border-slate-200 rounded-2xl px-5 py-5 min-h-[150px] shadow-sm hover:shadow-md transition-all">
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completion Rate</h3>
+                                        <h3 className="text-[#556070]/80 text-sm font-medium uppercase tracking-wider">Completion Rate</h3>
                                         <span className="material-symbols-outlined text-green-500">trending_up</span>
                                     </div>
-                                    <p className="text-3xl font-bold text-white">
+                                    <p className="text-3xl font-bold text-[#556070]">
                                         {tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0}%
                                     </p>
-                                    <p className="text-text-secondary text-sm mt-1">Overall progress</p>
+                                    <p className="text-[#556070]/80 text-sm mt-1">Overall progress</p>
                                 </div>
                             </div>
 
@@ -176,14 +176,14 @@ export default function ManagerDashboard() {
                                             <span className="material-symbols-outlined text-amber-500 text-xl">warning</span>
                                         </div>
                                         <div>
-                                            <h3 className="text-white font-bold text-base">Pending Delay Reviews</h3>
-                                            <p className="text-amber-200/80 text-sm">
+                                            <h3 className="text-[#556070] font-bold text-base">Pending Delay Reviews</h3>
+                                            <p className="text-amber-700 text-sm">
                                                 You have {tasks.filter(t => t.delayStatus === 'PENDING_MANAGER').length} task(s) requesting delay approval.
                                             </p>
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => navigate('/manager/tasks', { state: { filter: 'DELAYED' } })}
+                                        onClick={() => navigate('/engineer/tasks', { state: { filter: 'DELAYED' } })}
                                         className="px-4 py-2 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition-colors text-sm"
                                     >
                                         Review Now
@@ -192,33 +192,33 @@ export default function ManagerDashboard() {
                             )}
 
                             {/* Projects Overview */}
-                            <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
-                                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden mb-8">
+                                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-slate-200 shadow-sm bg-slate-50 flex items-center justify-between">
+                                    <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                         <span className="material-symbols-outlined text-emerald-500">folder</span>
                                         Recent Projects
                                     </h2>
                                     <button
-                                        onClick={() => navigate('/manager/projects')}
-                                        className="text-emerald-400 hover:text-emerald-300 text-sm font-medium"
+                                        onClick={() => navigate('/engineer/projects')}
+                                        className="text-emerald-700 hover:text-emerald-800 text-sm font-medium"
                                     >
                                         View All →
                                     </button>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
-                                        <thead className="bg-background-dark/50">
+                                        <thead className="bg-slate-50">
                                             <tr>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Project
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Status
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Tasks
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Progress
                                                 </th>
                                             </tr>
@@ -229,36 +229,36 @@ export default function ManagerDashboard() {
                                                 const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
                                                 const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
                                                 return (
-                                                    <tr key={p.id} className="hover:bg-background-dark/30 transition-colors cursor-pointer" onClick={() => navigate(`/manager/projects?projectId=${p.id}`)}>
+                                                    <tr key={p.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => navigate(`/engineer/projects?projectId=${p.id}`)}>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                                                            <div className="text-white font-medium">{p.name}</div>
-                                                            <div className="text-text-secondary text-sm mt-1">{p.description || 'No description'}</div>
+                                                            <div className="text-[#556070] font-medium">{p.name}</div>
+                                                            <div className="text-[#556070]/80 text-sm mt-1">{p.description || 'No description'}</div>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <span
                                                                 className={`px-2 py-1 text-xs font-medium rounded-full ${p.status === 'ACTIVE'
-                                                                    ? 'bg-green-500/20 text-green-400'
+                                                                    ? 'bg-green-100 text-green-800'
                                                                     : p.status === 'COMPLETED'
-                                                                        ? 'bg-blue-500/20 text-blue-400'
-                                                                        : 'bg-gray-500/20 text-gray-400'
+                                                                        ? 'bg-blue-100 text-blue-800'
+                                                                        : 'bg-slate-100 text-slate-700'
                                                                     }`}
                                                             >
                                                                 {p.status}
                                                             </span>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                                                            <span className="text-white">{projectTasks.length}</span>
-                                                            <span className="text-text-secondary"> tasks</span>
+                                                            <span className="text-[#556070]">{projectTasks.length}</span>
+                                                            <span className="text-[#556070]/80"> tasks</span>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <div className="flex items-center gap-2">
-                                                                <div className="flex-1 h-2 bg-background-dark rounded-full overflow-hidden w-24">
+                                                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden w-24">
                                                                     <div
                                                                         className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
                                                                         style={{ width: `${progress}%` }}
                                                                     ></div>
                                                                 </div>
-                                                                <span className="text-text-secondary text-sm w-12">{progress}%</span>
+                                                                <span className="text-[#556070]/80 text-sm w-12">{progress}%</span>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -266,7 +266,7 @@ export default function ManagerDashboard() {
                                             })}
                                             {projects.length === 0 && (
                                                 <tr>
-                                                    <td colSpan="4" className="px-6 py-8 text-center text-text-secondary">
+                                                    <td colSpan="4" className="px-6 py-8 text-center text-[#556070]/80">
                                                         No projects found. Projects assigned to your team will appear here.
                                                     </td>
                                                 </tr>
@@ -277,9 +277,9 @@ export default function ManagerDashboard() {
                             </div>
 
                             {/* Team Tasks Overview */}
-                            <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
-                                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden">
+                                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-slate-200 shadow-sm bg-slate-50 flex items-center justify-between">
+                                    <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                         <span className="material-symbols-outlined text-emerald-500">task_alt</span>
                                         Recent Tasks
                                     </h2>
@@ -287,21 +287,21 @@ export default function ManagerDashboard() {
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full">
-                                        <thead className="bg-background-dark/50">
+                                        <thead className="bg-slate-50">
                                             <tr>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Task
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Project
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Assignee
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Status
                                                 </th>
-                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Queries
                                                 </th>
                                             </tr>
@@ -311,13 +311,13 @@ export default function ManagerDashboard() {
                                                 const assignee = users.find((u) => u.id === t.assigneeId);
                                                 const pendingQueries = t.queries?.filter(q => q.status === 'PENDING').length || 0;
                                                 return (
-                                                    <tr key={t.id} className="hover:bg-background-dark/30 transition-colors cursor-pointer" onClick={() => handleTaskClick(t)}>
+                                                    <tr key={t.id} className="hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => handleTaskClick(t)}>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                                                            <div className="text-white font-medium">{t.title}</div>
-                                                            <div className="text-text-secondary text-sm mt-1">{t.description || 'No description'}</div>
+                                                            <div className="text-[#556070] font-medium">{t.title}</div>
+                                                            <div className="text-[#556070]/80 text-sm mt-1">{t.description || 'No description'}</div>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                                                            <span className="text-white">{t.projectName || 'Unknown'}</span>
+                                                            <span className="text-[#556070]">{t.projectName || 'Unknown'}</span>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <div className="flex items-center gap-2">
@@ -326,16 +326,16 @@ export default function ManagerDashboard() {
                                                                         {assignee?.name?.charAt(0)?.toUpperCase() || '?'}
                                                                     </span>
                                                                 </div>
-                                                                <span className="text-white text-sm">{assignee?.name || 'Unassigned'}</span>
+                                                                <span className="text-[#556070] text-sm">{assignee?.name || 'Unassigned'}</span>
                                                             </div>
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <span
                                                                 className={`px-2 py-1 text-xs font-medium rounded-full ${t.status === 'COMPLETED'
-                                                                    ? 'bg-green-500/20 text-green-400'
+                                                                    ? 'bg-green-100 text-green-800'
                                                                     : t.status === 'IN_PROGRESS'
-                                                                        ? 'bg-blue-500/20 text-blue-400'
-                                                                        : 'bg-gray-500/20 text-gray-400'
+                                                                        ? 'bg-blue-100 text-blue-800'
+                                                                        : 'bg-slate-100 text-slate-700'
                                                                     }`}
                                                             >
                                                                 {t.status.replace('_', ' ')}
@@ -343,12 +343,12 @@ export default function ManagerDashboard() {
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             {pendingQueries > 0 ? (
-                                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold border border-amber-500/30">
+                                                                <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-200">
                                                                     <span className="material-symbols-outlined text-sm">help</span>
                                                                     {pendingQueries} Pending
                                                                 </span>
                                                             ) : (
-                                                                <span className="text-text-secondary text-xs">-</span>
+                                                                <span className="text-[#556070]/70 text-xs">-</span>
                                                             )}
                                                         </td>
                                                     </tr>
@@ -356,7 +356,7 @@ export default function ManagerDashboard() {
                                             })}
                                             {tasks.length === 0 && (
                                                 <tr>
-                                                    <td colSpan="5" className="px-6 py-8 text-center text-text-secondary">
+                                                    <td colSpan="5" className="px-6 py-8 text-center text-[#556070]/80">
                                                         No tasks found. Tasks from your team's projects will appear here.
                                                     </td>
                                                 </tr>
@@ -365,8 +365,8 @@ export default function ManagerDashboard() {
                                     </table>
                                 </div>
                                 {/* View More Footer */}
-                                <div className="p-3 border-t border-border-dark bg-surface-dark hover:bg-background-dark/30 transition-colors flex justify-center cursor-pointer" onClick={() => navigate('/manager/tasks')}>
-                                    <button className="text-emerald-400 text-sm font-medium flex items-center gap-1">
+                                <div className="p-3 border-t border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors flex justify-center cursor-pointer" onClick={() => navigate('/engineer/tasks')}>
+                                    <button className="text-emerald-700 text-sm font-medium flex items-center gap-1">
                                         View More Tasks
                                         <span className="material-symbols-outlined text-base">expand_more</span>
                                     </button>

@@ -81,7 +81,18 @@ const taskSchema = new mongoose.Schema({
     // Rejection Tracking
     rejectionReason: { type: String, default: '' },
     rejectedAt: { type: Date, default: null },
-    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    
+    // Production / Flow Control Fields
+    isProductionTask: { type: Boolean, default: false },
+    isFullProductStage: { type: Boolean, default: false },
+    productionPhase: { type: String, default: '' },
+    sequence: { type: Number, default: 0 },
+    unitsCompleted: { type: Number, default: 0 },
+    unitsCurrentlyHere: { type: Number, default: 0 },
+
+    // Manager drag-to-reorder position (independent of production sequence)
+    order: { type: Number, default: 0 }
 }, {
     timestamps: true, // Automatically adds createdAt and updatedAt
 });

@@ -10,6 +10,7 @@ body {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #ECF1FF;
 }
 
 #root {
@@ -18,8 +19,309 @@ body {
   overflow: hidden;
 }
 
+/* Light-theme readability guard:
+   keep typography dark on light cards/sections without changing layout/logic */
+.light-theme [class*="bg-white"] h1.text-white,
+.light-theme [class*="bg-white"] h2.text-white,
+.light-theme [class*="bg-white"] h3.text-white,
+.light-theme [class*="bg-white"] h4.text-white,
+.light-theme [class*="bg-white"] p.text-white,
+.light-theme [class*="bg-white"] span.text-white,
+.light-theme [class*="bg-white"] div.text-white,
+.light-theme [class*="bg-white"] td.text-white,
+.light-theme [class*="bg-white"] th.text-white,
+.light-theme [class*="bg-white"] label.text-white,
+.light-theme [class*="bg-white"] input.text-white,
+.light-theme [class*="bg-white"] select.text-white,
+.light-theme [class*="bg-white"] textarea.text-white,
+.light-theme [class*="bg-slate-50"] h1.text-white,
+.light-theme [class*="bg-slate-50"] h2.text-white,
+.light-theme [class*="bg-slate-50"] h3.text-white,
+.light-theme [class*="bg-slate-50"] h4.text-white,
+.light-theme [class*="bg-slate-50"] p.text-white,
+.light-theme [class*="bg-slate-50"] span.text-white,
+.light-theme [class*="bg-slate-50"] div.text-white,
+.light-theme [class*="bg-slate-50"] td.text-white,
+.light-theme [class*="bg-slate-50"] th.text-white,
+.light-theme [class*="bg-slate-50"] label.text-white,
+.light-theme [class*="bg-slate-50"] input.text-white,
+.light-theme [class*="bg-slate-50"] select.text-white,
+.light-theme [class*="bg-slate-50"] textarea.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] h1.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] h2.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] h3.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] h4.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] p.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] span.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] div.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] td.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] th.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] label.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] input.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] select.text-white,
+.light-theme [class*="bg-[#ECF1FF]"] textarea.text-white {
+  color: #002045 !important;
+}
+
+.light-theme [class*="bg-white"] .hover\:text-white:hover,
+.light-theme [class*="bg-slate-50"] .hover\:text-white:hover,
+.light-theme [class*="bg-[#ECF1FF]"] .hover\:text-white:hover,
+.light-theme [class*="bg-surface-dark"] .hover\:text-white:hover,
+.light-theme [class*="bg-background-dark"] .hover\:text-white:hover {
+  color: #1e293b !important;
+}
+
+.light-theme [class*="bg-white"] .group-hover\:text-white,
+.light-theme [class*="bg-slate-50"] .group-hover\:text-white,
+.light-theme [class*="bg-[#ECF1FF]"] .group-hover\:text-white,
+.light-theme [class*="bg-surface-dark"] .group-hover\:text-white,
+.light-theme [class*="bg-background-dark"] .group-hover\:text-white {
+  color: #002045 !important;
+}
+
+/* Additional pass: many pages still use "surface/background dark" tokens on light mode */
+.light-theme [class*="bg-surface-dark"] h1.text-white,
+.light-theme [class*="bg-surface-dark"] h2.text-white,
+.light-theme [class*="bg-surface-dark"] h3.text-white,
+.light-theme [class*="bg-surface-dark"] h4.text-white,
+.light-theme [class*="bg-surface-dark"] p.text-white,
+.light-theme [class*="bg-surface-dark"] span.text-white,
+.light-theme [class*="bg-surface-dark"] div.text-white,
+.light-theme [class*="bg-surface-dark"] td.text-white,
+.light-theme [class*="bg-surface-dark"] th.text-white,
+.light-theme [class*="bg-surface-dark"] label.text-white,
+.light-theme [class*="bg-surface-dark"] input.text-white,
+.light-theme [class*="bg-surface-dark"] select.text-white,
+.light-theme [class*="bg-surface-dark"] textarea.text-white,
+.light-theme [class*="bg-background-dark"] h1.text-white,
+.light-theme [class*="bg-background-dark"] h2.text-white,
+.light-theme [class*="bg-background-dark"] h3.text-white,
+.light-theme [class*="bg-background-dark"] h4.text-white,
+.light-theme [class*="bg-background-dark"] p.text-white,
+.light-theme [class*="bg-background-dark"] span.text-white,
+.light-theme [class*="bg-background-dark"] div.text-white,
+.light-theme [class*="bg-background-dark"] td.text-white,
+.light-theme [class*="bg-background-dark"] th.text-white,
+.light-theme [class*="bg-background-dark"] label.text-white,
+.light-theme [class*="bg-background-dark"] input.text-white,
+.light-theme [class*="bg-background-dark"] select.text-white,
+.light-theme [class*="bg-background-dark"] textarea.text-white {
+  color: #002045 !important;
+}
+
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #002045 !important;
+  opacity: 0.6;
+}
+
+/* Global dark-surface form readability:
+   keep typed text and placeholders visible on dark cards, modals, and panels. */
+[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-background-dark"] textarea,
+[class*="bg-background-dark"] select,
+[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-surface-dark"] textarea,
+[class*="bg-surface-dark"] select,
+[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-slate-900"] textarea,
+[class*="bg-slate-900"] select,
+[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-slate-950"] textarea,
+[class*="bg-slate-950"] select,
+[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0a0f1d]"] textarea,
+[class*="bg-[#0a0f1d]"] select,
+[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0F172A]"] textarea,
+[class*="bg-[#0F172A]"] select,
+[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#0b1326]"] textarea,
+[class*="bg-[#0b1326]"] select,
+[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[class*="bg-[#131b2e]"] textarea,
+[class*="bg-[#131b2e]"] select {
+  color: #f1f5f9 !important;
+  caret-color: #f8fafc;
+}
+
+[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-background-dark"] textarea::placeholder,
+[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-surface-dark"] textarea::placeholder,
+[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-slate-900"] textarea::placeholder,
+[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-slate-950"] textarea::placeholder,
+[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0a0f1d]"] textarea::placeholder,
+[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0F172A]"] textarea::placeholder,
+[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#0b1326]"] textarea::placeholder,
+[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
+[class*="bg-[#131b2e]"] textarea::placeholder {
+  color: #8ea4c9 !important;
+  opacity: 1;
+}
+
+/* Keep button text readable on primary/semantic buttons */
+.light-theme button.text-white,
+.light-theme button .text-white,
+.light-theme a.text-white,
+.light-theme [class*="bg-primary"] .text-white,
+.light-theme [class*="bg-emerald-"] .text-white,
+.light-theme [class*="bg-indigo-"] .text-white,
+.light-theme [class*="bg-red-"] .text-white,
+.light-theme [class*="bg-amber-"] .text-white,
+.light-theme [class*="bg-violet-"] .text-white,
+.light-theme [class*="bg-blue-"] .text-white {
+  color: #ffffff !important;
+}
+
+/* Final light-theme pass:
+   default any leftover white typography to dark, then opt back in for truly colored surfaces. */
+.light-theme .text-white {
+  color: #556070 !important;
+}
+
+.light-theme .hover\:text-white:hover {
+  color: #556070 !important;
+}
+
+.light-theme .bg-gradient-primary.text-white,
+.light-theme .bg-gradient-primary .text-white,
+.light-theme [class*="bg-gradient-to-"].text-white,
+.light-theme [class*="bg-gradient-to-"] .text-white,
+.light-theme [class*="from-"].text-white,
+.light-theme [class*="from-"] .text-white,
+.light-theme [class*="to-"].text-white,
+.light-theme [class*="to-"] .text-white,
+.light-theme [class*="via-"].text-white,
+.light-theme [class*="via-"] .text-white,
+.light-theme [class*="bg-primary"].text-white,
+.light-theme [class*="bg-primary"] .text-white,
+.light-theme [class*="bg-emerald-"].text-white,
+.light-theme [class*="bg-emerald-"] .text-white,
+.light-theme [class*="bg-indigo-"].text-white,
+.light-theme [class*="bg-indigo-"] .text-white,
+.light-theme [class*="bg-red-"].text-white,
+.light-theme [class*="bg-red-"] .text-white,
+.light-theme [class*="bg-amber-"].text-white,
+.light-theme [class*="bg-amber-"] .text-white,
+.light-theme [class*="bg-violet-"].text-white,
+.light-theme [class*="bg-violet-"] .text-white,
+.light-theme [class*="bg-blue-"].text-white,
+.light-theme [class*="bg-blue-"] .text-white,
+.light-theme [class*="bg-cyan-"].text-white,
+.light-theme [class*="bg-cyan-"] .text-white,
+.light-theme [class*="bg-teal-"].text-white,
+.light-theme [class*="bg-teal-"] .text-white,
+.light-theme [class*="bg-green-"].text-white,
+.light-theme [class*="bg-green-"] .text-white,
+.light-theme [class*="bg-orange-"].text-white,
+.light-theme [class*="bg-orange-"] .text-white,
+.light-theme [class*="bg-yellow-"].text-white,
+.light-theme [class*="bg-yellow-"] .text-white,
+.light-theme [class*="bg-slate-700"].text-white,
+.light-theme [class*="bg-slate-700"] .text-white,
+.light-theme [class*="bg-slate-800"].text-white,
+.light-theme [class*="bg-slate-800"] .text-white,
+.light-theme [class*="bg-slate-900"].text-white,
+.light-theme [class*="bg-slate-900"] .text-white,
+.light-theme [class*="bg-background-dark"].text-white,
+.light-theme [class*="bg-background-dark"] .text-white,
+.light-theme [class*="bg-surface-dark"].text-white,
+.light-theme [class*="bg-surface-dark"] .text-white {
+  color: #ffffff !important;
+}
+
 /* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.custom-scrollbar::-webkit-scrollbar-thumb { background: #2d313d; border-radius: 10px; }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #3f4455; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* Print optimization for Inventory Documents */
+@media print {
+  .no-print, aside, header, .bottom-nav, button {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  .bg-surface-dark, .bg-background-dark {
+    background: white !important;
+    border-color: #ddd !important;
+  }
+  .text-white, .text-text-secondary {
+    color: black !important;
+  }
+  .max-w-7xl, .max-w-4xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  th, td {
+    border: 1px solid #ddd !important;
+    padding: 8px !important;
+  }
+}
+
+/* Date picker normalization */
+input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  color: inherit;
+  background-color: inherit;
+}
+
+input[type="date"]::-webkit-date-and-time-value,
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  color: inherit;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.date-input-light {
+  color-scheme: light;
+}
+
+.date-input-light::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+.date-input-dark {
+  /* Keep the field visually dark, but use a light native picker for readability. */
+  color-scheme: light;
+  color: #f8fafc;
+  background-color: inherit;
+}
+
+.date-input-dark::-webkit-calendar-picker-indicator {
+  filter: invert(0.92) sepia(0.08) saturate(0.7) hue-rotate(180deg) brightness(1.05);
+}
+
+/* Hide Number Input Spin Arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}

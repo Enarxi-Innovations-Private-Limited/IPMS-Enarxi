@@ -114,7 +114,7 @@ export default function SuperUserDashboard() {
           <nav aria-label="Breadcrumb" className="flex mb-6">
             <ol className="inline-flex items-center space-x-2">
               <li>
-                <span className="text-white text-sm font-medium">Dashboard</span>
+                <span className="text-[#556070] text-sm font-medium">Dashboard</span>
               </li>
             </ol>
           </nav>
@@ -122,7 +122,7 @@ export default function SuperUserDashboard() {
           {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
             <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Dashboard Overview</h1>
+              <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">Dashboard Overview</h1>
               <p className="text-text-secondary text-lg">Monitor your projects, teams, and overall performance.</p>
             </div>
             <div className="flex gap-3">
@@ -148,50 +148,50 @@ export default function SuperUserDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div
                   onClick={() => navigate('/super/projects')}
-                  className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 hover:bg-surface-dark/80 transition-all group"
+                  className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm cursor-pointer hover:border-primary/50 hover:bg-slate-50 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Total Projects</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-[#556070] transition-colors">Total Projects</h3>
                     <span className="material-symbols-outlined text-primary">folder</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{summary.total}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{summary.total}</p>
                 </div>
                 <div
                   onClick={() => navigate('/super/projects?filter=ACTIVE')}
                   className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-green-500/50 hover:bg-surface-dark/80 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Active</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-[#556070] transition-colors">Active</h3>
                     <span className="material-symbols-outlined text-green-500">trending_up</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{summary.active}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{summary.active}</p>
                 </div>
                 <div
                   onClick={() => navigate('/super/projects?filter=COMPLETED')}
                   className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 hover:bg-surface-dark/80 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Completed</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-[#556070] transition-colors">Completed</h3>
                     <span className="material-symbols-outlined text-blue-500">check_circle</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{summary.completed}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{summary.completed}</p>
                 </div>
                 <div
                   onClick={() => navigate('/super/projects?filter=DELAYED')}
                   className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl cursor-pointer hover:border-red-500/50 hover:bg-surface-dark/80 transition-all group"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-white transition-colors">Delayed</h3>
+                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider group-hover:text-[#556070] transition-colors">Delayed</h3>
                     <span className="material-symbols-outlined text-red-500">warning</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{summary.delayed}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{summary.delayed}</p>
                 </div>
               </div>
 
               {/* Pending Delay Approvals Widget */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                     <span className="material-symbols-outlined text-amber-500">warning</span>
                     Pending Delay Approvals ({pendingDelayTasks.length})
                   </h2>
@@ -199,7 +199,7 @@ export default function SuperUserDashboard() {
                 <div className="overflow-x-auto">
                   {pendingDelayTasks.length > 0 ? (
                     <table className="w-full">
-                      <thead className="bg-background-dark/50">
+                      <thead className="bg-[#ECF1FF]/50">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Task</th>
                           <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">Project</th>
@@ -210,8 +210,8 @@ export default function SuperUserDashboard() {
                       </thead>
                       <tbody className="divide-y divide-border-dark">
                         {pendingDelayTasks.map(task => (
-                          <tr key={task.id || task._id} className="hover:bg-background-dark/30">
-                            <td className="px-6 py-4 text-white font-medium">{task.title}</td>
+                          <tr key={task.id || task._id} className="hover:bg-slate-50">
+                            <td className="px-6 py-4 text-[#556070] font-medium">{task.title}</td>
                             <td className="px-6 py-4 text-text-secondary text-sm">{task.projectName || task.projectCode}</td>
                             <td className="px-6 py-4 text-text-secondary text-sm">
                               {availableUsers.find(u => u.id === task.assigneeId)?.name || 'Unknown'}
@@ -251,16 +251,16 @@ export default function SuperUserDashboard() {
               </div>
 
               {/* Projects Table */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mb-8">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">folder</span>
                     Projects
                   </h2>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-background-dark/50">
+                    <thead className="bg-[#ECF1FF]/50">
                       <tr>
                         <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
                           Name
@@ -282,9 +282,9 @@ export default function SuperUserDashboard() {
                         const completedTasks = p.completedTaskCount || 0;
                         const completion = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
                         return (
-                          <tr key={p.id} className="hover:bg-background-dark/30 transition-colors">
+                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-white font-medium">{p.name}</div>
+                              <div className="text-[#556070] font-medium">{p.name}</div>
                               <div className="text-text-secondary text-sm mt-1">{p.description || 'No description'}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -332,9 +332,9 @@ export default function SuperUserDashboard() {
               </div>
 
               {/* Recent Activity */}
-              <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">history</span>
                     Recent Activity
                   </h2>
@@ -344,7 +344,7 @@ export default function SuperUserDashboard() {
                     {activities.map((a) => (
                       <li key={a.id} className="flex items-center gap-3 text-sm">
                         <span className="material-symbols-outlined text-primary text-lg">circle</span>
-                        <span className="text-white flex-1">
+                        <span className="text-[#556070] flex-1">
                           <span className="font-medium">{a.action}</span>
                           {a.details && (
                             <span className="text-text-secondary ml-2">
@@ -370,7 +370,7 @@ export default function SuperUserDashboard() {
       {/* Notification Toast */}
       {notification && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[10000] animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className={`${notification.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'} text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 font-bold`}>
+          <div className={`${notification.type === 'error' ? 'bg-red-500' : 'bg-emerald-500'} text-[#556070] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 font-bold`}>
             <span className="material-symbols-outlined">{notification.type === 'error' ? 'error' : 'check_circle'}</span>
             {notification.message}
           </div>
@@ -380,7 +380,7 @@ export default function SuperUserDashboard() {
       {/* Rejection Modal */}
       {showRejectionModal && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b border-border-dark bg-red-500/10">
               <h2 className="text-lg font-semibold text-red-400 flex items-center gap-2">
                 <span className="material-symbols-outlined">feedback</span>
@@ -390,17 +390,17 @@ export default function SuperUserDashboard() {
             <div className="p-6">
               <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">Rejection Reason</label>
               <textarea
-                className="w-full bg-background-dark border border-border-dark rounded-xl px-4 py-3 text-white placeholder-text-secondary/30 focus:ring-2 focus:ring-red-500/50 outline-none resize-none h-32"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-[#556070] placeholder-text-secondary/30 focus:ring-2 focus:ring-red-500/50 outline-none resize-none h-32"
                 placeholder="Enter reason for rejection..."
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
               />
             </div>
-            <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
-              <button
-                onClick={() => setShowRejectionModal(false)}
-                className="px-4 py-2 text-white hover:bg-white/5 rounded-lg transition-colors"
-              >
+            <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowRejectionModal(false)}
+                  className="px-4 py-2 text-[#556070] hover:bg-slate-50 rounded-lg transition-colors"
+                >
                 Cancel
               </button>
               <button
@@ -411,7 +411,7 @@ export default function SuperUserDashboard() {
                   }
                 }}
                 disabled={!rejectionReason.trim()}
-                className="px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all disabled:opacity-50"
+                className="px-6 py-2 bg-red-500 hover:bg-red-600 text-[#556070] rounded-lg font-bold shadow-lg shadow-red-900/40 transition-all disabled:opacity-50"
               >
                 Confirm Reject
               </button>

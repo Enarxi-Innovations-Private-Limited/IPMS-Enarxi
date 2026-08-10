@@ -4,6 +4,7 @@ import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import api from '../../services/api.js';
 import EmployeeLayout from '../common/EmployeeLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
+import ProductionWorkerProjectView from './ProductionWorkerProjectView.jsx';
 
 // Kanban Components
 const KanbanTaskCard = ({ task, onClick }) => {
@@ -86,7 +87,27 @@ export default function EmployeeProjectsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [selectedProject, setSelectedProject] = useState(null);
+    const [fullProjectTasks, setFullProjectTasks] = useState([]);
+    const [productionAssignments, setProductionAssignments] = useState([]);
+    const [productionDrafts, setProductionDrafts] = useState({});
+    const [productionSaving, setProductionSaving] = useState({});
     const user = getCurrentUser();
+
+    useEffect(() => {
+        if (!selectedProject) {
+            setFullProjectTasks([]);
+            return;
+        }
+        const fetchFullProjectTasks = async () => {
+            try {
+                const res = await api.get(`/projects/${selectedProject.id}/tasks`);
+                setFullProjectTasks(res.data || []);
+            } catch (err) {
+                console.error('Failed to load full project tasks', err);
+            }
+        };
+        fetchFullProjectTasks();
+    }, [selectedProject]);
 
     // Attachments State
     const [isAttachmentsExpanded, setIsAttachmentsExpanded] = useState(true);
@@ -130,12 +151,23 @@ export default function EmployeeProjectsPage() {
     const loadData = async () => {
         try {
             setLoading(true);
-            const [projRes, taskRes] = await Promise.all([
+            const [projRes, taskRes, productionRes] = await Promise.all([
                 api.get('/projects'),
                 api.get('/tasks'),
+                api.get('/my/production-assignments')
             ]);
             setProjects(projRes.data);
             setTasks(taskRes.data);
+            setProductionAssignments(productionRes.data || []);
+            setProductionDrafts(
+                (productionRes.data || []).reduce((acc, item) => {
+                    acc[item.id] = {
+                        boardsCompletedDraft: String(item.boardsCompletedDraft ?? item.boardsCompletedApproved ?? 0),
+                        delayReason: item.delayReason || ''
+                    };
+                    return acc;
+                }, {})
+            );
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load projects');
         } finally {
@@ -157,6 +189,31 @@ export default function EmployeeProjectsPage() {
         const notStarted = projectTasks.filter((t) => t.status === 'NOT_STARTED').length;
         const completion = total > 0 ? Math.round((completed / total) * 100) : 0;
         return { total, completed, inProgress, notStarted, completion };
+    };
+
+    const submitProductionProgress = async (assignment) => {
+        const assignmentId = assignment.id;
+        const draft = productionDrafts[assignmentId] || {};
+        const boardsCompletedDraft = Number(draft.boardsCompletedDraft);
+        const delayReason = draft.delayReason || '';
+
+        if (!Number.isInteger(boardsCompletedDraft) || boardsCompletedDraft < 0) {
+            setError('Completed boards must be a whole number 0 or greater.');
+            return;
+        }
+
+        try {
+            setProductionSaving((prev) => ({ ...prev, [assignmentId]: true }));
+            await api.put(`/production/assignments/${assignmentId}/progress`, {
+                boardsCompletedDraft,
+                delayReason
+            });
+            await loadData();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to submit production progress');
+        } finally {
+            setProductionSaving((prev) => ({ ...prev, [assignmentId]: false }));
+        }
     };
 
     const handleUpdateProjectStatus = async (status) => {
@@ -215,6 +272,120 @@ export default function EmployeeProjectsPage() {
     if (selectedProject) {
         const stats = getProjectStats(selectedProject.id);
         const projectTasks = getProjectTasks(selectedProject.id);
+        const projectProductionTasks = fullProjectTasks.filter((task) => task.isProductionTask || task.isFullProductStage);
+        const projectProductionAssignments = productionAssignments.filter((assignment) => String(assignment.projectId) === String(selectedProject.id));
+
+        if (['PRODUCTION', 'FULL_PRODUCT_PRODUCTION'].includes(selectedProject.projectType)) {
+            return (
+                <EmployeeLayout currentPage="projects">
+                    <div className="p-6 lg:px-12 pb-24">
+                        <div className="max-w-[1480px] mx-auto w-full">
+                            <nav aria-label="Breadcrumb" className="flex mb-6">
+                                <ol className="inline-flex items-center space-x-2">
+                                    <li>
+                                        <button
+                                            onClick={() => navigate('/employee')}
+                                            className="text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                        >
+                                            Dashboard
+                                        </button>
+                                    </li>
+                                    <li className="flex items-center">
+                                        <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
+                                        <button
+                                            onClick={() => setSelectedProject(null)}
+                                            className="ml-2 text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                        >
+                                            My Projects
+                                        </button>
+                                    </li>
+                                    <li className="flex items-center">
+                                        <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
+                                        <span className="ml-2 text-white text-sm font-medium">{selectedProject.projectCode || selectedProject.name}</span>
+                                    </li>
+                                </ol>
+                            </nav>
+
+                            <ProductionWorkerProjectView
+                                project={selectedProject}
+                                tasks={projectProductionTasks}
+                                assignments={projectProductionAssignments}
+                                productionDrafts={productionDrafts}
+                                productionSaving={productionSaving}
+                                setProductionDrafts={setProductionDrafts}
+                                submitProductionProgress={submitProductionProgress}
+                                onBack={() => setSelectedProject(null)}
+                            />
+
+                            <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden mt-8">
+                                <div
+                                    className="px-6 py-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between cursor-pointer"
+                                    onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
+                                >
+                                    <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-primary">attach_file</span>
+                                        Attachments ({selectedProject.attachments?.length || 0})
+                                    </h2>
+                                    <span className={`material-symbols-outlined text-text-secondary transition-transform ${isAttachmentsExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                                </div>
+
+                                {isAttachmentsExpanded && (
+                                    <div className="p-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                            {selectedProject.attachments?.map((file, idx) => (
+                                                <div key={idx} className="flex items-center gap-3 p-3 bg-background-dark/50 border border-border-dark rounded-lg hover:bg-background-dark transition-colors group">
+                                                    <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                                                        <span className="material-symbols-outlined text-xl">description</span>
+                                                    </div>
+                                                    <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
+                                                        <p className="text-white text-sm font-medium truncate">{file.name}</p>
+                                                        <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
+                                                    </a>
+                                                    <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Open">
+                                                        <span className="material-symbols-outlined">open_in_new</span>
+                                                    </a>
+                                                </div>
+                                            ))}
+                                            {(!selectedProject.attachments || selectedProject.attachments.length === 0) && (
+                                                <div className="col-span-full py-4 text-center text-text-secondary text-sm">
+                                                    No attachments yet.
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="border-t border-border-dark pt-6">
+                                            <h4 className="text-white text-sm font-medium mb-3">Upload New Document</h4>
+                                            <div className="flex gap-2 mb-3">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Document Name (e.g., Project Plan v1)"
+                                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                                    value={attachmentName}
+                                                    onChange={(e) => setAttachmentName(e.target.value)}
+                                                />
+                                            </div>
+                                            <label className={`block w-full border-2 border-dashed border-border-dark rounded-xl p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                <input
+                                                    type="file"
+                                                    multiple
+                                                    className="hidden"
+                                                    onChange={handleUploadAttachment}
+                                                    disabled={isUploading}
+                                                />
+                                                <div className="flex flex-col items-center gap-1">
+                                                    <span className="material-symbols-outlined text-text-secondary group-hover:text-primary text-2xl">upload_file</span>
+                                                    <p className="text-sm font-medium text-white">Click to select files</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </EmployeeLayout>
+            );
+        }
 
         const mobileTabs = [
             { key: 'NOT_STARTED', label: 'New' },
@@ -262,7 +433,7 @@ export default function EmployeeProjectsPage() {
                                 </li>
                                 <li className="flex items-center">
                                     <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                    <span className="ml-2 text-white text-sm font-medium">{selectedProject.projectCode || 'No ID'}</span>
+                                    <span className="ml-2 text-white text-sm font-medium">{selectedProject.name || selectedProject.projectCode}</span>
                                 </li>
                             </ol>
                         </nav>
@@ -271,9 +442,12 @@ export default function EmployeeProjectsPage() {
                         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                             <div>
                                 <div className="flex items-center gap-3 mb-2">
-                                    <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
-                                        {selectedProject.projectCode || 'No ID'}
-                                    </h1>
+                                    <div>
+                                        <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                                            {selectedProject.name || selectedProject.projectCode}
+                                        </h1>
+                                        <p className="text-primary font-mono text-sm mt-0.5">{selectedProject.projectCode}</p>
+                                    </div>
                                     <div className={`px-4 py-1.5 text-sm font-bold uppercase tracking-wider rounded-full border-none ${selectedProject.status === 'ACTIVE' ? 'bg-green-500/20 text-green-400' :
                                         selectedProject.status === 'COMPLETED' ? 'bg-purple-500/20 text-purple-400' :
                                             selectedProject.status === 'ON_HOLD' ? 'bg-orange-500/20 text-orange-400' :
@@ -288,7 +462,7 @@ export default function EmployeeProjectsPage() {
                             </div>
                             <button
                                 onClick={() => setSelectedProject(null)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-surface-dark transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-text-secondary font-semibold hover:bg-slate-100 bg-white transition-colors"
                             >
                                 <span className="material-symbols-outlined text-lg">arrow_back</span>
                                 Back to Projects
@@ -560,7 +734,7 @@ export default function EmployeeProjectsPage() {
                         </div>
                     </div>
                 </div>
-            </EmployeeLayout >
+            </EmployeeLayout>
         );
     }
 
@@ -631,9 +805,10 @@ export default function EmployeeProjectsPage() {
                                                     arrow_forward
                                                 </span>
                                             </div>
-                                            <h3 className="text-primary font-bold text-lg mb-2 group-hover:text-white transition-colors font-mono">
-                                                {project.projectCode || 'No ID'}
+                                            <h3 className="text-white font-bold text-lg mb-1 group-hover:text-primary transition-colors leading-snug">
+                                                {project.name || project.projectCode || 'Untitled Project'}
                                             </h3>
+                                            <p className="text-primary font-mono text-xs mb-2">{project.projectCode}</p>
                                             <p className="text-text-secondary text-sm line-clamp-2 mb-4">
                                                 {project.description || 'No description'}
                                             </p>

@@ -199,7 +199,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
     };
 
     const isAssignee = currentUser && (currentUser.id === (activeTask.assigneeId?._id || activeTask.assigneeId));
-    const showCompleteButton = activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
+    const showCompleteButton = !activeTask.isFullProductStage && activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -339,7 +339,7 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                             type="date"
                                             value={deadlineInput}
                                             onChange={(e) => setDeadlineInput(e.target.value)}
-                                            className="bg-background-dark border border-border-dark rounded px-2 py-1 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                            className="date-input-dark bg-background-dark border border-border-dark rounded px-2 py-1 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         />
                                         <button
                                             onClick={handleDeadlineUpdate}

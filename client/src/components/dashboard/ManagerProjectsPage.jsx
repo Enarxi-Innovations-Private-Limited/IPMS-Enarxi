@@ -1,19 +1,58 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import api from '../../services/api.js';
 import { getCurrentUser } from '../../services/authService.js';
 import ManagerLayout from '../common/ManagerLayout.jsx';
 import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
+import ProductionDashboard from './ProductionDashboard.jsx';
+import { useSocket } from '../../context/SocketContext.jsx';
 
-// Draggable Task Component
+// Sortable table row for drag-to-reorder
+function SortableTaskRow({ task, children }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task._id || task.id });
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.45 : 1,
+        background: isDragging ? 'rgba(16,185,129,0.05)' : undefined,
+        zIndex: isDragging ? 10 : undefined,
+        position: 'relative',
+    };
+    return (
+        <tr ref={setNodeRef} style={style} className="hover:bg-slate-800/20 transition-colors group">
+            <td className="pl-3 pr-0 py-5 w-8 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+                <span className="material-symbols-outlined text-[18px] text-slate-600 hover:text-emerald-400 select-none transition-colors">
+                    drag_indicator
+                </span>
+            </td>
+            {children}
+        </tr>
+    );
+}
 
 
 export default function ManagerProjectsPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const { socket } = useSocket();
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
+    const [isSaving, setIsSaving] = useState(false);
+    const saveTimerRef = useRef(null);
     const [users, setUsers] = useState([]); // All users available to manager (filtered by department backend side)
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
@@ -37,6 +76,12 @@ export default function ManagerProjectsPage() {
     const [showAssignDeadlineModal, setShowAssignDeadlineModal] = useState(false);
     const [pendingAssignment, setPendingAssignment] = useState(null); // { taskId, assigneeId, task }
     const [assignDeadline, setAssignDeadline] = useState('');
+    const [showDeadlineExtensionModal, setShowDeadlineExtensionModal] = useState(false);
+    const [deadlineExtensionReason, setDeadlineExtensionReason] = useState('');
+    const [deadlineExtensionDate, setDeadlineExtensionDate] = useState('');
+    const [deadlineExtensionRequests, setDeadlineExtensionRequests] = useState([]);
+    const [loadingDeadlineExtensionRequests, setLoadingDeadlineExtensionRequests] = useState(false);
+    const [submittingDeadlineExtension, setSubmittingDeadlineExtension] = useState(false);
 
     // Add Member State
     const [showAddMember, setShowAddMember] = useState(false);
@@ -69,6 +114,24 @@ export default function ManagerProjectsPage() {
     const [showMemberDetailsModal, setShowMemberDetailsModal] = useState(false);
     const [selectedTeamMember, setSelectedTeamMember] = useState(null);
     const [memberPerformance, setMemberPerformance] = useState(null);
+
+    const isProductionOnlyProject = (project, tasksForProject = []) => {
+        if (!project) return false;
+        return project.projectType === 'PRODUCTION' || (!project.projectType && tasksForProject.some((task) => task.isProductionTask));
+    };
+
+    const isFullProductProductionProject = (project) => project?.projectType === 'FULL_PRODUCT_PRODUCTION';
+    const isBoardProjectView = (project, tasksForProject = []) =>
+        isProductionOnlyProject(project, tasksForProject) || isFullProductProductionProject(project);
+
+    const isProjectOverdue = (project) => {
+        if (!project?.deadline) return false;
+        const deadline = new Date(project.deadline);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        deadline.setHours(0, 0, 0, 0);
+        return deadline < today;
+    };
 
     useEffect(() => {
         if (notification) {
@@ -207,21 +270,120 @@ export default function ManagerProjectsPage() {
         }
     };
 
+    const loadDeadlineExtensionRequests = async (projectId) => {
+        if (!projectId) return;
+        try {
+            setLoadingDeadlineExtensionRequests(true);
+            const res = await api.get('/project-deadline-extension-requests', { params: { projectId } });
+            setDeadlineExtensionRequests(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to load deadline extension requests:', err);
+            setDeadlineExtensionRequests([]);
+        } finally {
+            setLoadingDeadlineExtensionRequests(false);
+        }
+    };
+
+    const openDeadlineExtensionModal = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setDeadlineExtensionDate(tomorrow.toISOString().slice(0, 10));
+        setDeadlineExtensionReason('');
+        setShowDeadlineExtensionModal(true);
+    };
+
+    const handleSubmitDeadlineExtensionRequest = async (e) => {
+        if (e) e.preventDefault();
+        if (!selectedProject) return;
+        if (!deadlineExtensionDate) {
+            setNotification({ message: 'Requested deadline is required.', type: 'error' });
+            return;
+        }
+        if (!deadlineExtensionReason.trim()) {
+            setNotification({ message: 'Reason is required for deadline extension.', type: 'error' });
+            return;
+        }
+
+        try {
+            setSubmittingDeadlineExtension(true);
+            const res = await api.post(`/projects/${selectedProject.id}/deadline-extension-requests`, {
+                requestedDeadline: deadlineExtensionDate,
+                reason: deadlineExtensionReason.trim()
+            });
+            setNotification({ message: res.data?.message || 'Deadline extension request submitted.', type: 'success' });
+            setShowDeadlineExtensionModal(false);
+            await loadDeadlineExtensionRequests(selectedProject.id);
+        } catch (err) {
+            setNotification({
+                message: err.response?.data?.message || 'Failed to submit deadline extension request.',
+                type: 'error'
+            });
+        } finally {
+            setSubmittingDeadlineExtension(false);
+        }
+    };
+
     const handleDeleteTask = async (taskId) => {
         try {
             console.log('Attempting to delete task:', taskId);
             await api.delete(`/tasks/${taskId}`);
             console.log('Task delete API success');
-            setTasks(tasks.filter(t => t.id !== taskId));
+            setTasks(tasks.filter(t => t.id !== taskId && t._id !== taskId));
             setNotification({ message: 'Task Deleted', type: 'success' });
         } catch (err) {
             console.error('Failed to delete task:', err);
+            setNotification({
+                message: err.response?.data?.message || 'Failed to delete task.',
+                type: 'error'
+            });
         }
     };
 
     useEffect(() => {
         loadData();
     }, []);
+
+    // Socket.IO — receive reorder events from other clients
+    useEffect(() => {
+        const sock = socket?.current;
+        if (!sock) return;
+        sock.emit('join:tasks');
+        const handleReordered = (items) => {
+            const orderMap = Object.fromEntries(items.map(i => [String(i.taskId), i.order]));
+            setTasks(prev => [...prev].sort((a, b) => {
+                const oa = orderMap[String(a._id ?? a.id)] ?? (a.order ?? 0);
+                const ob = orderMap[String(b._id ?? b.id)] ?? (b.order ?? 0);
+                return oa - ob;
+            }));
+        };
+        sock.on('tasks:reordered', handleReordered);
+        return () => sock.off('tasks:reordered', handleReordered);
+    }, [socket]);
+
+    // DnD sensors
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+    // Drag end — optimistic reorder within the current project's task list
+    const handleTaskDragEnd = ({ active, over }) => {
+        if (!over || active.id === over.id) return;
+        setTasks(prev => {
+            const oldIdx = prev.findIndex(t => (t._id ?? t.id) === active.id);
+            const newIdx = prev.findIndex(t => (t._id ?? t.id) === over.id);
+            if (oldIdx === -1 || newIdx === -1) return prev;
+            const reordered = arrayMove(prev, oldIdx, newIdx);
+            clearTimeout(saveTimerRef.current);
+            setIsSaving(true);
+            saveTimerRef.current = setTimeout(async () => {
+                try {
+                    const payload = reordered.map((t, i) => ({ taskId: t._id ?? t.id, order: i }));
+                    await api.put('/tasks/reorder', payload);
+                } catch { /* silent */ } finally {
+                    setIsSaving(false);
+                }
+            }, 600);
+            return reordered;
+        });
+    };
 
     useEffect(() => {
         if (!loading && projects.length > 0) {
@@ -260,7 +422,8 @@ export default function ManagerProjectsPage() {
         if (!project) return [];
         // Support both populated objects and ID strings
         const memberIds = project.teamIds?.map(m => (typeof m === 'object' && m ? m.id || m._id : m)) || [];
-        return users.filter(u => !memberIds.includes(u.id));
+        const currentUser = getCurrentUser();
+        return users.filter(u => !memberIds.includes(u.id) && u.id !== currentUser?.id);
     };
 
     const getStatusColor = (status) => {
@@ -277,6 +440,7 @@ export default function ManagerProjectsPage() {
         setShowDetailsModal(true);
         setShowAddTask(false);
         setShowAddMember(false);
+        loadDeadlineExtensionRequests(project.id);
     };
 
     const openTaskDetail = (task) => {
@@ -300,16 +464,41 @@ export default function ManagerProjectsPage() {
 
     const handleAddTask = async (e) => {
         if (e) e.preventDefault();
+        const trimmedTitle = newTaskTitle.trim();
         if (!newTaskDeadline) {
             setNotification({ message: 'Task deadline is mandatory', type: 'error' });
             return;
         }
+        if (!trimmedTitle) {
+            setNotification({ message: 'Task title is required', type: 'error' });
+            return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const deadlineDate = new Date(newTaskDeadline);
+        deadlineDate.setHours(0, 0, 0, 0);
+
+        if (deadlineDate < today) {
+            setNotification({ message: 'Task deadline cannot be in the past', type: 'error' });
+            return;
+        }
+
+        if (selectedProject?.deadline) {
+            const projectDeadline = new Date(selectedProject.deadline);
+            projectDeadline.setHours(0, 0, 0, 0);
+            if (deadlineDate > projectDeadline) {
+                setNotification({ message: 'Task deadline cannot be later than the project deadline', type: 'error' });
+                return;
+            }
+        }
+
         try {
             const res = await api.post('/tasks', {
-                title: newTaskTitle,
+                title: trimmedTitle,
                 description: newTaskDescription,
                 projectId: selectedProject.id,
-                deadline: new Date(newTaskDeadline),
+                deadline: deadlineDate,
                 // Assignee is left null intentionally so the manager can assign it later
             });
             setTasks([...tasks, res.data]);
@@ -321,6 +510,10 @@ export default function ManagerProjectsPage() {
             setNotification({ message: 'New Task Created', type: 'success' });
         } catch (err) {
             console.error('Failed to create task', err);
+            setNotification({
+                message: err.response?.data?.message || 'Failed to create task. Check the title and deadline and try again.',
+                type: 'error'
+            });
         }
     };
 
@@ -391,6 +584,12 @@ export default function ManagerProjectsPage() {
     // Confirm assignment with deadline
     const handleConfirmAssignment = async () => {
         if (!pendingAssignment) return;
+        if (selectedProjectIsOverdue) {
+            setNotification({ message: 'Project deadline has passed. Request super admin approval to extend the deadline before assigning tasks.', type: 'error' });
+            setShowAssignDeadlineModal(false);
+            openDeadlineExtensionModal();
+            return;
+        }
 
         const { taskId, assigneeId, isSelfAssign } = pendingAssignment;
 
@@ -438,6 +637,7 @@ export default function ManagerProjectsPage() {
             setAssignDeadline('');
         } catch (err) {
             console.error("Failed to assign task", err);
+            setNotification({ message: err.response?.data?.message || 'Failed to assign task.', type: 'error' });
             loadData(); // Revert on error
         }
     };
@@ -480,6 +680,11 @@ export default function ManagerProjectsPage() {
     // Function to handle "Assign" click
     const handleAssignClick = (e, task) => {
         e.stopPropagation();
+        if (isProjectOverdue(selectedProject)) {
+            setNotification({ message: 'Project deadline has passed. Request super admin approval to extend the deadline before assigning tasks.', type: 'error' });
+            openDeadlineExtensionModal();
+            return;
+        }
         const rect = e.currentTarget.getBoundingClientRect();
         // Position relative to viewport, handling edge cases
         setUserPickerPosition({ x: rect.left, y: rect.bottom + 5 });
@@ -490,6 +695,9 @@ export default function ManagerProjectsPage() {
     const getProjectTasks = () => {
         if (!selectedProject) return [];
         let pTasks = tasks.filter(t => t.projectId === selectedProject.id);
+        if (isFullProductProductionProject(selectedProject)) {
+            pTasks = pTasks.filter((task) => !task.isProductionTask);
+        }
 
         // Status Filter
         if (taskFilter !== 'ALL') {
@@ -514,9 +722,18 @@ export default function ManagerProjectsPage() {
         return pTasks;
     };
 
+    const selectedProjectAllTasks = selectedProject
+        ? tasks.filter(t => t.projectId === selectedProject.id || (t.project && t.project._id === selectedProject.id))
+        : [];
     const projectTasks = getProjectTasks();
+    const selectedProjectIsOverdue = isProjectOverdue(selectedProject);
+    const latestDeadlineExtensionRequest = deadlineExtensionRequests[0] || null;
     const totalPages = Math.ceil(projectTasks.length / itemsPerPage);
     const paginatedTasks = projectTasks.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const todayDateString = new Date().toISOString().split('T')[0];
+    const projectStartDateString = selectedProject?.startDate ? new Date(selectedProject.startDate).toISOString().split('T')[0] : '';
+    const projectDeadlineDateString = selectedProject?.deadline ? new Date(selectedProject.deadline).toISOString().split('T')[0] : '';
+    const addTaskMinDate = projectStartDateString && projectStartDateString > todayDateString ? projectStartDateString : todayDateString;
 
     // Color Helpers for new design
     const getStatusBadgeStyles = (status, isAssigned) => {
@@ -560,7 +777,7 @@ export default function ManagerProjectsPage() {
                     {/* Header & Filter */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8 shrink-0">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">Projects</h1>
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#556070] tracking-tight mb-2">Projects</h1>
                             <p className="text-text-secondary text-lg">Monitor and manage all team projects.</p>
                         </div>
                         <div className="flex gap-3">
@@ -570,7 +787,7 @@ export default function ManagerProjectsPage() {
                                     onClick={() => setFilter(status)}
                                     className={`px-4 py-2 rounded-lg font-medium transition-colors ${filter === status
                                         ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
-                                        : 'bg-surface-dark text-text-secondary hover:text-white border border-border-dark'
+                                        : 'bg-white text-text-secondary hover:text-[#1e293b] border border-slate-200'
                                         }`}
                                 >
                                     {status === 'ALL' ? 'All' : status.charAt(0) + status.slice(1).toLowerCase()}
@@ -581,13 +798,13 @@ export default function ManagerProjectsPage() {
 
                     {/* Content */}
                     {loading ? (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-8 text-center">
+                        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center">
                             <p className="text-text-secondary">Loading projects...</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto pb-4">
                             {filteredProjects.map((p) => {
-                                const projectTasks = tasks.filter((t) => t.projectId === p.id);
+                                const projectTasks = tasks.filter((t) => t.projectId === p.id && (p.projectType !== 'FULL_PRODUCT_PRODUCTION' || !t.isProductionTask));
                                 const completed = projectTasks.filter((t) => t.status === 'COMPLETED').length;
                                 const progress = projectTasks.length > 0 ? Math.round((completed / projectTasks.length) * 100) : 0;
                                 const projectMembers = users.filter((u) => p.teamIds?.includes(u.id));
@@ -596,12 +813,12 @@ export default function ManagerProjectsPage() {
                                     <div
                                         key={p.id}
                                         onClick={() => openDetailsModal(p)}
-                                        className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden hover:border-emerald-500/50 transition-colors cursor-pointer relative group h-full max-h-[300px] flex flex-col"
+                                        className="bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden hover:border-emerald-500/50 transition-colors cursor-pointer relative group h-full max-h-[300px] flex flex-col"
                                     >
                                         <div className="p-6 flex-1 flex flex-col">
                                             <div className="flex items-start justify-between mb-4">
                                                 <div>
-                                                    <h3 className="text-white font-semibold text-lg">{p.name}</h3>
+                                                    <h3 className="text-[#556070] font-semibold text-lg">{p.name}</h3>
                                                     {p.projectCode && (
                                                         <p className="text-primary text-xs font-mono">{p.projectCode}</p>
                                                     )}
@@ -618,7 +835,7 @@ export default function ManagerProjectsPage() {
                                             {p.budget > 0 && (
                                                 <div className="mb-4 flex items-center gap-2">
                                                     <span className="material-symbols-outlined text-emerald-400 text-sm">payments</span>
-                                                    <span className="text-white text-sm font-semibold">₹ {p.budget?.toLocaleString('en-IN')}</span>
+                                                    <span className="text-[#556070] text-sm font-semibold">₹ {p.budget?.toLocaleString('en-IN')}</span>
                                                 </div>
                                             )}
 
@@ -626,9 +843,9 @@ export default function ManagerProjectsPage() {
                                             <div className="mb-4">
                                                 <div className="flex justify-between text-sm mb-2">
                                                     <span className="text-text-secondary">Progress</span>
-                                                    <span className="text-white">{progress}%</span>
+                                                    <span className="text-[#556070]">{progress}%</span>
                                                 </div>
-                                                <div className="h-2 bg-background-dark rounded-full overflow-hidden">
+                                                <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                                                     <div
                                                         className="h-full bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
                                                         style={{ width: `${progress}%` }}
@@ -651,7 +868,7 @@ export default function ManagerProjectsPage() {
                                             {/* Actions */}
                                             <div className="mt-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <select
-                                                    className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
+                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
                                                     value={p.status}
                                                     onChange={(e) => handleStatusChange(p.id, e.target.value)}
                                                 >
@@ -664,7 +881,7 @@ export default function ManagerProjectsPage() {
                                                         e.stopPropagation();
                                                         openDetailsModal(p);
                                                     }}
-                                                    className="p-2 rounded-lg bg-background-dark border border-border-dark text-text-secondary hover:text-white hover:bg-surface-dark transition-colors"
+                                                    className="p-2 rounded-lg bg-white border border-slate-200 text-text-secondary hover:text-[#1e293b] hover:bg-slate-50 transition-colors"
                                                     title="View Details"
                                                 >
                                                     <span className="material-symbols-outlined">visibility</span>
@@ -683,7 +900,7 @@ export default function ManagerProjectsPage() {
             {showDetailsModal && selectedProject && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
                     <div
-                        className="bg-[#0a0f1d] border border-slate-800 w-full max-w-5xl rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[85vh] max-h-[90vh]"
+                        className="bg-[#0a0f1d] border border-slate-800 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[94vh]"
                         onClick={() => setShowUserPicker(null)}
                     >
                         {/* Header */}
@@ -707,397 +924,504 @@ export default function ManagerProjectsPage() {
                             </div>
                         </div>
 
-                        {/* Controls: Filter & Search */}
-                        <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
-                            <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
-                                {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((f) => (
-                                    <button
-                                        key={f}
-                                        onClick={() => { setTaskFilter(f); setCurrentPage(1); }}
-                                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-all whitespace-nowrap ${taskFilter === f
-                                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                            : 'text-slate-500 hover:text-white'
-                                            }`}
-                                    >
-                                        {f.replace('_', ' ')}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="relative w-full md:w-80">
-                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
-                                <input
-                                    type="text"
-                                    value={taskSearchQuery}
-                                    onChange={(e) => { setTaskSearchQuery(e.target.value); setCurrentPage(1); }}
-                                    className="w-full bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder-slate-600"
-                                    placeholder="Filter tasks..."
+                        {isBoardProjectView(selectedProject, selectedProjectAllTasks) ? (
+                            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 md:p-8">
+                                <ProductionDashboard
+                                    project={selectedProject}
+                                    tasks={selectedProjectAllTasks}
+                                    users={users}
+                                    showManagerActions={true}
+                                    onTaskSelect={openTaskDetail}
+                                    onAssignTask={handleAssignClick}
+                                    onDeleteTask={handleDeleteTask}
+                                    onRefresh={async () => {
+                                        await loadData();
+                                    }}
                                 />
                             </div>
-                        </div>
+                        ) : (
+                            <>
+                                {selectedProjectIsOverdue && (
+                                    <div className="px-4 pt-4 md:px-8 md:pt-6 shrink-0">
+                                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+                                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                                <div>
+                                                    <p className="text-sm font-bold text-amber-300">Project deadline has already passed.</p>
+                                                    <p className="mt-1 text-xs text-amber-100/80">
+                                                        Managers cannot assign or self-assign tasks until a super admin approves a deadline extension request.
+                                                    </p>
+                                                    {latestDeadlineExtensionRequest && (
+                                                        <p className="mt-2 text-xs text-amber-100/70">
+                                                            Latest request: <span className="font-semibold">{latestDeadlineExtensionRequest.status}</span>
+                                                            {' '}for {new Date(latestDeadlineExtensionRequest.requestedDeadline).toLocaleDateString('en-GB')}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={openDeadlineExtensionModal}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold text-slate-950 transition-colors hover:bg-amber-400"
+                                                >
+                                                    <span className="material-symbols-outlined text-base">event_repeat</span>
+                                                    Request Deadline Extension
+                                                </button>
+                                            </div>
+                                            <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/30 p-3">
+                                                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Request History</p>
+                                                {loadingDeadlineExtensionRequests ? (
+                                                    <p className="mt-2 text-xs text-slate-400">Loading requests...</p>
+                                                ) : deadlineExtensionRequests.length > 0 ? (
+                                                    <div className="mt-2 space-y-2">
+                                                        {deadlineExtensionRequests.slice(0, 3).map((request) => (
+                                                            <div key={request.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-slate-900/40 px-3 py-2 text-xs">
+                                                                <div>
+                                                                    <p className="text-slate-200">
+                                                                        Requested <span className="font-semibold">{new Date(request.requestedDeadline).toLocaleDateString('en-GB')}</span>
+                                                                    </p>
+                                                                    <p className="text-slate-400 line-clamp-1">{request.reason}</p>
+                                                                </div>
+                                                                <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${
+                                                                    request.status === 'APPROVED'
+                                                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                                                        : request.status === 'REJECTED'
+                                                                            ? 'bg-rose-500/15 text-rose-300'
+                                                                            : 'bg-amber-500/15 text-amber-300'
+                                                                }`}>
+                                                                    {request.status}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <p className="mt-2 text-xs text-slate-400">No extension requests submitted yet.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
-                        {/* Add Task Bar */}
-                        <div className="px-4 pb-4 md:px-8 md:pb-6 shrink-0">
-                            <form
-                                onSubmit={(e) => {
-                                    e.preventDefault();
-                                    handleAddTask(e);
-                                }}
-                                className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
-                            >
-                                <div className="flex-1 flex flex-col md:flex-row gap-3">
-                                    <div className="flex-[1.5] relative">
+                                {/* Controls: Filter & Search */}
+                                <div className="px-4 py-4 md:px-8 md:py-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+                                    <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-hide lg:pb-0">
+                                        {['ALL', 'NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'].map((f) => (
+                                            <button
+                                                key={f}
+                                                onClick={() => { setTaskFilter(f); setCurrentPage(1); }}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold tracking-wider transition-all whitespace-nowrap ${taskFilter === f
+                                                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                    : 'text-slate-500 hover:text-white'
+                                                    }`}
+                                            >
+                                                {f.replace('_', ' ')}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="relative w-full md:w-80">
+                                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-lg">search</span>
                                         <input
                                             type="text"
-                                            value={newTaskTitle}
-                                            onChange={(e) => setNewTaskTitle(e.target.value)}
-                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                            value={taskSearchQuery}
+                                            onChange={(e) => { setTaskSearchQuery(e.target.value); setCurrentPage(1); }}
+                                            className="w-full bg-slate-900/50 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder-slate-600"
+                                            placeholder="Filter tasks..."
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Add Task Bar */}
+                                <div className="px-4 pb-4 md:px-8 md:pb-6 shrink-0">
+                                    <form
+                                        onSubmit={(e) => {
+                                            e.preventDefault();
+                                            handleAddTask(e);
+                                        }}
+                                        className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3"
+                                    >
+                                        <div className="flex-1 flex flex-col md:flex-row gap-3">
+                                            <div className="flex-[1.5] relative">
+                                                <input
+                                                    type="text"
+                                                    value={newTaskTitle}
+                                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 px-4 md:py-3 md:px-6 text-sm text-slate-100 placeholder:text-[#8ea4c9] focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
                                             placeholder="Task Title..."
                                         />
                                     </div>
                                     <div className="flex-[2] relative">
                                         <input
-                                            type="text"
-                                            value={newTaskDescription}
-                                            onChange={(e) => setNewTaskDescription(e.target.value)}
-                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
+                                                    type="text"
+                                                    value={newTaskDescription}
+                                                    onChange={(e) => setNewTaskDescription(e.target.value)}
+                                            className="w-full bg-slate-900/30 border-2 border-[#2563eb]/60 rounded-xl py-2 pl-4 pr-12 md:py-3 md:pl-6 md:pr-36 text-sm text-slate-100 placeholder:text-[#8ea4c9] focus:outline-none focus:border-[#2563eb] focus:ring-4 focus:ring-[#2563eb]/10 transition-all"
                                             placeholder="Description (optional)..."
                                         />
-                                        <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                                            <div className="relative">
-                                                <div className={`flex items-center gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border transition-colors ${newTaskDeadline ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-400 hover:bg-slate-800'}`}>
-                                                    <span className="material-symbols-outlined text-lg">calendar_today</span>
-                                                    <span className={`text-xs font-medium whitespace-nowrap hidden md:inline ${!newTaskDeadline && 'hidden'}`}>
-                                                        {newTaskDeadline ? new Date(newTaskDeadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
-                                                    </span>
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                                                    <div className="relative">
+                                                        <div className={`flex items-center gap-2 px-2 py-1 md:px-3 md:py-1.5 rounded-lg border transition-colors ${newTaskDeadline ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500 hover:text-slate-400 hover:bg-slate-800'}`}>
+                                                            <span className="material-symbols-outlined text-lg">calendar_today</span>
+                                                            <span className={`text-xs font-medium whitespace-nowrap hidden md:inline ${!newTaskDeadline && 'hidden'}`}>
+                                                                {newTaskDeadline ? new Date(newTaskDeadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : ''}
+                                                            </span>
+                                                        </div>
+                                                        <input
+                                                            type="date"
+                                                            value={newTaskDeadline}
+                                                            onChange={(e) => setNewTaskDeadline(e.target.value)}
+                                                            min={addTaskMinDate}
+                                                            max={projectDeadlineDateString || undefined}
+                                                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                                            title="Set Deadline"
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <input
-                                                    type="date"
-                                                    value={newTaskDeadline}
-                                                    onChange={(e) => setNewTaskDeadline(e.target.value)}
-                                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                                                    title="Set Deadline"
-                                                />
                                             </div>
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            disabled={!newTaskTitle || !newTaskDeadline}
+                                            className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap"
+                                        >
+                                            <span className="material-symbols-outlined text-lg">add</span>
+                                            <span>Add Task</span>
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {/* Table Content */}
+                                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
+                                    <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
+                                        <table className="w-full text-left border-collapse hidden lg:table">
+                                            <thead className="sticky top-0 bg-[#0a0f1d] z-10">
+                                                <tr className="bg-slate-900/50 border-b border-slate-800">
+                                                    <th className="w-8 pl-3 pr-0">
+                                                        {isSaving && <span className="material-symbols-outlined text-[14px] text-emerald-400 animate-spin">progress_activity</span>}
+                                                    </th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
+                                                    <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd}>
+                                            <SortableContext items={paginatedTasks.map(t => t._id ?? t.id)} strategy={verticalListSortingStrategy}>
+                                            <tbody className="divide-y divide-slate-800">
+                                                {paginatedTasks.length > 0 ? (
+                                                    paginatedTasks.map((task) => {
+                                                        const currentUser = getCurrentUser();
+                                                        const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
+                                                        const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
+                                                        const deadline = task.deadline ? new Date(task.deadline) : null;
+                                                        const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+
+                                                        return (
+                                                            <SortableTaskRow key={task._id ?? task.id} task={task}>
+                                                                <td className="px-6 py-5">
+                                                                    <div className={`font-bold text-sm ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                                        {task.title}
+                                                                    </div>
+                                                                    <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]">
+                                                                        {task.description || 'No description provided'}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    {assignee ? (
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
+                                                                                {assignee.name.charAt(0)}
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-300">{assignee.name}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center space-x-2">
+                                                                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400">?</div>
+                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    <div className="flex justify-center flex-col items-center">
+                                                                        <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border} border uppercase whitespace-nowrap`}>
+                                                                            {task.status === 'WAITING_APPROVAL' ? 'WAITING APPROVAL' : badgeStyle.label}
+                                                                        </span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    {deadline ? (
+                                                                        <div className={`flex items-center space-x-2 ${isOverdue ? 'text-rose-400' : task.status === 'COMPLETED' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                                                            <span className="material-symbols-outlined text-base">
+                                                                                {task.status === 'COMPLETED' ? 'check_circle' : isOverdue ? 'event_busy' : 'calendar_today'}
+                                                                            </span>
+                                                                            <span className="text-xs">{deadline.toLocaleDateString()}</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <span className="text-xs text-slate-600">-</span>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-5">
+                                                                    <div className="flex items-center justify-center space-x-2 relative">
+                                                                        {!task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => handleAssignClick(e, task)}
+                                                                                className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold transition-all shadow-lg shadow-emerald-900/20"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-sm">person_add</span>
+                                                                                <span>Assign</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Mark as Completed Button for Self-Assigned Tasks */}
+                                                                        {task.assigneeId === currentUser?.id && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (true) {
+                                                                                        setConfirmModal({
+                                                                                            show: true,
+                                                                                            title: 'Complete Task?',
+                                                                                            message: 'Mark this task as completed?',
+                                                                                            type: 'primary',
+                                                                                            onConfirm: () => {
+                                                                                                handleTaskApproval(task.id, 'COMPLETED');
+                                                                                                setConfirmModal({ ...confirmModal, show: false });
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
+                                                                                title="Mark as Completed"
+                                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">check_circle</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Re-assign or Change Status button for assigned tasks */}
+                                                                        {task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => handleAssignClick(e, task)}
+                                                                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                                title="Reassign"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">person_add</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Reopen Completed Task */}
+                                                                        {task.status === 'COMPLETED' && (
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (true) {
+                                                                                        setConfirmModal({
+                                                                                            show: true,
+                                                                                            title: 'Reopen Task?',
+                                                                                            message: 'Reopen this task? Status will be set to IN PROGRESS.',
+                                                                                            type: 'primary',
+                                                                                            onConfirm: () => {
+                                                                                                handleTaskApproval(task.id, 'IN_PROGRESS');
+                                                                                                setConfirmModal({ ...confirmModal, show: false });
+                                                                                            }
+                                                                                        });
+                                                                                    }
+                                                                                }}
+                                                                                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                                title="Reopen Task"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-lg">undo</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {/* Approve/Reject for Waiting Approval */}
+                                                                        {task.status === 'WAITING_APPROVAL' && (
+                                                                            <>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        if (true) {
+                                                                                            setConfirmModal({
+                                                                                                show: true,
+                                                                                                title: 'Approve Task?',
+                                                                                                message: 'Approve this task as COMPLETED?',
+                                                                                                type: 'primary',
+                                                                                                onConfirm: () => {
+                                                                                                    handleTaskApproval(task.id, 'COMPLETED');
+                                                                                                    setConfirmModal({ ...confirmModal, show: false });
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    }}
+                                                                                    className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
+                                                                                    title="Approve Task"
+                                                                                >
+                                                                                    <span className="material-symbols-outlined text-lg">check_circle</span>
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleRejectClick(task);
+                                                                                    }}
+                                                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all"
+                                                                                    title="Reject Task"
+                                                                                >
+                                                                                    <span className="material-symbols-outlined text-lg">cancel</span>
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+
+                                                                        {/* Delete Task Button */}
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                setConfirmModal({
+                                                                                    show: true,
+                                                                                    title: 'Delete Task',
+                                                                                    message: `Are you sure you want to delete the task "${task.title}"? This action cannot be undone.`,
+                                                                                    type: 'danger',
+                                                                                    onConfirm: async () => {
+                                                                                        setConfirmModal(prev => ({ ...prev, show: false }));
+                                                                                        await handleDeleteTask(task.id || task._id);
+                                                                                    }
+                                                                                });
+                                                                            }}
+                                                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all ml-1"
+                                                                            title="Delete Task"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-lg">delete</span>
+                                                                        </button>
+
+                                                                        <button
+                                                                            onClick={() => openTaskDetail(task)}
+                                                                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
+                                                                            title="View Details"
+                                                                        >
+                                                                            <span className="material-symbols-outlined text-lg">visibility</span>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </SortableTaskRow>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <tr>
+                                                        <td colSpan="6" className="px-6 py-10 text-center text-slate-500 text-sm">
+                                                            No tasks found matching current filters.
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </tbody>
+                                            </SortableContext>
+                                            </DndContext>
+                                        </table>
+
+                                        {/* Mobile Card View */}
+                                        <div className="lg:hidden divide-y divide-white/5">
+                                            {paginatedTasks.length > 0 ? (
+                                                paginatedTasks.map((task) => {
+                                                    const currentUser = getCurrentUser();
+                                                    const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
+                                                    const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
+                                                    const deadline = task.deadline ? new Date(task.deadline) : null;
+                                                    const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+
+                                                    return (
+                                                        <div key={task.id} className="p-4 space-y-3">
+                                                            <div className="flex justify-between items-start gap-3">
+                                                                <div className="min-w-0">
+                                                                    <div className={`font-bold text-sm truncate ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
+                                                                        {task.title}
+                                                                    </div>
+                                                                    <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description || 'No description'}</div>
+                                                                </div>
+                                                                <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
+                                                                    {badgeStyle.label}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between pt-2">
+                                                                <div className="flex items-center gap-2">
+                                                                    {assignee ? (
+                                                                        <>
+                                                                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
+                                                                                {assignee.name.charAt(0)}
+                                                                            </div>
+                                                                            <span className="text-xs text-slate-300 font-medium truncate max-w-[100px]">{assignee.name}</span>
+                                                                        </>
+                                                                    ) : (
+                                                                        <>
+                                                                            <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400">?</div>
+                                                                            <span className="text-xs text-slate-500 italic">Unassigned</span>
+                                                                        </>
+                                                                    )}
+                                                                </div>
+                                                                {deadline && (
+                                                                    <div className={`text-[10px] font-mono border px-2 py-0.5 rounded ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
+                                                                        {deadline.toLocaleDateString()}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Mobile Actions */}
+                                                            <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5 mt-2">
+                                                                {/* Assign Button */}
+                                                                {!task.assigneeId && (
+                                                                    <button
+                                                                        onClick={(e) => handleAssignClick(e, task)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase hover:bg-emerald-500 hover:text-white transition-colors"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">person_add</span> Assign
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Unassign Button */}
+                                                                {task.assigneeId && task.status !== 'COMPLETED' && (
+                                                                    <button
+                                                                        onClick={() => handleUnassignTask(task.id)}
+                                                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase hover:bg-amber-500 hover:text-white transition-colors"
+                                                                    >
+                                                                        <span className="material-symbols-outlined text-sm">person_remove</span> Unassign
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Delete Button */}
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setConfirmModal({
+                                                                            show: true,
+                                                                            title: 'Delete Task',
+                                                                            message: `Are you sure you want to delete the task "${task.title}"? This action cannot be undone.`,
+                                                                            type: 'danger',
+                                                                            onConfirm: async () => {
+                                                                                setConfirmModal(prev => ({ ...prev, show: false }));
+                                                                                await handleDeleteTask(task.id || task._id);
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">delete</span>
+                                                                </button>
+
+                                                                {/* View Button */}
+                                                                <button
+                                                                    onClick={() => openTaskDetail(task)}
+                                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 text-[10px] font-bold uppercase hover:bg-slate-700 hover:text-white transition-colors"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-sm">visibility</span>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            ) : (
+                                                <div className="p-8 text-center text-slate-500 italic">
+                                                    No tasks found matching current filters.
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
-                                <button
-                                    type="submit"
-                                    disabled={!newTaskTitle || !newTaskDeadline}
-                                    className="flex items-center justify-center space-x-2 px-6 py-2 md:py-3 bg-[#2563eb] hover:bg-blue-600 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-all shadow-lg shadow-blue-900/20 whitespace-nowrap"
-                                >
-                                    <span className="material-symbols-outlined text-lg">add</span>
-                                    <span>Add Task</span>
-                                </button>
-                            </form>
-                        </div>
-
-                        {/* Table Content */}
-                        <div className="flex-1 overflow-auto custom-scrollbar px-4 pb-4 md:px-8 md:pb-8">
-                            <div className="bg-slate-900/20 border border-slate-800 rounded-xl overflow-hidden min-h-[300px]">
-                                <table className="w-full text-left border-collapse hidden lg:table">
-                                    <thead className="sticky top-0 bg-[#0a0f1d] z-10">
-                                        <tr className="bg-slate-900/50 border-b border-slate-800">
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Assignee</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Status</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Deadline</th>
-                                            <th className="px-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-800">
-                                        {paginatedTasks.length > 0 ? (
-                                            paginatedTasks.map((task) => {
-                                                const currentUser = getCurrentUser();
-                                                const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
-                                                const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
-                                                const deadline = task.deadline ? new Date(task.deadline) : null;
-                                                const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
-
-                                                return (
-                                                    <tr key={task.id} className="hover:bg-slate-800/20 transition-colors group">
-                                                        <td className="px-6 py-5">
-                                                            <div className={`font-bold text-sm ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                                                {task.title}
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 mt-0.5 truncate max-w-[200px]">
-                                                                {task.description || 'No description provided'}
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            {assignee ? (
-                                                                <div className="flex items-center space-x-2">
-                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
-                                                                        {assignee.name.charAt(0)}
-                                                                    </div>
-                                                                    <span className="text-xs text-slate-300">{assignee.name}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <div className="flex items-center space-x-2">
-                                                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-400">?</div>
-                                                                    <span className="text-xs text-slate-500 italic">Unassigned</span>
-                                                                </div>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <div className="flex justify-center flex-col items-center">
-                                                                <span className={`px-2.5 py-1 text-[10px] font-bold rounded-md ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border} border uppercase whitespace-nowrap`}>
-                                                                    {task.status === 'WAITING_APPROVAL' ? 'WAITING APPROVAL' : badgeStyle.label}
-                                                                </span>
-                                                            </div>
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            {deadline ? (
-                                                                <div className={`flex items-center space-x-2 ${isOverdue ? 'text-rose-400' : task.status === 'COMPLETED' ? 'text-emerald-500' : 'text-slate-400'}`}>
-                                                                    <span className="material-symbols-outlined text-base">
-                                                                        {task.status === 'COMPLETED' ? 'check_circle' : isOverdue ? 'event_busy' : 'calendar_today'}
-                                                                    </span>
-                                                                    <span className="text-xs">{deadline.toLocaleDateString()}</span>
-                                                                </div>
-                                                            ) : (
-                                                                <span className="text-xs text-slate-600">-</span>
-                                                            )}
-                                                        </td>
-                                                        <td className="px-6 py-5">
-                                                            <div className="flex items-center justify-center space-x-2 relative">
-                                                                {!task.assigneeId && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => handleAssignClick(e, task)}
-                                                                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold transition-all shadow-lg shadow-emerald-900/20"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-sm">person_add</span>
-                                                                        <span>Assign</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Mark as Completed Button for Self-Assigned Tasks */}
-                                                                {task.assigneeId === currentUser?.id && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (true) {
-                                                                                setConfirmModal({
-                                                                                    show: true,
-                                                                                    title: 'Complete Task?',
-                                                                                    message: 'Mark this task as completed?',
-                                                                                    type: 'primary',
-                                                                                    onConfirm: () => {
-                                                                                        handleTaskApproval(task.id, 'COMPLETED');
-                                                                                        setConfirmModal({ ...confirmModal, show: false });
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                        className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
-                                                                        title="Mark as Completed"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">check_circle</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Re-assign or Change Status button for assigned tasks */}
-                                                                {task.assigneeId && task.status !== 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => handleAssignClick(e, task)}
-                                                                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                        title="Reassign"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">person_add</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Reopen Completed Task */}
-                                                                {task.status === 'COMPLETED' && (
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (true) {
-                                                                                setConfirmModal({
-                                                                                    show: true,
-                                                                                    title: 'Reopen Task?',
-                                                                                    message: 'Reopen this task? Status will be set to IN PROGRESS.',
-                                                                                    type: 'primary',
-                                                                                    onConfirm: () => {
-                                                                                        handleTaskApproval(task.id, 'IN_PROGRESS');
-                                                                                        setConfirmModal({ ...confirmModal, show: false });
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        }}
-                                                                        className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                        title="Reopen Task"
-                                                                    >
-                                                                        <span className="material-symbols-outlined text-lg">undo</span>
-                                                                    </button>
-                                                                )}
-
-                                                                {/* Approve/Reject for Waiting Approval */}
-                                                                {task.status === 'WAITING_APPROVAL' && (
-                                                                    <>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                if (true) {
-                                                                                    setConfirmModal({
-                                                                                        show: true,
-                                                                                        title: 'Approve Task?',
-                                                                                        message: 'Approve this task as COMPLETED?',
-                                                                                        type: 'primary',
-                                                                                        onConfirm: () => {
-                                                                                            handleTaskApproval(task.id, 'COMPLETED');
-                                                                                            setConfirmModal({ ...confirmModal, show: false });
-                                                                                        }
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                            className="p-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 hover:text-green-400 rounded-lg transition-all"
-                                                                            title="Approve Task"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-lg">check_circle</span>
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                handleRejectClick(task);
-                                                                            }}
-                                                                            className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all"
-                                                                            title="Reject Task"
-                                                                        >
-                                                                            <span className="material-symbols-outlined text-lg">cancel</span>
-                                                                        </button>
-                                                                    </>
-                                                                )}
-
-                                                                {/* Delete Task Button */}
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDeleteTask(task.id);
-                                                                    }}
-                                                                    className="p-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-500 hover:text-red-400 rounded-lg transition-all ml-1"
-                                                                    title="Delete Task"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-lg">delete</span>
-                                                                </button>
-
-                                                                <button
-                                                                    onClick={() => openTaskDetail(task)}
-                                                                    className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all"
-                                                                    title="View Details"
-                                                                >
-                                                                    <span className="material-symbols-outlined text-lg">visibility</span>
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })
-                                        ) : (
-                                            <tr>
-                                                <td colSpan="5" className="px-6 py-10 text-center text-slate-500 text-sm">
-                                                    No tasks found matching current filters.
-                                                </td>
-                                            </tr>
-                                        )}
-                                    </tbody>
-                                </table>
-
-                                {/* Mobile Card View */}
-                                <div className="lg:hidden divide-y divide-white/5">
-                                    {paginatedTasks.length > 0 ? (
-                                        paginatedTasks.map((task) => {
-                                            const currentUser = getCurrentUser();
-                                            const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
-                                            const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
-                                            const deadline = task.deadline ? new Date(task.deadline) : null;
-                                            const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
-
-                                            return (
-                                                <div key={task.id} className="p-4 space-y-3">
-                                                    <div className="flex justify-between items-start gap-3">
-                                                        <div className="min-w-0">
-                                                            <div className={`font-bold text-sm truncate ${task.status === 'COMPLETED' ? 'text-slate-500 line-through' : 'text-white'}`}>
-                                                                {task.title}
-                                                            </div>
-                                                            <div className="text-[11px] text-slate-500 mt-1 line-clamp-1">{task.description || 'No description'}</div>
-                                                        </div>
-                                                        <span className={`px-2 py-1 rounded text-[9px] font-bold border shrink-0 uppercase tracking-wider ${badgeStyle.bg} ${badgeStyle.text} ${badgeStyle.border}`}>
-                                                            {badgeStyle.label}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex items-center justify-between pt-2">
-                                                        <div className="flex items-center gap-2">
-                                                            {assignee ? (
-                                                                <>
-                                                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shadow-sm ${assignee.id === getCurrentUser()?.id ? 'bg-indigo-500 shadow-indigo-900/20' : 'bg-emerald-600 shadow-emerald-900/20'}`}>
-                                                                        {assignee.name.charAt(0)}
-                                                                    </div>
-                                                                    <span className="text-xs text-slate-300 font-medium truncate max-w-[100px]">{assignee.name}</span>
-                                                                </>
-                                                            ) : (
-                                                                <>
-                                                                    <div className="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-400">?</div>
-                                                                    <span className="text-xs text-slate-500 italic">Unassigned</span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                        {deadline && (
-                                                            <div className={`text-[10px] font-mono border px-2 py-0.5 rounded ${isOverdue ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>
-                                                                {deadline.toLocaleDateString()}
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Mobile Actions */}
-                                                    <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/5 mt-2">
-                                                        {/* Assign Button */}
-                                                        {!task.assigneeId && (
-                                                            <button
-                                                                onClick={(e) => handleAssignClick(e, task)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-500 text-[10px] font-bold uppercase hover:bg-emerald-500 hover:text-white transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">person_add</span> Assign
-                                                            </button>
-                                                        )}
-
-                                                        {/* Unassign Button */}
-                                                        {task.assigneeId && task.status !== 'COMPLETED' && (
-                                                            <button
-                                                                onClick={() => handleUnassignTask(task.id)}
-                                                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase hover:bg-amber-500 hover:text-white transition-colors"
-                                                            >
-                                                                <span className="material-symbols-outlined text-sm">person_remove</span> Unassign
-                                                            </button>
-                                                        )}
-
-                                                        {/* Delete Button */}
-                                                        <button
-                                                            onClick={() => handleDeleteTask(task.id)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500 text-[10px] font-bold uppercase hover:bg-red-500 hover:text-white transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">delete</span>
-                                                        </button>
-
-                                                        {/* View Button */}
-                                                        <button
-                                                            onClick={() => openTaskDetail(task)}
-                                                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700/50 text-slate-300 text-[10px] font-bold uppercase hover:bg-slate-700 hover:text-white transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-sm">visibility</span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })
-                                    ) : (
-                                        <div className="p-8 text-center text-slate-500 italic">
-                                            No tasks found matching current filters.
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                            </>
+                        )}
 
                         {/* Footer */}
                         <div className="px-4 py-4 md:px-8 md:py-6 border-t border-slate-800 bg-slate-900/30 flex flex-col md:flex-row items-center justify-between mt-auto shrink-0 gap-4">
@@ -1118,27 +1442,29 @@ export default function ManagerProjectsPage() {
                                     <span className="text-[10px] font-bold uppercase tracking-widest group-hover:underline decoration-blue-500/50 underline-offset-4">{getTeamMembers(selectedProject).length} Members</span>
                                 </button>
                             </div>
-                            <div className="flex items-center space-x-4">
-                                <span className="text-[11px] text-slate-500 font-medium">
-                                    Showing {Math.min((currentPage - 1) * itemsPerPage + 1, projectTasks.length)} - {Math.min(currentPage * itemsPerPage, projectTasks.length)} of {projectTasks.length} tasks
-                                </span>
-                                <div className="flex items-center space-x-2">
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                        disabled={currentPage === 1}
-                                        className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                        disabled={currentPage === totalPages || totalPages === 0}
-                                        className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
-                                    </button>
+                            {!isBoardProjectView(selectedProject, selectedProjectAllTasks) && (
+                                <div className="flex items-center space-x-4">
+                                    <span className="text-[11px] text-slate-500 font-medium">
+                                        Showing {Math.min((currentPage - 1) * itemsPerPage + 1, projectTasks.length)} - {Math.min(currentPage * itemsPerPage, projectTasks.length)} of {projectTasks.length} tasks
+                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            disabled={currentPage === 1}
+                                            className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-lg leading-none">chevron_left</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            disabled={currentPage === totalPages || totalPages === 0}
+                                            className="p-1.5 rounded-lg bg-slate-800 text-slate-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <span className="material-symbols-outlined text-lg leading-none">chevron_right</span>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
 
                         {/* User Picker Popover/Dropdown */}
@@ -1489,9 +1815,9 @@ export default function ManagerProjectsPage() {
                             setPendingAssignment(null);
                             setAssignDeadline('');
                         }}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className={`px-6 py-4 border-b border-border-dark ${pendingAssignment.isSelfAssign ? 'bg-gradient-to-r from-indigo-900/50 to-purple-900/50' : 'bg-gradient-surface'}`}>
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <div className="relative w-full max-w-md mx-4 rounded-2xl border border-slate-700 bg-[#0F172A] shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                            <div className={`px-6 py-4 border-b border-slate-700 ${pendingAssignment.isSelfAssign ? 'bg-gradient-to-r from-indigo-900/80 to-purple-900/70' : 'bg-slate-900/80'}`}>
+                                <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                                     <span className={`material-symbols-outlined ${pendingAssignment.isSelfAssign ? 'text-indigo-400' : 'text-primary'}`}>
                                         {pendingAssignment.isSelfAssign ? 'person_add' : 'schedule'}
                                     </span>
@@ -1500,19 +1826,36 @@ export default function ManagerProjectsPage() {
                             </div>
                             <div className="p-6 space-y-4">
                                 {/* Task Info */}
-                                <div className="bg-background-dark/50 rounded-lg p-4 border border-border-dark">
-                                    <p className="text-white font-medium">{pendingAssignment.task?.title}</p>
-                                    <p className="text-text-secondary text-sm mt-1">
+                                <div className="bg-slate-900/50 rounded-lg p-4 border border-slate-700">
+                                    <p className="text-slate-100 font-medium">{pendingAssignment.task?.title}</p>
+                                    <p className="text-slate-300 text-sm mt-1">
                                         {pendingAssignment.isSelfAssign
                                             ? <span className="text-indigo-400 font-medium">Taking this task for yourself</span>
-                                            : <>Assigning to: <span className="text-white">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span></>
+                                            : <>Assigning to: <span className="text-slate-100">{users.find(u => u.id === pendingAssignment.assigneeId)?.name || 'Unknown'}</span></>
                                         }
                                     </p>
                                 </div>
 
+                                {selectedProjectIsOverdue ? (
+                                    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+                                        <p className="text-sm font-semibold text-amber-300">
+                                            Assignment is blocked because this project deadline has passed.
+                                        </p>
+                                        <p className="mt-2 text-xs text-amber-100/80">
+                                            Managers must request a super-admin deadline extension before assigning or self-assigning tasks again.
+                                        </p>
+                                        {latestDeadlineExtensionRequest && (
+                                            <p className="mt-2 text-xs text-amber-100/70">
+                                                Latest request: <span className="font-semibold">{latestDeadlineExtensionRequest.status}</span>
+                                                {' '}for {new Date(latestDeadlineExtensionRequest.requestedDeadline).toLocaleDateString('en-GB')}
+                                            </p>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <>
                                 {/* Deadline Input */}
                                 <div>
-                                    <label className="block text-text-secondary text-sm mb-2">
+                                    <label className="block text-slate-300 text-sm mb-2">
                                         Deadline (when should this be completed?)
                                     </label>
                                     <input
@@ -1525,19 +1868,21 @@ export default function ManagerProjectsPage() {
                                         })()}
                                         max={selectedProject?.deadline ? new Date(selectedProject.deadline).toISOString().split('T')[0] : undefined}
                                         onChange={(e) => setAssignDeadline(e.target.value)}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-primary focus:border-transparent outline-none [color-scheme:dark]"
+                                        className="date-input-dark w-full bg-slate-950 border border-slate-600 rounded-lg px-4 py-3 text-slate-100 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                     />
                                     {selectedProject?.deadline && (
-                                        <p className="text-text-secondary text-xs mt-1">
+                                        <p className="text-slate-300 text-xs mt-1">
                                             📅 Must be between <span className="text-white">{selectedProject.startDate ? new Date(selectedProject.startDate).toLocaleDateString() : 'Today'}</span> and <span className="text-primary font-medium">{new Date(selectedProject.deadline).toLocaleDateString()}</span>
                                         </p>
                                     )}
                                 </div>
 
                                 {/* Info */}
-                                <p className="text-text-secondary text-xs">
+                                <p className="text-slate-300 text-xs">
                                     💡 Performance will be calculated based on when the task is completed vs. this deadline.
                                 </p>
+                                    </>
+                                )}
                             </div>
                             <div className="px-6 py-4 border-t border-border-dark flex justify-between gap-3">
                                 <button
@@ -1546,45 +1891,115 @@ export default function ManagerProjectsPage() {
                                         setPendingAssignment(null);
                                         setAssignDeadline('');
                                     }}
-                                    className="px-4 py-2 rounded-lg border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                    className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
-                                    onClick={handleConfirmAssignment}
-                                    disabled={!assignDeadline}
-                                    className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${pendingAssignment.isSelfAssign
-                                        ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                                        : 'bg-primary hover:bg-primary-dark text-white'
+                                    onClick={selectedProjectIsOverdue ? openDeadlineExtensionModal : handleConfirmAssignment}
+                                    disabled={!selectedProjectIsOverdue && !assignDeadline}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${selectedProjectIsOverdue
+                                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
+                                        : pendingAssignment.isSelfAssign
+                                            ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                            : 'bg-primary hover:bg-primary-dark text-white'
                                         }`}
                                 >
-                                    {pendingAssignment.isSelfAssign ? 'Take Task with Deadline' : 'Assign with Deadline'}
+                                    {selectedProjectIsOverdue
+                                        ? 'Request Deadline Extension'
+                                        : pendingAssignment.isSelfAssign ? 'Take Task with Deadline' : 'Assign with Deadline'}
                                 </button>
                             </div>
                         </div>
                     </div>
                 )
             }
+            {showDeadlineExtensionModal && selectedProject && (
+                <div className="fixed inset-0 z-[10001] flex items-center justify-center">
+                    <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowDeadlineExtensionModal(false)}></div>
+                    <div className="relative mx-4 w-full max-w-lg overflow-hidden rounded-2xl border border-slate-700 bg-[#0F172A] shadow-2xl">
+                        <div className="border-b border-slate-800 bg-slate-900/60 px-6 py-4">
+                            <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
+                                <span className="material-symbols-outlined text-amber-400">event_repeat</span>
+                                Request Deadline Extension
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-400">
+                                Submit a new deadline and business reason for super-admin approval.
+                            </p>
+                        </div>
+                        <form onSubmit={handleSubmitDeadlineExtensionRequest} className="space-y-4 p-6">
+                            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
+                                <p className="text-sm font-semibold text-white">{selectedProject.name}</p>
+                                <p className="mt-1 text-xs text-slate-400">
+                                    Current deadline: {selectedProject.deadline ? new Date(selectedProject.deadline).toLocaleDateString('en-GB') : 'Not set'}
+                                </p>
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Requested New Deadline
+                                </label>
+                                <input
+                                    type="date"
+                                    value={deadlineExtensionDate}
+                                    min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                                    onChange={(e) => setDeadlineExtensionDate(e.target.value)}
+                                    className="date-input-dark w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="mb-2 block text-sm font-medium text-slate-300">
+                                    Reason for Extension
+                                </label>
+                                <textarea
+                                    value={deadlineExtensionReason}
+                                    onChange={(e) => setDeadlineExtensionReason(e.target.value)}
+                                    rows={4}
+                                    placeholder="Explain why this project deadline must be extended."
+                                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-white placeholder-slate-500 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-500/30"
+                                    required
+                                />
+                            </div>
+                            <div className="flex justify-end gap-3 border-t border-slate-800 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowDeadlineExtensionModal(false)}
+                                    className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingDeadlineExtension}
+                                    className="rounded-lg bg-amber-500 px-5 py-2 text-sm font-bold text-slate-950 transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {submittingDeadlineExtension ? 'Submitting...' : 'Submit Request'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             {/* Rejection Reason Modal */}
             {
                 showRejectModal && taskToReject && (
                     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRejectModal(false)}></div>
-                        <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-to-r from-red-900/50 to-orange-900/50">
+                        <div className="relative bg-[#0F172A] border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+                            <div className="px-6 py-4 border-b border-slate-700 bg-gradient-to-r from-red-950/80 to-red-900/40">
                                 <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-red-400">cancel</span>
+                                    <span className="material-symbols-outlined text-red-500">cancel</span>
                                     Reject Task Approval
                                 </h2>
                             </div>
                             <form onSubmit={confirmReject} className="p-6 space-y-4">
                                 <div>
                                     <p className="text-white font-medium mb-1">Task: {taskToReject.title}</p>
-                                    <p className="text-text-secondary text-sm">Please provide a reason for rejecting this task approval request.</p>
+                                    <p className="text-slate-400 text-sm">Please provide a reason for rejecting this task approval request.</p>
                                 </div>
 
                                 <div>
-                                    <label className="block text-text-secondary text-sm mb-2">
+                                    <label className="block text-slate-300 text-sm mb-2 font-medium">
                                         Rejection Reason <span className="text-red-500">*</span>
                                     </label>
                                     <textarea
@@ -1592,7 +2007,7 @@ export default function ManagerProjectsPage() {
                                         onChange={(e) => setRejectionReason(e.target.value)}
                                         required
                                         rows={4}
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none resize-none placeholder-slate-600"
+                                        className="w-full bg-[#1E293B] border border-slate-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none resize-none placeholder-slate-500"
                                         placeholder="Explain why the task is being rejected..."
                                     />
                                 </div>
@@ -1601,13 +2016,13 @@ export default function ManagerProjectsPage() {
                                     <button
                                         type="button"
                                         onClick={() => setShowRejectModal(false)}
-                                        className="px-4 py-2 rounded-lg border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                                        className="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
-                                        className="px-6 py-2 rounded-lg font-medium bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg shadow-red-900/20"
+                                        className="px-6 py-2 rounded-lg font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg shadow-red-900/30"
                                     >
                                         Reject Task
                                     </button>
@@ -1695,7 +2110,7 @@ export default function ManagerProjectsPage() {
                                                                 )}
                                                             </div>
                                                             <span className={`px-2 py-1 text-[10px] font-bold rounded uppercase ml-2 ${task.status === 'IN_PROGRESS' ? 'bg-blue-500/20 text-blue-400' :
-                                                                    'bg-slate-700 text-slate-400'
+                                                                'bg-slate-700 text-slate-400'
                                                                 }`}>
                                                                 {task.status === 'NOT_STARTED' ? 'NOT STARTED' : task.status.replace('_', ' ')}
                                                             </span>
@@ -1777,6 +2192,6 @@ export default function ManagerProjectsPage() {
                 </div>
             )}
 
-        </ManagerLayout >
+        </ManagerLayout>
     );
 }

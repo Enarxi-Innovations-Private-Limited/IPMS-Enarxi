@@ -1,0 +1,11 @@
+packages:
+  - 'client'
+  - 'server'
+
+allowBuilds:
+  core-js: true
+  cypress: true
+  esbuild: true
+  mongodb-memory-server: true
+  puppeteer: true
+  unrs-resolver: true

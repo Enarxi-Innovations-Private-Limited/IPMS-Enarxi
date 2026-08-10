@@ -132,7 +132,7 @@ export default function SuperUserBackupsPage() {
                 {/* Page Header */}
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                     <div>
-                        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                        <h1 className="text-2xl font-bold text-[#556070] flex items-center gap-3">
                             <span className="material-symbols-outlined text-amber-500" style={{ fontSize: '32px' }}>backup</span>
                             Backup Management
                         </h1>
@@ -146,12 +146,12 @@ export default function SuperUserBackupsPage() {
                                 placeholder="Search backups..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="pl-10 pr-4 py-2 bg-surface-dark border border-border-dark rounded-lg text-white placeholder-text-secondary focus:ring-2 focus:ring-primary focus:border-transparent outline-none w-64"
+                                className="pl-10 pr-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[#556070] placeholder-text-secondary focus:ring-2 focus:ring-primary focus:border-transparent outline-none w-64"
                             />
                         </div>
                         <button
                             onClick={loadBackups}
-                            className="px-4 py-2 bg-surface-dark border border-border-dark rounded-lg text-white hover:bg-background-dark transition-colors flex items-center gap-2"
+                            className="px-4 py-2 bg-white border border-slate-200 shadow-sm rounded-lg text-[#556070] hover:bg-slate-50 transition-colors flex items-center gap-2"
                         >
                             <span className="material-symbols-outlined">refresh</span>
                             Refresh
@@ -172,12 +172,12 @@ export default function SuperUserBackupsPage() {
 
                 <div className="grid lg:grid-cols-3 gap-6">
                     {/* Backup Folders List */}
-                    <div className="lg:col-span-1 bg-surface-dark rounded-xl border border-border-dark overflow-hidden">
-                        <div className="p-4 border-b border-border-dark bg-gradient-surface">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-200 bg-[#ECF1FF]/30 border-b border-slate-200">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-amber-500">folder_special</span>
                                 Backup Folders
-                                <span className="ml-auto text-sm text-text-secondary bg-background-dark px-2 py-0.5 rounded-full">
+                                <span className="ml-auto text-sm text-text-secondary bg-slate-50 px-2 py-0.5 rounded-full">
                                     {filteredBackups.length}
                                 </span>
                             </h2>
@@ -199,7 +199,7 @@ export default function SuperUserBackupsPage() {
                                         <button
                                             key={backup.folderName}
                                             onClick={() => loadBackupDetails(backup.folderName)}
-                                            className={`w-full p-4 text-left hover:bg-background-dark transition-colors ${selectedBackup === backup.folderName ? 'bg-primary/10 border-l-4 border-primary' : ''
+                                            className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${selectedBackup === backup.folderName ? 'bg-primary/10 border-l-4 border-primary' : ''
                                                 }`}
                                         >
                                             <div className="flex items-start gap-3">
@@ -208,7 +208,7 @@ export default function SuperUserBackupsPage() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2">
-                                                        <p className="font-semibold text-white truncate">{backup.projectCode}</p>
+                                                        <p className="font-semibold text-[#556070] truncate">{backup.projectCode}</p>
                                                         {backup.department && backup.department !== 'Unknown' && (
                                                             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${backup.department === 'SOFTWARE'
                                                                     ? 'bg-blue-500/20 text-blue-400'
@@ -246,9 +246,9 @@ export default function SuperUserBackupsPage() {
                     </div>
 
                     {/* Backup Details */}
-                    <div className="lg:col-span-2 bg-surface-dark rounded-xl border border-border-dark overflow-hidden">
-                        <div className="p-4 border-b border-border-dark bg-gradient-surface flex items-center justify-between">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-200 bg-[#ECF1FF]/30 border-b border-slate-200 flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-primary">info</span>
                                 {selectedBackup ? `Backup Details: ${selectedBackup}` : 'Select a backup to view details'}
                             </h2>
@@ -276,44 +276,44 @@ export default function SuperUserBackupsPage() {
                         ) : (
                             <div className="p-4 space-y-4">
                                 {/* Project Info */}
-                                <div className="bg-background-dark rounded-lg p-4 space-y-2">
+                                <div className="bg-slate-50 rounded-lg p-4 space-y-2">
                                     <div className="grid grid-cols-2 gap-4 text-sm">
                                         <div>
                                             <span className="text-text-secondary">Project Name:</span>
-                                            <p className="text-white font-medium">{backupDetails.projectInfo?.projectName || 'N/A'}</p>
+                                            <p className="text-[#556070] font-medium">{backupDetails.projectInfo?.projectName || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <span className="text-text-secondary">Project Code:</span>
-                                            <p className="text-white font-medium">{backupDetails.projectInfo?.projectCode || 'N/A'}</p>
+                                            <p className="text-[#556070] font-medium">{backupDetails.projectInfo?.projectCode || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <span className="text-text-secondary">Department:</span>
-                                            <p className="text-white font-medium">{backupDetails.projectInfo?.department || 'N/A'}</p>
+                                            <p className="text-[#556070] font-medium">{backupDetails.projectInfo?.department || 'N/A'}</p>
                                         </div>
                                         <div>
                                             <span className="text-text-secondary">Deleted At:</span>
-                                            <p className="text-white font-medium">{formatDate(backupDetails.deletedAt)}</p>
+                                            <p className="text-[#556070] font-medium">{formatDate(backupDetails.deletedAt)}</p>
                                         </div>
                                         <div>
                                             <span className="text-text-secondary">Deleted By:</span>
-                                            <p className="text-white font-medium">{backupDetails.deletedBy || 'Unknown'}</p>
+                                            <p className="text-[#556070] font-medium">{backupDetails.deletedBy || 'Unknown'}</p>
                                         </div>
                                         <div>
                                             <span className="text-text-secondary">Total Files:</span>
-                                            <p className="text-white font-medium">{backupDetails.files?.length || 0}</p>
+                                            <p className="text-[#556070] font-medium">{backupDetails.files?.length || 0}</p>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Files List */}
                                 <div className="space-y-2">
-                                    <h3 className="text-white font-semibold flex items-center gap-2">
+                                    <h3 className="text-[#556070] font-semibold flex items-center gap-2">
                                         <span className="material-symbols-outlined text-text-secondary">attach_file</span>
                                         Backed Up Files
                                     </h3>
 
                                     {backupDetails.files?.length === 0 ? (
-                                        <div className="bg-background-dark rounded-lg p-6 text-center">
+                                        <div className="bg-slate-50 rounded-lg p-6 text-center">
                                             <span className="material-symbols-outlined text-4xl text-text-secondary">inbox</span>
                                             <p className="text-text-secondary mt-2">No files in this backup</p>
                                         </div>
@@ -322,13 +322,13 @@ export default function SuperUserBackupsPage() {
                                             {backupDetails.files?.map((file) => (
                                                 <div
                                                     key={file.filename}
-                                                    className="bg-background-dark rounded-lg p-3 flex items-center gap-3 group hover:bg-background-dark/80 transition-colors"
+                                                    className="bg-slate-50 rounded-lg p-3 flex items-center gap-3 group hover:bg-slate-50/80 transition-colors"
                                                 >
-                                                    <div className="p-2 bg-surface-dark rounded-lg">
+                                                    <div className="p-2 bg-slate-100 rounded-lg border border-slate-200">
                                                         <span className="material-symbols-outlined text-primary">{getFileIcon(file.filename)}</span>
                                                     </div>
                                                     <div className="flex-1 min-w-0">
-                                                        <p className="text-white font-medium truncate">{file.originalName}</p>
+                                                        <p className="text-[#556070] font-medium truncate">{file.originalName}</p>
                                                         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
                                                             <span className="flex items-center gap-1">
                                                                 <span className="material-symbols-outlined text-sm">storage</span>
@@ -381,9 +381,9 @@ export default function SuperUserBackupsPage() {
             {deleteConfirm.show && (
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center">
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteConfirm({ show: false, type: '', folderName: '', filename: '' })}></div>
-                    <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-                        <div className="px-6 py-4 border-b border-border-dark bg-red-500/10">
-                            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <div className="relative bg-white border border-slate-200 shadow-sm rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+                        <div className="px-6 py-4 border-b border-slate-200 bg-red-500/10">
+                            <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                                 <span className="material-symbols-outlined text-red-400">warning</span>
                                 Confirm Permanent Deletion
                             </h2>
@@ -393,12 +393,12 @@ export default function SuperUserBackupsPage() {
                                 {deleteConfirm.type === 'folder' ? (
                                     <>
                                         Are you sure you want to <span className="text-red-400 font-semibold">permanently delete</span> the entire backup folder
-                                        <span className="text-white font-semibold"> "{deleteConfirm.folderName}"</span> and all its files?
+                                        <span className="text-[#556070] font-semibold"> "{deleteConfirm.folderName}"</span> and all its files?
                                     </>
                                 ) : (
                                     <>
                                         Are you sure you want to <span className="text-red-400 font-semibold">permanently delete</span> the file
-                                        <span className="text-white font-semibold"> "{deleteConfirm.filename}"</span>?
+                                        <span className="text-[#556070] font-semibold"> "{deleteConfirm.filename}"</span>?
                                     </>
                                 )}
                             </p>
@@ -407,16 +407,16 @@ export default function SuperUserBackupsPage() {
                                 This action cannot be undone. The file(s) will be permanently removed.
                             </p>
                         </div>
-                        <div className="px-6 py-4 border-t border-border-dark flex justify-end gap-3">
+                        <div className="px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
                             <button
                                 onClick={() => setDeleteConfirm({ show: false, type: '', folderName: '', filename: '' })}
-                                className="px-4 py-2 rounded-lg border border-border-dark text-white font-medium hover:bg-background-dark transition-colors"
+                                className="px-4 py-2 rounded-lg border border-border-dark text-[#556070] font-medium hover:bg-slate-50 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={deleteConfirm.type === 'folder' ? handleDeleteFolder : handleDeleteFile}
-                                className="px-4 py-2 rounded-lg bg-red-500 text-white font-bold hover:bg-red-600 transition-colors flex items-center gap-2"
+                                className="px-4 py-2 rounded-lg bg-red-500 text-[#556070] font-bold hover:bg-red-600 transition-colors flex items-center gap-2"
                             >
                                 <span className="material-symbols-outlined text-lg">delete_forever</span>
                                 Delete Permanently

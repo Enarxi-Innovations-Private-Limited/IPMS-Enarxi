@@ -5,8 +5,15 @@ import { getCurrentUser, getToken, isTokenExpired, saveAuth } from '../../servic
 
 const ROLE_ROUTE_MAP = {
   SUPER_USER: '/super',
-  EMPLOYEE: '/employee',
+  SUPER_ADMIN: '/super',
+  ENGINEER: '/engineer',
+  MANAGER: '/engineer',
+  JUNIOR_ENGINEER: '/junior-engineer',
+  EMPLOYEE: '/junior-engineer',
   INTERN: '/intern',
+  STOCK_ADMIN: '/stock-admin',
+  STORE_MANAGER: '/store',
+  PURCHASE_MANAGER: '/purchase',
 };
 
 export default function LoginPage() {
@@ -16,29 +23,30 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [microsoftLoading, setMicrosoftLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check for Microsoft login callback params
     const params = new URLSearchParams(window.location.search);
-    const tokenFromUrl = params.get('token');
-    const userParam = params.get('user');
-    const errorParam = params.get('error');
+    const pwaToken = params.get('pwa_token');
+    const pwaUserRaw = params.get('pwa_user');
+    const pwaError = params.get('pwa_error');
 
-    if (tokenFromUrl && userParam) {
+    if (pwaToken && pwaUserRaw) {
       try {
-        const userObj = JSON.parse(decodeURIComponent(userParam));
-        saveAuth(tokenFromUrl, userObj);
-        const path = ROLE_ROUTE_MAP[userObj.role] || '/';
-        navigate(path, { replace: true });
-        return; // Exit early to prevent duplicate redirects
-      } catch (err) {
-        setError('Failed to process Microsoft login.');
-      }
-    }
+        const pwaUser = JSON.parse(pwaUserRaw);
+        saveAuth(pwaToken, pwaUser);
+        window.history.replaceState({}, document.title, window.location.pathname);
 
-    if (errorParam) {
-      setError(decodeURIComponent(errorParam));
+        const path = ROLE_ROUTE_MAP[pwaUser.role] || '/';
+        navigate(path, { replace: true });
+        return;
+      } catch (e) {
+        setError('Failed to process PWA sign-in response.');
+      }
+    } else if (pwaError) {
+      setError(pwaError);
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const token = getToken();
@@ -66,8 +74,14 @@ export default function LoginPage() {
     }
   };
 
+  const handleMicrosoftLogin = () => {
+    setError('');
+    setMicrosoftLoading(true);
+    window.location.assign(`/api/auth/microsoft/start?origin=${encodeURIComponent(window.location.origin)}`);
+  };
+
   return (
-    <div className="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased min-h-screen flex flex-col relative overflow-x-hidden selection:bg-primary selection:text-white">
+    <div className="bg-[#ECF1FF] text-[#002045] font-display antialiased min-h-screen flex flex-col relative overflow-x-hidden">
       {/* Animated Background Gradients */}
       <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div className="absolute top-[-10%] left-[-5%] w-[40vw] h-[40vw] rounded-full bg-primary/20 blur-[100px] animate-pulse" style={{ animationDuration: '4s' }}></div>
@@ -78,30 +92,26 @@ export default function LoginPage() {
       {/* Header */}
       <header className="relative z-20 flex items-center justify-between px-6 py-4 md:px-10 lg:px-20 w-full max-w-[1440px] mx-auto">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center size-10 rounded-lg bg-primary/20 text-primary ring-1 ring-primary/30">
+          <div className="flex items-center justify-center size-10 rounded-lg bg-[#002045]/10 text-[#002045] ring-1 ring-[#002045]/20">
             <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>hub</span>
           </div>
           <div className="flex flex-col">
-            <h2 className="text-white text-lg font-bold leading-tight tracking-tight">IPMS</h2>
-            <span className="text-xs text-slate-400 font-medium tracking-wide">INTERNAL SYSTEM</span>
+            <h2 className="text-[#002045] text-lg font-bold leading-tight tracking-tight">IPMS</h2>
+            <span className="text-xs text-[#002045]/60 font-medium tracking-wide">INTERNAL SYSTEM</span>
           </div>
         </div>
-        <button className="hidden sm:flex group items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-4 bg-[#232f48]/50 hover:bg-[#232f48] border border-[#324467] text-white text-sm font-bold transition-all duration-200">
-          <span className="material-symbols-outlined text-slate-400 group-hover:text-white transition-colors" style={{ fontSize: '18px' }}>support_agent</span>
-          <span className="truncate">Contact IT Support</span>
-        </button>
       </header>
 
       {/* Main Content */}
       <main className="relative z-10 flex-grow flex items-center justify-center p-4">
         <div className="flex items-center justify-center w-full">
           {/* Centered Login Form */}
-          <div className="w-full max-w-[480px] glass-panel rounded-2xl p-8 shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
+          <div className="w-full max-w-[480px] bg-white rounded-2xl p-8 shadow-[0_20px_50px_rgba(0,32,69,0.1)] border border-[#002045]/5 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-[#002045]"></div>
             <div className="flex flex-col gap-6">
               <div className="flex flex-col gap-2 mb-2">
-                <h1 className="text-white text-3xl font-black leading-tight tracking-tight">Welcome Back</h1>
-                <p className="text-[#92a4c9] text-base font-normal">Please sign in to your IPMS account</p>
+                <h1 className="text-[#002045] text-3xl font-black leading-tight tracking-tight">Welcome Back</h1>
+                <p className="text-[#002045]/60 text-base font-normal">Please sign in to your IPMS account</p>
               </div>
 
               {error && (
@@ -112,12 +122,12 @@ export default function LoginPage() {
 
               <form onSubmit={handleSubmit} className="flex flex-col gap-2">
                 <div className="flex flex-col gap-2">
-                  <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
+                  <label className="text-[#002045] text-sm font-semibold tracking-wide flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>id_card</span>
                     Employee ID
                   </label>
                   <input
-                    className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
+                    className="form-input w-full rounded-lg border border-[#002045]/10 bg-[#f8fafc] focus:bg-white h-12 px-4 text-[#002045] placeholder:text-[#002045]/30 text-base focus:border-[#002045] focus:ring-1 focus:ring-[#002045] transition-all outline-none"
                     type="text"
                     value={employeeId}
                     onChange={(e) => setEmployeeId(e.target.value)}
@@ -127,14 +137,14 @@ export default function LoginPage() {
 
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-white text-sm font-semibold tracking-wide flex items-center gap-2">
+                    <label className="text-[#002045] text-sm font-semibold tracking-wide flex items-center gap-2">
                       <span className="material-symbols-outlined text-primary" style={{ fontSize: '18px' }}>lock</span>
                       Password
                     </label>
                   </div>
                   <div className="relative">
                     <input
-                      className="form-input w-full rounded-lg border border-[#324467] bg-[#192233]/80 hover:bg-[#192233] focus:bg-[#192233] h-12 px-4 pr-12 text-white placeholder:text-[#92a4c9]/50 text-base focus:border-primary focus:ring-1 focus:ring-primary transition-colors outline-none"
+                      className="form-input w-full rounded-lg border border-[#002045]/10 bg-[#f8fafc] focus:bg-white h-12 px-4 pr-12 text-[#002045] placeholder:text-[#002045]/30 text-base focus:border-[#002045] focus:ring-1 focus:ring-[#002045] transition-all outline-none"
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -143,7 +153,7 @@ export default function LoginPage() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute inset-y-0 right-0 flex items-center px-4 text-[#92a4c9] hover:text-white cursor-pointer transition-colors focus:outline-none"
+                      className="absolute inset-y-0 right-0 flex items-center px-4 text-[#002045]/40 hover:text-[#002045] cursor-pointer transition-colors focus:outline-none"
                     >
                       <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
                         {showPassword ? 'visibility' : 'visibility_off'}
@@ -156,46 +166,49 @@ export default function LoginPage() {
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <div className="relative flex items-center">
                       <input
-                        className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-[#324467] bg-[#192233] checked:border-primary checked:bg-primary transition-all"
+                        className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-[#002045]/20 bg-white checked:border-[#002045] checked:bg-[#002045] transition-all"
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
                       />
                       <span className="material-symbols-outlined absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-[12px] text-white opacity-0 peer-checked:opacity-100 pointer-events-none">check</span>
                     </div>
-                    <span className="text-sm text-[#92a4c9] group-hover:text-white transition-colors">Remember me</span>
+                    <span className="text-sm text-[#002045]/60 group-hover:text-[#002045] transition-colors">Remember me</span>
                   </label>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-base tracking-wide shadow-[0_4px_14px_0_rgba(19,91,236,0.39)] transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center justify-center gap-2 h-12 rounded-lg bg-[#002045] hover:bg-[#001a38] text-white font-bold text-base tracking-wide shadow-lg shadow-[#002045]/20 transition-all transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed mb-4"
                 >
                   <span>{loading ? 'Signing in...' : 'Sign In to Dashboard'}</span>
                   <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>login</span>
                 </button>
+
+                <div className="relative my-3">
+                  <div className="border-t border-[#324467]/50"></div>
+                  <span className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 bg-[#111827] px-3 text-xs text-[#92a4c9]">or</span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleMicrosoftLogin}
+                  disabled={microsoftLoading}
+                  className="w-full flex items-center justify-center gap-3 h-12 rounded-lg border border-[#324467] bg-white text-[#111827] font-bold text-base tracking-wide transition-all hover:bg-[#f8fafc] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+                    <path fill="#f25022" d="M1 1h10v10H1z" />
+                    <path fill="#00a4ef" d="M13 1h10v10H13z" />
+                    <path fill="#7fba00" d="M1 13h10v10H1z" />
+                    <path fill="#ffb900" d="M13 13h10v10H13z" />
+                  </svg>
+                  <span>{microsoftLoading ? 'Connecting to Microsoft...' : 'Continue with Microsoft'}</span>
+                </button>
               </form>
 
-              <div className="flex items-center gap-4 mt-2 mb-2">
-                <div className="h-px bg-[#324467] flex-1"></div>
-                <span className="text-xs font-semibold text-[#92a4c9] uppercase tracking-wider">or continue with</span>
-                <div className="h-px bg-[#324467] flex-1"></div>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => {
-                  const baseUrl = api.defaults.baseURL.replace(/\/$/, '');
-                  window.location.href = `${baseUrl}/auth/microsoft`;
-                }}
-                className="w-full flex items-center justify-center gap-3 h-12 rounded-lg bg-white hover:bg-gray-100 text-[#192233] font-bold text-base tracking-wide transition-all transform active:scale-[0.98] border border-transparent hover:border-[#324467] mb-4"
-              >
-                <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" alt="Microsoft" className="w-5 h-5" />
-                <span>Sign in with Microsoft</span>
-              </button>
-
-              <div className="mt-8 pt-6 border-t border-[#324467]/50 flex items-center justify-between text-xs text-[#92a4c9]">
+              <div className="mt-8 pt-6 border-t border-[#002045]/5 flex items-center justify-between text-xs text-[#002045]/40">
 
               </div>
             </div>

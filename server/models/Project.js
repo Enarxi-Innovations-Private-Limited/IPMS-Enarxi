@@ -58,6 +58,15 @@ const projectSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     },
+    projectType: {
+        type: String,
+        enum: ['GENERAL', 'PRODUCTION', 'FULL_PRODUCT_PRODUCTION'],
+        default: 'GENERAL',
+    },
+    totalBatchSize: {
+        type: Number,
+        default: 0,
+    },
     createdAt: {
         type: Date,
         default: Date.now,
