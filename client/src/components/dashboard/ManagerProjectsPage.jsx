@@ -1112,7 +1112,7 @@ export default function ManagerProjectsPage() {
                                                         const assignee = users.find(u => u.id === task.assigneeId) || (task.assigneeId === currentUser?.id ? { ...currentUser, name: currentUser.name || 'Me' } : null);
                                                         const badgeStyle = getStatusBadgeStyles(task.status, !!task.assigneeId);
                                                         const deadline = task.deadline ? new Date(task.deadline) : null;
-                                                        const isOverdue = deadline && deadline < new Date() && task.status !== 'COMPLETED';
+                                                        const isOverdue = deadline && new Date(deadline).setHours(23, 59, 59, 999) < Date.now() && task.status !== 'COMPLETED';
 
                                                         return (
                                                             <SortableTaskRow key={task._id ?? task.id} task={task}>

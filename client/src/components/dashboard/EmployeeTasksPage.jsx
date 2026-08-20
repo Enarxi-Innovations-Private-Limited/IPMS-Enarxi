@@ -256,7 +256,7 @@ export default function EmployeeTasksPage() {
                                         boardsCompletedDraft: String(assignment.boardsCompletedDraft ?? assignment.boardsCompletedApproved ?? 0),
                                         delayReason: assignment.delayReason || ''
                                     };
-                                    const isOverdue = assignment.deadline && new Date() > new Date(assignment.deadline);
+                                    const isOverdue = assignment.deadline && new Date(assignment.deadline).setHours(23, 59, 59, 999) < Date.now();
 
                                     return (
                                         <div key={assignment.id} className="rounded-xl border border-border-dark bg-background-dark/40 p-4">
