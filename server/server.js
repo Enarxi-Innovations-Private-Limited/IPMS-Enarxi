@@ -3578,8 +3578,12 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
 
         // Parse deadline if provided
         const deadlineDate = deadline ? new Date(deadline) : null;
-        if (deadlineDate && deadlineDate < new Date().setHours(0, 0, 0, 0)) {
-            return res.status(400).json({ message: 'Deadline cannot be in the past' });
+        if (deadlineDate) {
+            const checkDeadline = new Date(deadlineDate);
+            checkDeadline.setHours(23, 59, 59, 999);
+            if (checkDeadline < new Date()) {
+                return res.status(400).json({ message: 'Deadline cannot be in the past' });
+            }
         }
 
         // Calculate allocated time in minutes if both are set
@@ -3798,8 +3802,12 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
         // Handle deadline update
         if (deadline !== undefined) {
             const newDeadline = deadline ? new Date(deadline) : null;
-            if (newDeadline && newDeadline < new Date().setHours(0, 0, 0, 0)) {
-                return res.status(400).json({ message: 'Deadline cannot be in the past' });
+            if (newDeadline) {
+                const checkDeadline = new Date(newDeadline);
+                checkDeadline.setHours(23, 59, 59, 999);
+                if (checkDeadline < new Date()) {
+                    return res.status(400).json({ message: 'Deadline cannot be in the past' });
+                }
             }
             task.deadline = newDeadline;
             // Recalculate allocated minutes if assignedAt exists

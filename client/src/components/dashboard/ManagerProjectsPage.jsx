@@ -474,19 +474,23 @@ export default function ManagerProjectsPage() {
             return;
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const deadlineDate = new Date(newTaskDeadline);
-        deadlineDate.setHours(0, 0, 0, 0);
+        let deadlineDate = null;
+        if (newTaskDeadline) {
+            const [y, m, d] = newTaskDeadline.split('-').map(Number);
+            deadlineDate = new Date(y, m - 1, d, 23, 59, 59, 999);
+        }
 
-        if (deadlineDate < today) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        if (deadlineDate < todayStart) {
             setNotification({ message: 'Task deadline cannot be in the past', type: 'error' });
             return;
         }
 
         if (selectedProject?.deadline) {
             const projectDeadline = new Date(selectedProject.deadline);
-            projectDeadline.setHours(0, 0, 0, 0);
+            projectDeadline.setHours(23, 59, 59, 999);
             if (deadlineDate > projectDeadline) {
                 setNotification({ message: 'Task deadline cannot be later than the project deadline', type: 'error' });
                 return;
