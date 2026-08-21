@@ -1,28 +1,31 @@
 # Session Log
 
 ## Last Updated
-2026-06-18T12:20:00.000+05:30
+2026-08-21T15:56:00.000+05:30
 
 ## Goal
-Clean the repo and production folder structure safely, excluding temp artifacts and tracked local credential files from Git.
+Restrict Managers from directly marking projects as COMPLETED and enforce Super Admin authority over project completion approval.
 
 ## Status
 DONE
 
 ## Done This Session
-- Updated `.gitignore` to cover `.temp/`, `.env.save`, and `client/.env`.
-- Removed `client/.env` from Git tracking while preserving the local file.
-- Committed and pushed repo cleanup as `e7154f7` and restored `server/taskTemplates.js` in follow-up commit `e1f4fc4`.
-- Mirrored the folder cleanup on the production VPS by moving root clutter and utility scripts into `.temp/`.
-- Restarted `ipms-backend` and `ipms-preview-bom` under PM2 and verified backend, BOM docs, and public nginx responses.
+- Updated `server/server.js` (`PUT /api/projects/:projectId` and `PUT /api/projects/:projectId/status`) to enforce role-based rules on setting `COMPLETED` status:
+  - Non-super-admins (Managers, Engineers) attempting to mark a project as `COMPLETED` are automatically routed to `WAITING_APPROVAL`, sending an `APPROVAL_REQUEST` notification to Super Admins.
+  - Non-super-admins cannot directly override a project's status to `COMPLETED`.
+  - Updated production state sync logic (`syncProductionProjectState`) to transition complete production projects to `WAITING_APPROVAL` instead of directly marking them `COMPLETED`.
+- Updated `ManagerProjectsPage.jsx`:
+  - Updated Manager project status dropdown option from `Completed` to `Request Closure (Submit to Admin)`.
+  - Updated `handleStatusChange` to route requests through `/projects/:projectId/status` and notify the Manager that closure approval was requested.
+  - Disabled status select if project is already `COMPLETED`.
+- Verified backend syntax with `node -c server/server.js` and frontend build with `pnpm --filter client build` (both exit 0).
 
 ## Decisions Made
-- Kept the cleanup on `Inventory-setup`; no new `production` branch was created yet because the server checkout is still manually diverged.
-- Restored `server/taskTemplates.js` to the tracked codebase because it is a live backend dependency, not an unused script.
-- Avoided `git pull` on the VPS and used direct file updates instead to prevent overwriting manual production-side changes.
+- Only Super Admins / Super Users have authority to approve and transition project status to `COMPLETED`.
+- Manager completion actions create an approval request (`WAITING_APPROVAL`) for Super Admin review.
 
 ## Blockers
-- Production checkout remains `ahead 2, behind 1` with manual drift in `server/BOM/automation/robu.py`, `scripts/esp32_data.xlsx`, and untracked `ecosystem.production.config.js`.
+- None.
 
 ## Next Step
-Decide whether to normalize the production server onto a dedicated deploy branch or keep using direct file sync for production updates.
+Verify from a Manager account that selecting "Request Closure" submits the project for Super Admin approval without directly completing it.

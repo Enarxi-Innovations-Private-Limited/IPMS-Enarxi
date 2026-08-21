@@ -2122,8 +2122,35 @@ app.put('/api/projects/:projectId', authMiddleware, requireRole(roles.SUPER_USER
             if (project.status === 'COMPLETED' && status !== 'COMPLETED' && !isSuperAdminRole(req.user.role)) {
                 return res.status(403).json({ message: 'Only super admins can reopen completed projects.' });
             }
-            console.log('Changing status from', project.status, 'to', status);
-            project.status = status;
+            if (status === 'COMPLETED' && !isSuperProjectEditor) {
+                if (isManagerLike) {
+                    // Check task completion first
+                    const projectTasks = await Task.find({ projectId: project._id });
+                    if (projectTasks.length > 0) {
+                        const incompleteTasks = projectTasks.filter(t => t.status !== 'COMPLETED');
+                        if (incompleteTasks.length > 0) {
+                            return res.status(400).json({
+                                message: `Cannot request project closure. ${incompleteTasks.length} out of ${projectTasks.length} tasks are still incomplete.`
+                            });
+                        }
+                    }
+                    project.status = 'WAITING_APPROVAL';
+                    const superUsers = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
+                    for (const admin of superUsers) {
+                        await Notification.create({
+                            recipientId: admin._id,
+                            type: 'APPROVAL_REQUEST',
+                            message: `Project [${project.projectCode || project._id}] marked as complete by Manager ${req.user.name}. Needs approval.`,
+                            relatedId: project._id
+                        });
+                    }
+                } else {
+                    return res.status(403).json({ message: 'Only super admins can approve or set project status to COMPLETED.' });
+                }
+            } else {
+                console.log('Changing status from', project.status, 'to', status);
+                project.status = status;
+            }
         }
         if (deadline !== undefined) {
             project.deadline = deadline;
@@ -2614,6 +2641,50 @@ app.delete('/api/backups/:folderName', authMiddleware, requireRole(roles.SUPER_U
 app.use('/api/backups/files', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), express.static(path.join(__dirname, 'uploads', 'backup')));
 
 
+// Sync project status based on task completion
+async function syncProjectStatusWithTasks(projectId) {
+    if (!projectId) return null;
+    const project = await Project.findById(projectId);
+    if (!project) return null;
+
+    const allProjectTasks = await Task.find({ projectId });
+    const totalTasks = allProjectTasks.length;
+    const completedTasks = allProjectTasks.filter(t => t.status === 'COMPLETED').length;
+    const inProgressTasks = allProjectTasks.filter(t => t.status === 'IN_PROGRESS').length;
+
+    console.log(`Syncing project ${projectId} status. Stats:`, { totalTasks, completedTasks, inProgressTasks, currentStatus: project.status });
+
+    if (totalTasks > 0 && completedTasks === totalTasks) {
+        if (project.status !== 'COMPLETED' && project.status !== 'WAITING_APPROVAL') {
+            project.status = 'WAITING_APPROVAL';
+            await project.save();
+            console.log('✅ Project auto-updated to WAITING_APPROVAL:', project._id);
+
+            const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
+            for (const admin of superAdmins) {
+                await Notification.create({
+                    recipientId: admin._id,
+                    type: 'APPROVAL_REQUEST',
+                    message: `Project [${project.projectCode || project._id}] completed all tasks. Awaiting your approval to mark as completed.`,
+                    relatedId: project._id
+                });
+            }
+        }
+    } else if (completedTasks < totalTasks) {
+        // If incomplete tasks exist, project cannot be WAITING_APPROVAL or COMPLETED
+        if (project.status === 'WAITING_APPROVAL' || project.status === 'COMPLETED') {
+            project.status = 'ACTIVE';
+            await project.save();
+            console.log(`🔄 Project ${project._id} status reverted to ACTIVE (${completedTasks}/${totalTasks} tasks completed)`);
+        } else if (inProgressTasks > 0 && project.status === 'PLANNING') {
+            project.status = 'ACTIVE';
+            await project.save();
+            console.log('✅ Project auto-updated to ACTIVE:', project._id);
+        }
+    }
+    return project;
+}
+
 // Update project status (Accessible by Team Members)
 app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
     try {
@@ -2637,39 +2708,54 @@ app.put('/api/projects/:projectId/status', authMiddleware, async (req, res) => {
 
         if (status) {
             console.log(`Updating project ${projectId} status to ${status} by ${req.user.name}`);
-            if (project.status === 'COMPLETED' && status !== 'COMPLETED' && !isSuperAdminRole(req.user.role)) {
+
+            if (project.status === 'COMPLETED' && status !== 'COMPLETED' && !isSuperUser) {
                 return res.status(403).json({ message: 'Only super admins can reopen completed projects.' });
             }
-            if ((req.user.role === roles.ENGINEER || req.user.role === roles.MANAGER) && status === 'COMPLETED') {
+
+            // Validation: Cannot set/approve COMPLETED if there are incomplete tasks
+            if (status === 'COMPLETED') {
+                const projectTasks = await Task.find({ projectId: project._id });
+                if (projectTasks.length > 0) {
+                    const incompleteTasks = projectTasks.filter(t => t.status !== 'COMPLETED');
+                    if (incompleteTasks.length > 0) {
+                        return res.status(400).json({
+                            message: `Cannot set project to COMPLETED. ${incompleteTasks.length} out of ${projectTasks.length} tasks are still incomplete. All tasks must be completed before project closure.`
+                        });
+                    }
+                }
+            }
+
+            if (!isSuperUser && status === 'COMPLETED') {
+                // Non-super-admin manager/engineer requesting closure
                 project.status = 'WAITING_APPROVAL';
-                // Notify Super Users
                 const superUsers = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
                 for (const admin of superUsers) {
                     await Notification.create({
                         recipientId: admin._id,
                         type: 'APPROVAL_REQUEST',
-                        message: `Project [${project.projectCode}] marked as complete by Manager ${req.user.name}. Needs approval.`,
+                        message: `Project [${project.projectCode || project._id}] marked as complete by Manager ${req.user.name}. Needs approval.`,
                         relatedId: project._id
                     });
                 }
-            }
-            else if ((req.user.role === roles.SUPER_USER || req.user.role === roles.SUPER_ADMIN) && project.status === 'WAITING_APPROVAL') {
+            } else if (isSuperUser && project.status === 'WAITING_APPROVAL') {
                 project.status = status; // COMPLETED (Approve) or ACTIVE (Reject)
                 if (project.managerId) {
                     const action = status === 'COMPLETED' ? 'approved' : 'returned';
                     await Notification.create({
                         recipientId: project.managerId,
                         type: 'PROJECT_UPDATE',
-                        message: `Project [${project.projectCode}] completion was ${action} by Super Admin`,
+                        message: `Project [${project.projectCode || project._id}] completion was ${action} by Super Admin`,
                         relatedId: project._id
                     });
                 }
-            }
-            else {
+            } else if (!isSuperUser && status === 'WAITING_APPROVAL') {
+                project.status = 'WAITING_APPROVAL';
+            } else {
                 project.status = status;
             }
             await project.save();
-            await logActivity('PROJECT_UPDATED', `Project "${project.name}" status updated to ${status}`, req.user._id, req.user.name, project._id, project.name);
+            await logActivity('PROJECT_UPDATED', `Project "${project.name}" status updated to ${project.status}`, req.user._id, req.user.name, project._id, project.name);
             res.json({ id: project._id, status: project.status });
         } else {
             res.status(400).json({ message: 'Status is required' });
@@ -3662,6 +3748,9 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
             }
         }
 
+        // Sync project status (reverts WAITING_APPROVAL / COMPLETED to ACTIVE since a new task was added)
+        await syncProjectStatusWithTasks(projectId);
+
         // Notify assignee about deadline if set
         if (finalAssigneeId && deadlineDate && finalAssigneeId.toString() !== req.user._id.toString()) {
             await Notification.create({
@@ -3759,6 +3848,9 @@ app.delete('/api/tasks/:taskId', authMiddleware, requireRole(roles.SUPER_USER, r
         await ProductionAssignment.deleteMany({ taskId });
         if (shouldResyncProductionState) {
             await syncProductionProjectState(task.projectId);
+        }
+        if (task.projectId) {
+            await syncProjectStatusWithTasks(task.projectId);
         }
         console.log(`✅ Task deleted: ${taskId}`);
         res.json({ message: 'Task deleted successfully', id: taskId });
@@ -3983,38 +4075,7 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         // Auto-update project status based on task completion
         if (task.projectId) {
-            const allProjectTasks = await Task.find({ projectId: task.projectId });
-            const totalTasks = allProjectTasks.length;
-            const completedTasks = allProjectTasks.filter(t => t.status === 'COMPLETED').length;
-            const inProgressTasks = allProjectTasks.filter(t => t.status === 'IN_PROGRESS').length;
-
-            console.log('Task stats after update:', { totalTasks, completedTasks, inProgressTasks });
-
-            const project = await Project.findById(task.projectId);
-            if (project && project.status !== 'COMPLETED' && project.status !== 'WAITING_APPROVAL') {
-                if (totalTasks > 0 && completedTasks === totalTasks) {
-                    // All tasks completed - mark project as WAITING_APPROVAL for Super Admin
-                    project.status = 'WAITING_APPROVAL';
-                    await project.save();
-                    console.log('✅ Project auto-updated to WAITING_APPROVAL:', project._id);
-
-                    // Notify all Super Admins about project completion approval
-                    const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
-                    for (const admin of superAdmins) {
-                        await Notification.create({
-                            recipientId: admin._id,
-                            type: 'APPROVAL_REQUEST',
-                            message: `Project [${project.projectCode}] completed all tasks. Awaiting your approval to mark as completed.`,
-                            relatedId: project._id
-                        });
-                    }
-                } else if (inProgressTasks > 0 && project.status === 'PLANNING') {
-                    // At least one task in progress - mark project as ACTIVE
-                    project.status = 'ACTIVE';
-                    await project.save();
-                    console.log('✅ Project auto-updated to ACTIVE:', project._id);
-                }
-            }
+            await syncProjectStatusWithTasks(task.projectId);
         }
 
         res.json({ id: task._id, title: task.title, description: task.description, status: task.status, projectId: task.projectId, assigneeId: task.assigneeId });
@@ -4124,50 +4185,8 @@ app.put('/api/tasks/:taskId/status', authMiddleware, async (req, res) => {
         // Auto-update project status based on task completion
         let projectStatus = null;
         if (task.projectId) {
-            console.log('Checking project tasks for projectId:', task.projectId);
-            const allProjectTasks = await Task.find({ projectId: task.projectId });
-            const totalTasks = allProjectTasks.length;
-            const completedTasks = allProjectTasks.filter(t => t.status === 'COMPLETED').length;
-            const inProgressTasks = allProjectTasks.filter(t => t.status === 'IN_PROGRESS').length;
-
-            console.log('Task stats:', { totalTasks, completedTasks, inProgressTasks });
-
-            const project = await Project.findById(task.projectId);
-            if (project) {
-                console.log('Current project status:', project.status);
-                projectStatus = project.status;
-
-                if (project.status !== 'COMPLETED' && project.status !== 'WAITING_APPROVAL') {
-                    if (totalTasks > 0 && completedTasks === totalTasks) {
-                        // All tasks completed - mark project as WAITING_APPROVAL for Super Admin
-                        project.status = 'WAITING_APPROVAL';
-                        await project.save();
-                        projectStatus = 'WAITING_APPROVAL';
-                        console.log('✅ Project auto-updated to WAITING_APPROVAL:', project._id);
-
-                        // Notify all Super Admins about project completion approval
-                        const superAdmins = await User.find({ role: { $in: [roles.SUPER_USER, roles.SUPER_ADMIN] } });
-                        for (const admin of superAdmins) {
-                            await Notification.create({
-                                recipientId: admin._id,
-                                type: 'APPROVAL_REQUEST',
-                                message: `Project [${project.projectCode}] completed all tasks. Awaiting your approval to mark as completed.`,
-                                relatedId: project._id
-                            });
-                        }
-                    } else if (inProgressTasks > 0 && project.status === 'PLANNING') {
-                        // At least one task in progress - mark project as ACTIVE
-                        project.status = 'ACTIVE';
-                        await project.save();
-                        projectStatus = 'ACTIVE';
-                        console.log('✅ Project auto-updated to ACTIVE:', project._id);
-                    }
-                }
-            } else {
-                console.log('Project not found for ID:', task.projectId);
-            }
-        } else {
-            console.log('Task has no projectId');
+            const updatedProject = await syncProjectStatusWithTasks(task.projectId);
+            projectStatus = updatedProject?.status || null;
         }
 
         res.json({ id: task._id, status: task.status, projectStatus });
@@ -4586,30 +4605,7 @@ app.get('/api/manager/performance', authMiddleware, requireRole(roles.MANAGER, r
     }
 });
 
-// Project Status Manual Update (Manager override)
-app.put('/api/projects/:projectId/status', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN, roles.MANAGER), async (req, res) => {
-    try {
-        const { projectId } = req.params;
-        const { status } = req.body;
-        const project = await Project.findById(projectId);
-        if (!project) return res.status(404).json({ message: 'Project not found' });
 
-        const allowedStatuses = ['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED'];
-        if (!allowedStatuses.includes(status)) {
-            return res.status(400).json({ message: 'Invalid status' });
-        }
-
-        project.status = status;
-        await project.save();
-
-        await logActivity('PROJECT_STATUS_UPDATED', `Project ${project.name} status updated to ${status}`, req.user._id, req.user.name, project._id, project.name);
-
-        res.json({ id: project._id, status: project.status });
-    } catch (err) {
-        console.error('❌ [Update Project Status]: Error:', err);
-        res.status(500).json({ message: 'Failed to update status', error: err.message });
-    }
-});
 
 // ============ ACTIVITY ROUTES ============
 app.get('/api/activity-logs', authMiddleware, requireRole(roles.SUPER_USER, roles.SUPER_ADMIN), async (req, res) => {

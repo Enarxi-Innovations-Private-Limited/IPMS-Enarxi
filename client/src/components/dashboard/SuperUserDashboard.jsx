@@ -188,6 +188,65 @@ export default function SuperUserDashboard() {
                 </div>
               </div>
 
+              {/* Pending Project Closure Approvals Widget */}
+              {projects.some(p => p.status === 'WAITING_APPROVAL') && (
+                <div className="bg-yellow-50 border border-yellow-300 rounded-xl shadow-sm overflow-hidden mb-8">
+                  <div className="px-6 py-4 border-b border-yellow-200 bg-yellow-100/50 flex items-center justify-between">
+                    <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-yellow-600">pending_actions</span>
+                      Pending Project Closure Approvals ({projects.filter(p => p.status === 'WAITING_APPROVAL').length})
+                    </h2>
+                    <button
+                      onClick={() => navigate('/super/projects?filter=WAITING_APPROVAL')}
+                      className="text-xs font-bold text-yellow-800 hover:underline cursor-pointer"
+                    >
+                      View Projects
+                    </button>
+                  </div>
+                  <div className="p-4 grid gap-4 md:grid-cols-2">
+                    {projects.filter(p => p.status === 'WAITING_APPROVAL').map(p => (
+                      <div key={p.id || p._id} className="bg-white border border-yellow-200 rounded-lg p-4 flex items-center justify-between">
+                        <div>
+                          <h4 className="font-bold text-slate-900">{p.name}</h4>
+                          <p className="text-xs text-slate-500 font-mono">{p.projectCode || p.id}</p>
+                          <p className="text-xs text-slate-600 mt-1">Manager: {p.managerName || 'Assigned Manager'}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.put(`/projects/${p.id || p._id}/status`, { status: 'COMPLETED' });
+                                loadData();
+                              } catch (err) {
+                                setError('Failed to approve project closure');
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-sm">check_circle</span>
+                            Approve
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.put(`/projects/${p.id || p._id}/status`, { status: 'ACTIVE' });
+                                loadData();
+                              } catch (err) {
+                                setError('Failed to reject project closure');
+                              }
+                            }}
+                            className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors flex items-center gap-1 cursor-pointer"
+                          >
+                            <span className="material-symbols-outlined text-sm">cancel</span>
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Pending Delay Approvals Widget */}
               <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-8">
                 <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">

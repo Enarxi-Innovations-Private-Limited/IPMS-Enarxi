@@ -386,15 +386,17 @@ export default function SuperUserProjectsPage() {
 
     const handleProjectApproval = async (projectId, status) => {
         try {
-            await api.put(`/projects/${projectId}/status`, { status });
+            const res = await api.put(`/projects/${projectId}/status`, { status });
+            const updatedStatus = res.data?.status || status;
             // Update local state
-            setProjects(projects.map(p => p.id === projectId ? { ...p, status } : p));
-            // Close details modal if open
-            if (showDetailsModal && selectedProject?.id === projectId) {
-                setSelectedProject({ ...selectedProject, status });
+            setProjects(prev => prev.map(p => (p.id === projectId || p._id === projectId) ? { ...p, status: updatedStatus } : p));
+            if (selectedProject && (selectedProject.id === projectId || selectedProject._id === projectId)) {
+                setSelectedProject(prev => ({ ...prev, status: updatedStatus }));
             }
+            setError('');
         } catch (err) {
             console.error('Failed to update project status:', err);
+            setError(err.response?.data?.message || 'Failed to update project status');
         }
     };
 
@@ -629,6 +631,49 @@ export default function SuperUserProjectsPage() {
                         </div>
                     )}
 
+                    {isSuperAdmin && projects.some(p => p.status === 'WAITING_APPROVAL') && (
+                        <div className="mb-6 rounded-xl border border-yellow-300 bg-yellow-50 p-5">
+                            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-yellow-600">hourglass_empty</span>
+                                        Project Closure Approval Queue
+                                    </h3>
+                                    <p className="mt-1 text-sm text-slate-600">
+                                        The following projects have been submitted by managers for completion approval.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+                                {projects.filter(p => p.status === 'WAITING_APPROVAL').map((p) => (
+                                    <div key={p.id || p._id} className="rounded-xl border border-yellow-200 bg-white p-4 shadow-sm flex items-center justify-between">
+                                        <div>
+                                            <p className="text-sm font-semibold text-slate-900">{p.name}</p>
+                                            <p className="text-xs text-slate-500 font-mono mt-0.5">{p.projectCode || p.id}</p>
+                                            <p className="text-xs text-slate-600 mt-1">Manager: {p.managerName || 'Assigned Manager'}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => handleProjectApproval(p.id || p._id, 'COMPLETED')}
+                                                className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                Approve Closure
+                                            </button>
+                                            <button
+                                                onClick={() => handleProjectApproval(p.id || p._id, 'ACTIVE')}
+                                                className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-colors flex items-center gap-1"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">cancel</span>
+                                                Reject
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {isSuperAdmin && (
                         <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
                             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -777,16 +822,36 @@ export default function SuperUserProjectsPage() {
                                         </div>
 
                                         {/* Actions */}
-                                        <div className="px-5 py-3 border-t border-border-dark flex gap-2">
-                                            <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
-                                                <span className="material-symbols-outlined text-base">visibility</span>View Details
-                                            </button>
-                                            <button onClick={() => openEditModal(project)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-[#556070] transition-colors" title="Edit Project">
-                                                <span className="material-symbols-outlined text-base">edit</span>
-                                            </button>
-                                            <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-[#556070] transition-colors" title="Delete Project">
-                                                <span className="material-symbols-outlined text-base">delete</span>
-                                            </button>
+                                        <div className="px-5 py-3 border-t border-border-dark flex flex-col gap-2">
+                                            {project.status === 'WAITING_APPROVAL' && (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleProjectApproval(project.id || project._id, 'COMPLETED'); }}
+                                                        className="flex-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-1"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                                                        Approve Closure
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); handleProjectApproval(project.id || project._id, 'ACTIVE'); }}
+                                                        className="flex-1 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors flex items-center justify-center gap-1"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">cancel</span>
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            )}
+                                            <div className="flex gap-2">
+                                                <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
+                                                    <span className="material-symbols-outlined text-base">visibility</span>View Details
+                                                </button>
+                                                <button onClick={() => openEditModal(project)} className="px-3 py-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-[#556070] transition-colors" title="Edit Project">
+                                                    <span className="material-symbols-outlined text-base">edit</span>
+                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); setSelectedProject(project); setShowDeleteConfirm(true); }} className="px-3 py-2 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-[#556070] transition-colors" title="Delete Project">
+                                                    <span className="material-symbols-outlined text-base">delete</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 );
@@ -1056,6 +1121,34 @@ export default function SuperUserProjectsPage() {
 
                     {/* Modal Container */}
                     <div className="relative bg-[#11141D] border border-white/10 w-full max-w-[94vw] rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[88vh] max-h-[95vh] z-10">
+                        {/* Waiting Approval Alert Banner */}
+                        {selectedProject.status === 'WAITING_APPROVAL' && (
+                            <div className="bg-amber-500/20 border-b border-amber-500/30 px-10 py-3.5 flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-amber-400 text-2xl">pending_actions</span>
+                                    <div>
+                                        <p className="text-amber-200 text-sm font-bold">Project Closure Pending Approval</p>
+                                        <p className="text-amber-300/80 text-xs">The manager has marked this project as complete and requested admin closure approval.</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => handleProjectApproval(selectedProject.id || selectedProject._id, 'COMPLETED')}
+                                        className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1.5 shadow-md"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">check_circle</span>
+                                        Approve Closure
+                                    </button>
+                                    <button
+                                        onClick={() => handleProjectApproval(selectedProject.id || selectedProject._id, 'ACTIVE')}
+                                        className="px-4 py-2 rounded-lg bg-rose-600 text-white text-xs font-bold hover:bg-rose-700 transition-colors flex items-center gap-1.5 shadow-md"
+                                    >
+                                        <span className="material-symbols-outlined text-sm">cancel</span>
+                                        Reject Request
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                         {/* Hero Header */}
                         <div className="relative pt-8 pb-10 px-10 border-b border-white/5" style={{ background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(10, 12, 18, 0) 100%)' }}>
                             <div className="flex items-start justify-between">
@@ -1401,6 +1494,20 @@ export default function SuperUserProjectsPage() {
                                 >
                                     <span className="material-symbols-outlined text-xl">attach_file</span>
                                     <span className="text-[10px] font-bold uppercase tracking-widest">{selectedProject.attachments?.length || 0} Attachments</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-slate-400 font-medium">Status:</span>
+                                    <select
+                                        value={selectedProject.status}
+                                        onChange={(e) => handleProjectApproval(selectedProject.id || selectedProject._id, e.target.value)}
+                                        className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500 cursor-pointer"
+                                    >
+                                        <option value="PLANNING">Planning</option>
+                                        <option value="ACTIVE">Active</option>
+                                        <option value="ON_HOLD">On Hold</option>
+                                        <option value="WAITING_APPROVAL">⏳ Waiting Approval</option>
+                                        <option value="COMPLETED">Completed</option>
+                                    </select>
                                 </div>
                             </div>
                             <div className="flex items-center space-x-4">

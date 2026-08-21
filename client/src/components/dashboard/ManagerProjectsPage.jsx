@@ -400,11 +400,16 @@ export default function ManagerProjectsPage() {
 
     const handleStatusChange = async (projectId, status) => {
         try {
-            await api.put(`/projects/${projectId}`, { status });
+            const res = await api.put(`/projects/${projectId}/status`, { status });
+            const updatedStatus = res.data?.status || status;
             await loadData();
-            // Update selected project if open
             if (selectedProject && selectedProject.id === projectId) {
-                setSelectedProject(prev => ({ ...prev, status }));
+                setSelectedProject(prev => ({ ...prev, status: updatedStatus }));
+            }
+            if (updatedStatus === 'WAITING_APPROVAL') {
+                setNotification({ message: 'Project closure request submitted to Super Admin for approval.', type: 'success' });
+            } else {
+                setNotification({ message: `Project status updated to ${updatedStatus.replace('_', ' ')}`, type: 'success' });
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to update status');
@@ -872,13 +877,19 @@ export default function ManagerProjectsPage() {
                                             {/* Actions */}
                                             <div className="mt-auto flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <select
-                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer"
+                                                    className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-[#556070] text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none cursor-pointer disabled:opacity-60"
                                                     value={p.status}
                                                     onChange={(e) => handleStatusChange(p.id, e.target.value)}
+                                                    disabled={p.status === 'COMPLETED'}
                                                 >
                                                     <option value="PLANNING">Planning</option>
                                                     <option value="ACTIVE">Active</option>
-                                                    <option value="COMPLETED">Completed</option>
+                                                    {p.status === 'WAITING_APPROVAL' && <option value="WAITING_APPROVAL">⏳ Waiting Approval</option>}
+                                                    {p.status === 'COMPLETED' ? (
+                                                        <option value="COMPLETED">Completed</option>
+                                                    ) : (
+                                                        <option value="COMPLETED">Request Closure (Submit to Admin)</option>
+                                                    )}
                                                 </select>
                                                 <button
                                                     onClick={(e) => {
