@@ -8,6 +8,6 @@
     "dev:bom": "node scripts/dev-root.mjs --bom-only",
     "dev:client": "pnpm --filter client run dev",
     "dev:server": "pnpm --filter server run dev",
-    "build": "pnpm --filter client run build"
+    "build": "npm --prefix client run build"
   }
 }
