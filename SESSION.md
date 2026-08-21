@@ -1,31 +1,25 @@
 # Session Log
 
 ## Last Updated
-2026-08-21T15:56:00.000+05:30
+2026-08-21T17:07:00.000+05:30
 
 ## Goal
-Restrict Managers from directly marking projects as COMPLETED and enforce Super Admin authority over project completion approval.
+Design implementation plan to block task creation on COMPLETED projects for Managers and provide explicit Super Admin project reopening capabilities.
 
 ## Status
-DONE
+IN_PROGRESS (Awaiting User Review on Implementation Plan)
 
 ## Done This Session
-- Updated `server/server.js` (`PUT /api/projects/:projectId` and `PUT /api/projects/:projectId/status`) to enforce role-based rules on setting `COMPLETED` status:
-  - Non-super-admins (Managers, Engineers) attempting to mark a project as `COMPLETED` are automatically routed to `WAITING_APPROVAL`, sending an `APPROVAL_REQUEST` notification to Super Admins.
-  - Non-super-admins cannot directly override a project's status to `COMPLETED`.
-  - Updated production state sync logic (`syncProductionProjectState`) to transition complete production projects to `WAITING_APPROVAL` instead of directly marking them `COMPLETED`.
-- Updated `ManagerProjectsPage.jsx`:
-  - Updated Manager project status dropdown option from `Completed` to `Request Closure (Submit to Admin)`.
-  - Updated `handleStatusChange` to route requests through `/projects/:projectId/status` and notify the Manager that closure approval was requested.
-  - Disabled status select if project is already `COMPLETED`.
-- Verified backend syntax with `node -c server/server.js` and frontend build with `pnpm --filter client build` (both exit 0).
+- Analyzed user requirement: once a project is approved as `COMPLETED` by Super Admin, Managers cannot create/add tasks to it. Super Admin must have an explicit option to reopen the project (transition to `ACTIVE`), after which task creation is unlocked.
+- Identified what was missing: `POST /api/tasks` did not block task creation on `COMPLETED` projects, `ManagerProjectsPage.jsx` did not disable the "+ Add Task" button for completed projects, and `SuperUserProjectsPage.jsx` lacked 1-click "Reopen Project" buttons on completed project cards/modals.
+- Created `implementation_plan.md` artifact detailing backend task locking, frontend UI guards, and Super Admin 1-click project reopening controls.
 
 ## Decisions Made
-- Only Super Admins / Super Users have authority to approve and transition project status to `COMPLETED`.
-- Manager completion actions create an approval request (`WAITING_APPROVAL`) for Super Admin review.
+- `COMPLETED` projects are strictly locked against task creation by Managers.
+- Super Admin can reopen completed projects (`ACTIVE`), restoring task creation for Managers.
 
 ## Blockers
-- None.
+- Awaiting user review and approval on `implementation_plan.md`.
 
 ## Next Step
-Verify from a Manager account that selecting "Request Closure" submits the project for Super Admin approval without directly completing it.
+Obtain user approval on `implementation_plan.md` and execute the proposed backend and frontend changes.

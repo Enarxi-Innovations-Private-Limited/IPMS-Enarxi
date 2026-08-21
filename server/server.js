@@ -1681,13 +1681,23 @@ app.get('/api/projects', authMiddleware, async (req, res) => {
         const projectsWithStats = await Promise.all(projects.map(async (p) => {
             const taskCount = await Task.countDocuments({ projectId: p._id });
             const completedTaskCount = await Task.countDocuments({ projectId: p._id, status: 'COMPLETED' });
+
+            // Self-heal status if incomplete tasks exist on a project marked WAITING_APPROVAL or COMPLETED
+            let currentStatus = p.status;
+            if (taskCount > 0 && completedTaskCount < taskCount && (p.status === 'WAITING_APPROVAL' || p.status === 'COMPLETED')) {
+                p.status = 'ACTIVE';
+                await p.save();
+                currentStatus = 'ACTIVE';
+                console.log(`🔄 Self-healed project ${p.projectCode || p._id} status to ACTIVE (${completedTaskCount}/${taskCount} tasks completed)`);
+            }
+
             return {
                 id: p._id,
                 name: p.name,
                 projectCode: p.projectCode,
                 description: p.description,
                 department: p.department || 'SOFTWARE',
-                status: p.status,
+                status: currentStatus,
                 startDate: p.startDate,
                 endDate: p.deadline,
                 deadline: p.deadline,

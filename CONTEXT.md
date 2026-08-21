@@ -1,19 +1,20 @@
 # Agent Context Brief
 
 ## What I Need To Know Right Now
-- Enforced strict Super Admin authority over `COMPLETED` project status in `server/server.js`:
-  1. `PUT /api/projects/:projectId` and `PUT /api/projects/:projectId/status` redirect any Manager/Engineer completion attempt to `WAITING_APPROVAL`.
-  2. Non-super-admins cannot directly mark projects as `COMPLETED`.
-  3. `ManagerProjectsPage.jsx` UI status select now lists `Request Closure (Submit to Admin)` and notifies the manager when an approval request is dispatched.
+- Created `implementation_plan.md` to implement **Completed Project Task Lock & Reopening Workflow**:
+  1. Strictly block task creation (`POST /api/tasks`) on `COMPLETED` projects for Managers.
+  2. Disable "+ Add Task" button and show a lock banner in `ManagerProjectsPage.jsx` when project is `COMPLETED`.
+  3. Add 1-click **"Reopen Project"** buttons to `SuperUserProjectsPage.jsx` on completed project cards and modal header.
+  4. Super Admin reopening transitions status to `ACTIVE`, unlocking task creation for Managers.
 
 ## Recent Gotchas
-- Previously `PUT /api/projects/:projectId` allowed managers to bypass `WAITING_APPROVAL` and directly mark projects `COMPLETED`.
+- Previously task creation on a `COMPLETED` project auto-reverted status to `ACTIVE` instead of blocking the Manager.
 
 ## Active Assumptions
-- Only Super Admins can transition projects to `COMPLETED` or reopen `COMPLETED` projects.
+- Once Super Admin approves closure (`COMPLETED`), task creation is locked until Super Admin explicitly reopens the project.
 
 ## Carry-Forward
-- Backend & Manager frontend routes have been aligned to enforce approval flow.
+- Awaiting user approval on `implementation_plan.md`.
 
 ## Next Step
-Verify from a Manager account that selecting "Request Closure" submits the project for Super Admin approval without directly completing it.
+Obtain user approval on `implementation_plan.md` and execute the proposed changes.
