@@ -3656,6 +3656,12 @@ app.post('/api/tasks', authMiddleware, async (req, res) => {
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
 
+        if (project.status === 'COMPLETED') {
+            return res.status(400).json({
+                message: 'Cannot create tasks on a COMPLETED project. Ask a Super Admin to reopen the project first.'
+            });
+        }
+
         if (project.projectType === 'PRODUCTION') {
             return res.status(400).json({ message: 'Manual task creation is not allowed for production projects.' });
         }
@@ -3880,7 +3886,15 @@ app.put('/api/tasks/:taskId', authMiddleware, async (req, res) => {
 
         const task = await Task.findById(taskId);
         if (!task) return res.status(404).json({ message: 'Task not found' });
+
         const taskProject = task.projectId ? await Project.findById(task.projectId) : null;
+        const isSuperAdminUser = [roles.SUPER_USER, roles.SUPER_ADMIN].includes(req.user.role);
+
+        if (taskProject && taskProject.status === 'COMPLETED' && !isSuperAdminUser) {
+            return res.status(400).json({
+                message: 'Cannot modify tasks on a COMPLETED project. Ask a Super Admin to reopen the project first.'
+            });
+        }
 
         if (task.isProductionTask) {
             return res.status(400).json({ message: 'Production task status must be updated from the production dashboard.' });

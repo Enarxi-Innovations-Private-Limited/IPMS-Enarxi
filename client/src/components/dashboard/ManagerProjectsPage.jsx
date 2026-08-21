@@ -862,15 +862,21 @@ export default function ManagerProjectsPage() {
                                                 </div>
                                             </div>
 
-                                            {/* Stats */}
-                                            <div className="flex items-center gap-4 text-sm mb-4">
-                                                <div className="flex items-center gap-1 text-text-secondary">
-                                                    <span className="material-symbols-outlined text-base">task_alt</span>
-                                                    <span>{projectTasks.length} tasks</span>
+                                            {/* Stats & Deadline */}
+                                            <div className="flex items-center justify-between text-xs mb-4 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex items-center gap-1 text-slate-600">
+                                                        <span className="material-symbols-outlined text-sm text-slate-400">task_alt</span>
+                                                        <span>{projectTasks.length} tasks</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 text-slate-600">
+                                                        <span className="material-symbols-outlined text-sm text-slate-400">group</span>
+                                                        <span>{projectMembers.length} members</span>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-1 text-text-secondary">
-                                                    <span className="material-symbols-outlined text-base">group</span>
-                                                    <span>{projectMembers.length} members</span>
+                                                <div className="flex items-center gap-1 text-slate-700 font-medium">
+                                                    <span className="material-symbols-outlined text-sm text-amber-600">calendar_today</span>
+                                                    <span>{p.deadline ? new Date(p.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No deadline'}</span>
                                                 </div>
                                             </div>
 
@@ -938,6 +944,15 @@ export default function ManagerProjectsPage() {
                                 </button>
                             </div>
                         </div>
+
+                        {selectedProject.status === 'COMPLETED' && (
+                            <div className="bg-blue-500/20 border-b border-blue-500/30 px-6 py-3 flex items-center justify-between shrink-0 text-blue-200 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-blue-400">lock</span>
+                                    <span><strong>Project Completed:</strong> Task creation and editing are locked. Contact Super Admin to reopen this project.</span>
+                                </div>
+                            </div>
+                        )}
 
                         {isBoardProjectView(selectedProject, selectedProjectAllTasks) ? (
                             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 md:p-8">

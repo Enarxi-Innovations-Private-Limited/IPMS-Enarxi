@@ -1,25 +1,27 @@
 # Session Log
 
 ## Last Updated
-2026-08-21T17:07:00.000+05:30
+2026-08-21T17:15:00.000+05:30
 
 ## Goal
-Design implementation plan to block task creation on COMPLETED projects for Managers and provide explicit Super Admin project reopening capabilities.
+Ensure project and task deadlines are clearly displayed across all Manager dashboard views and project pages.
 
 ## Status
-IN_PROGRESS (Awaiting User Review on Implementation Plan)
+DONE
 
 ## Done This Session
-- Analyzed user requirement: once a project is approved as `COMPLETED` by Super Admin, Managers cannot create/add tasks to it. Super Admin must have an explicit option to reopen the project (transition to `ACTIVE`), after which task creation is unlocked.
-- Identified what was missing: `POST /api/tasks` did not block task creation on `COMPLETED` projects, `ManagerProjectsPage.jsx` did not disable the "+ Add Task" button for completed projects, and `SuperUserProjectsPage.jsx` lacked 1-click "Reopen Project" buttons on completed project cards/modals.
-- Created `implementation_plan.md` artifact detailing backend task locking, frontend UI guards, and Super Admin 1-click project reopening controls.
+- Updated `ManagerProjectsPage.jsx`:
+  - Added explicit **Project Deadline** display (formatted date with `calendar_today` icon) to every project grid card.
+- Updated `ManagerDashboard.jsx`:
+  - Added **Deadline** column to the **Recent Projects** overview table.
+  - Added **Deadline** column to the **Recent Tasks** overview table, featuring automatic red highlight styling (`text-rose-600 font-bold`) for overdue tasks.
+- Verified backend syntax with `node -c server/server.js` and client build with `pnpm --filter client build` (both exit code 0).
 
 ## Decisions Made
-- `COMPLETED` projects are strictly locked against task creation by Managers.
-- Super Admin can reopen completed projects (`ACTIVE`), restoring task creation for Managers.
+- Project deadlines and task deadlines are now prominently displayed across all Manager overview cards and tables.
 
 ## Blockers
-- Awaiting user review and approval on `implementation_plan.md`.
+- None.
 
 ## Next Step
-Obtain user approval on `implementation_plan.md` and execute the proposed backend and frontend changes.
+Deploy the updated frontend and backend to production using the production deployment commands.

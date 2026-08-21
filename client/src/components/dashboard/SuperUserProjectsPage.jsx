@@ -841,6 +841,15 @@ export default function SuperUserProjectsPage() {
                                                     </button>
                                                 </div>
                                             )}
+                                            {project.status === 'COMPLETED' && (
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleProjectApproval(project.id || project._id, 'ACTIVE'); }}
+                                                    className="w-full px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-1 shadow-sm"
+                                                >
+                                                    <span className="material-symbols-outlined text-sm">lock_open</span>
+                                                    Reopen Project
+                                                </button>
+                                            )}
                                             <div className="flex gap-2">
                                                 <button onClick={() => openDetailsModal(project)} className="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors">
                                                     <span className="material-symbols-outlined text-base">visibility</span>View Details
@@ -1147,6 +1156,25 @@ export default function SuperUserProjectsPage() {
                                         Reject Request
                                     </button>
                                 </div>
+                            </div>
+                        )}
+                        {/* Completed Project Reopen Banner */}
+                        {selectedProject.status === 'COMPLETED' && (
+                            <div className="bg-blue-500/20 border-b border-blue-500/30 px-10 py-3.5 flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <span className="material-symbols-outlined text-blue-400 text-2xl">check_circle</span>
+                                    <div>
+                                        <p className="text-blue-200 text-sm font-bold">Project is Completed</p>
+                                        <p className="text-blue-300/80 text-xs">Task creation and editing are locked for managers. Reopen project to allow new task creation.</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => handleProjectApproval(selectedProject.id || selectedProject._id, 'ACTIVE')}
+                                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-md"
+                                >
+                                    <span className="material-symbols-outlined text-sm">lock_open</span>
+                                    Reopen Project
+                                </button>
                             </div>
                         )}
                         {/* Hero Header */}

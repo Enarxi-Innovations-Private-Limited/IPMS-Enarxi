@@ -216,6 +216,9 @@ export default function ManagerDashboard() {
                                                     Status
                                                 </th>
                                                 <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
+                                                    Deadline
+                                                </th>
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Tasks
                                                 </th>
                                                 <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
@@ -245,6 +248,16 @@ export default function ManagerDashboard() {
                                                             >
                                                                 {p.status}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap text-sm text-[#556070]">
+                                                            {p.deadline ? (
+                                                                <span className="inline-flex items-center gap-1">
+                                                                    <span className="material-symbols-outlined text-xs text-amber-600">calendar_today</span>
+                                                                    {new Date(p.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400">No deadline</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             <span className="text-[#556070]">{projectTasks.length}</span>
@@ -302,6 +315,9 @@ export default function ManagerDashboard() {
                                                     Status
                                                 </th>
                                                 <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
+                                                    Deadline
+                                                </th>
+                                                <th className="px-4 py-3 md:px-6 md:py-4 text-left text-xs font-medium uppercase tracking-wider text-[#556070]/70">
                                                     Queries
                                                 </th>
                                             </tr>
@@ -340,6 +356,16 @@ export default function ManagerDashboard() {
                                                             >
                                                                 {t.status.replace('_', ' ')}
                                                             </span>
+                                                        </td>
+                                                        <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap text-sm">
+                                                            {t.deadline ? (
+                                                                <span className={`inline-flex items-center gap-1 font-medium ${new Date(t.deadline).setHours(23, 59, 59, 999) < Date.now() && t.status !== 'COMPLETED' ? 'text-rose-600 font-bold' : 'text-[#556070]'}`}>
+                                                                    <span className="material-symbols-outlined text-xs">calendar_today</span>
+                                                                    {new Date(t.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="text-slate-400">No deadline</span>
+                                                            )}
                                                         </td>
                                                         <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
                                                             {pendingQueries > 0 ? (
