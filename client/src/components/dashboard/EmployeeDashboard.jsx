@@ -440,8 +440,8 @@ export default function EmployeeDashboard() {
 
               {/* Tasks Table */}
               <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
-                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-slate-200 bg-[#ECF1FF]/30">
+                  <h2 className="text-lg font-semibold text-[#556070] flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">task_alt</span>
                     My Tasks
                   </h2>
@@ -453,7 +453,7 @@ export default function EmployeeDashboard() {
                 ) : myTasks.length > 0 ? (
                   <div className="overflow-x-auto custom-scrollbar flex-1">
                     <table className="w-full">
-                      <thead className="bg-slate-50 border-b border-border-dark text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200 text-left">
                         <tr>
                           <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Title</th>
                           <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Project</th>
@@ -463,15 +463,15 @@ export default function EmployeeDashboard() {
                           <th className="px-4 py-3 md:px-6 md:py-4 text-xs font-bold text-text-secondary uppercase tracking-wider">Queries</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-border-dark">
+                      <tbody className="divide-y divide-slate-100">
                         {myTasks.map((t) => (
-                          <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
+                          <tr key={t.id} className="hover:bg-primary/5 transition-colors">
                             <td className="px-4 py-3 md:px-6 md:py-4 max-w-[200px] md:max-w-xs overflow-hidden relative group cursor-pointer" onClick={() => setViewTask(t)}>
-                              <div className="text-white font-medium group-hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
+                              <div className="text-[#556070] font-medium group-hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
                               <div className="text-text-secondary text-xs md:text-sm mt-1 truncate">{t.description || 'No description'}</div>
                             </td>
                             <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                              <span className="text-white font-mono text-xs md:text-sm">
+                              <span className="text-[#556070] font-mono font-bold text-xs md:text-sm">
                                 {t.projectCode || <span className="text-text-secondary italic">No Code</span>}
                               </span>
                             </td>
