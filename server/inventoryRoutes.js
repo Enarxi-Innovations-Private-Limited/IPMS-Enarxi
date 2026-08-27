@@ -710,6 +710,13 @@ function canUserAccessInventory(user) {
 }
 
 router.use((req, res, next) => {
+    // Read-only GET access for item master, classifications, locations, and vendors is allowed for all authenticated users
+    if (req.method === 'GET') {
+        const allowedReadPaths = ['/items', '/classifications', '/locations', '/vendors', '/stock-overview'];
+        if (allowedReadPaths.some(p => req.path.startsWith(p))) {
+            return next();
+        }
+    }
     if (canUserAccessInventory(req.user)) return next();
     return res.status(403).json({ message: 'Inventory access is restricted for your team.' });
 });

@@ -402,13 +402,13 @@ export default function InternTasksPage() {
                                         {filteredTasks.map((t) => (
                                             <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
                                                 <td className="px-6 py-4 cursor-pointer" onClick={() => setViewTask(t)}>
-                                                    <div className="text-white font-medium hover:text-primary transition-colors">{t.title}</div>
+                                                    <div className="text-[#556070] font-medium hover:text-primary transition-colors">{t.title}</div>
                                                     <div className="text-text-secondary text-sm mt-1 line-clamp-1">
                                                         {t.description || 'No description'}
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
-                                                    <span className="text-white font-mono">
+                                                    <span className="text-[#556070] font-mono font-bold">
                                                         {projects.find((p) => p.id === t.projectId)?.projectCode || '-'}
                                                     </span>
                                                 </td>
