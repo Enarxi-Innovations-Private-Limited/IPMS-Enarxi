@@ -192,34 +192,34 @@ export default function InternDashboard() {
               {/* Stats Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div
-                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl"
+                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl cursor-pointer hover:border-primary/50 transition-all group"
                   onClick={goToProjects}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Projects</h3>
                     <span className="material-symbols-outlined text-primary">folder</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{projects.length}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{projects.length}</p>
                 </div>
                 <div
-                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl"
+                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl cursor-pointer hover:border-green-500/50 transition-all group"
                   onClick={goToTasks}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Tasks</h3>
                     <span className="material-symbols-outlined text-green-500">task_alt</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">{myTasks.length}</p>
+                  <p className="text-3xl font-bold text-[#556070]">{myTasks.length}</p>
                 </div>
                 <div
-                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl"
+                  className="bg-white border border-slate-200 shadow-sm rounded-xl p-6 shadow-xl cursor-pointer hover:border-blue-500/50 transition-all group"
                   onClick={goToTasks}
                 >
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completed</h3>
                     <span className="material-symbols-outlined text-blue-500">check_circle</span>
                   </div>
-                  <p className="text-3xl font-bold text-white">
+                  <p className="text-3xl font-bold text-[#556070]">
                     {myTasks.filter((t) => t.status === 'COMPLETED').length}
                   </p>
                 </div>
@@ -304,11 +304,11 @@ export default function InternDashboard() {
                         {myTasks.map((t) => (
                           <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
                             <td className="px-4 py-3 md:px-6 md:py-4 max-w-[200px] md:max-w-xs overflow-hidden relative group cursor-pointer" onClick={() => setViewTask(t)}>
-                              <div className="text-white font-medium hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
+                              <div className="text-[#556070] font-medium hover:text-primary transition-colors text-sm md:text-base">{t.title}</div>
                               <div className="text-text-secondary text-xs md:text-sm mt-1 truncate">{t.description || 'No description'}</div>
                             </td>
                             <td className="px-4 py-3 md:px-6 md:py-4 whitespace-nowrap">
-                              <span className="text-white font-mono text-xs md:text-sm">
+                              <span className="text-[#556070] font-mono text-xs md:text-sm">
                                 {projects.find((p) => p.id === t.projectId)?.projectCode || '-'}
                               </span>
                             </td>

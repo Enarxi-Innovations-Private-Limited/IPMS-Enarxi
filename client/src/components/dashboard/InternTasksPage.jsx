@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../../services/api.js';
 import InternLayout from '../common/InternLayout.jsx';
 import { getCurrentUser } from '../../services/authService.js';
+import TaskDetailModal from '../tasks/TaskDetailModal.jsx';
 
 export default function InternTasksPage() {
     const navigate = useNavigate();
@@ -17,6 +18,7 @@ export default function InternTasksPage() {
     const [commentText, setCommentText] = useState({});
     const [productionDrafts, setProductionDrafts] = useState({});
     const [productionSaving, setProductionSaving] = useState({});
+    const [viewTask, setViewTask] = useState(null);
 
     // Query state
     const [showQueryModal, setShowQueryModal] = useState(false);
@@ -399,8 +401,8 @@ export default function InternTasksPage() {
                                     <tbody className="divide-y divide-border-dark">
                                         {filteredTasks.map((t) => (
                                             <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
-                                                <td className="px-6 py-4">
-                                                    <div className="text-white font-medium">{t.title}</div>
+                                                <td className="px-6 py-4 cursor-pointer" onClick={() => setViewTask(t)}>
+                                                    <div className="text-white font-medium hover:text-primary transition-colors">{t.title}</div>
                                                     <div className="text-text-secondary text-sm mt-1 line-clamp-1">
                                                         {t.description || 'No description'}
                                                     </div>
@@ -416,7 +418,9 @@ export default function InternTasksPage() {
                                                             ? 'bg-green-500/20 text-green-400'
                                                             : t.status === 'IN_PROGRESS'
                                                                 ? 'bg-blue-500/20 text-blue-400'
-                                                                : 'bg-gray-500/20 text-gray-400'
+                                                                : t.status === 'WAITING_APPROVAL'
+                                                                    ? 'bg-yellow-500/20 text-yellow-400'
+                                                                    : 'bg-gray-500/20 text-gray-400'
                                                             }`}
                                                     >
                                                         {t.status.replace('_', ' ')}
@@ -434,16 +438,21 @@ export default function InternTasksPage() {
                                                         </div>
                                                     )}
 
-                                                    <select
-                                                        className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
-                                                        value={statusUpdate[t.id] || t.status}
-                                                        onChange={(e) => handleStatusChange(t.id, e.target.value)}
-                                                    >
-                                                        <option value="NOT_STARTED">Not Started</option>
-                                                        <option value="IN_PROGRESS">In Progress</option>
-                                                        <option value="COMPLETED">Completed</option>
-                                                        <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
-                                                    </select>
+                                                    {t.status === 'WAITING_APPROVAL' ? (
+                                                        <span className="text-yellow-400 text-sm italic">⏳ Pending Manager Approval</span>
+                                                    ) : t.status === 'COMPLETED' ? (
+                                                        <span className="text-green-400 text-sm">✓ Approved & Completed</span>
+                                                    ) : (
+                                                        <select
+                                                            className="bg-background-dark border border-border-dark rounded-lg px-3 py-1.5 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                                            value={statusUpdate[t.id] || t.status}
+                                                            onChange={(e) => handleStatusChange(t.id, e.target.value)}
+                                                        >
+                                                            <option value="NOT_STARTED">Not Started</option>
+                                                            <option value="IN_PROGRESS">In Progress</option>
+                                                            <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
+                                                        </select>
+                                                    )}
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-2 min-w-[200px]">
@@ -466,22 +475,38 @@ export default function InternTasksPage() {
                                                             </button>
                                                         </div>
                                                         {t.comments && t.comments.length > 0 && (
-                                                            <div className="text-xs text-text-secondary mt-1">
+                                                            <button
+                                                                onClick={() => setViewTask(t)}
+                                                                className="text-xs text-text-secondary mt-1 hover:text-white flex items-center gap-1 w-fit"
+                                                            >
+                                                                <span className="material-symbols-outlined text-[14px]">visibility</span>
                                                                 {t.comments.length} update{t.comments.length !== 1 ? 's' : ''}
-                                                            </div>
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </td>
                                                 {/* Queries Column */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-2 min-w-[150px]">
-                                                        <button
-                                                            onClick={() => openQueryModal(t)}
-                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 rounded-lg text-sm font-semibold transition-colors"
-                                                        >
-                                                            <span className="material-symbols-outlined text-base">help</span>
-                                                            Raise Query
-                                                        </button>
+                                                        <div className="flex gap-2">
+                                                            <button
+                                                                onClick={() => openQueryModal(t)}
+                                                                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 rounded-lg text-sm font-semibold transition-colors"
+                                                            >
+                                                                <span className="material-symbols-outlined text-base">help</span>
+                                                                Raise
+                                                            </button>
+                                                            {t.queries?.length > 0 && (
+                                                                <button
+                                                                    onClick={() => setViewTask(t)}
+                                                                    className="px-3 py-1.5 bg-surface-dark border border-border-dark text-white rounded-lg hover:bg-background-dark transition-colors"
+                                                                    title="View Queries"
+                                                                >
+                                                                    <span className="material-symbols-outlined text-base">visibility</span>
+                                                                </button>
+                                                            )}
+                                                        </div>
+
                                                         {t.queries && t.queries.length > 0 && (
                                                             <div className="text-xs">
                                                                 <span className={`${t.queries.some(q => q.status === 'PENDING') ? 'text-amber-700' : 'text-green-700'}`}>
@@ -489,11 +514,6 @@ export default function InternTasksPage() {
                                                                 </span>
                                                                 {' / '}
                                                                 <span className="text-text-secondary">{t.queries.length} total</span>
-                                                            </div>
-                                                        )}
-                                                        {t.queries && t.queries.filter(q => q.status === 'RESOLVED').length > 0 && (
-                                                            <div className="text-xs text-green-700 font-medium">
-                                                                ✓ {t.queries.filter(q => q.status === 'RESOLVED').length} resolved
                                                             </div>
                                                         )}
                                                     </div>
@@ -572,6 +592,19 @@ export default function InternTasksPage() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* View Task Details Modal */}
+            {viewTask && (
+                <TaskDetailModal
+                    task={viewTask}
+                    users={[]}
+                    onClose={() => setViewTask(null)}
+                    onUpdate={(updatedTask) => {
+                        setTasks(tasks.map(t => t.id === updatedTask.id || t.id === updatedTask._id ? updatedTask : t));
+                    }}
+                    canRespond={false}
+                />
             )}
         </InternLayout>
     );

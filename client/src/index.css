@@ -19,8 +19,7 @@ body {
   overflow: hidden;
 }
 
-/* Light-theme readability guard:
-   keep typography dark on light cards/sections without changing layout/logic */
+/* Light-theme readability guard for typography on light containers */
 .light-theme [class*="bg-white"] h1.text-white,
 .light-theme [class*="bg-white"] h2.text-white,
 .light-theme [class*="bg-white"] h3.text-white,
@@ -31,9 +30,6 @@ body {
 .light-theme [class*="bg-white"] td.text-white,
 .light-theme [class*="bg-white"] th.text-white,
 .light-theme [class*="bg-white"] label.text-white,
-.light-theme [class*="bg-white"] input.text-white,
-.light-theme [class*="bg-white"] select.text-white,
-.light-theme [class*="bg-white"] textarea.text-white,
 .light-theme [class*="bg-slate-50"] h1.text-white,
 .light-theme [class*="bg-slate-50"] h2.text-white,
 .light-theme [class*="bg-slate-50"] h3.text-white,
@@ -44,9 +40,6 @@ body {
 .light-theme [class*="bg-slate-50"] td.text-white,
 .light-theme [class*="bg-slate-50"] th.text-white,
 .light-theme [class*="bg-slate-50"] label.text-white,
-.light-theme [class*="bg-slate-50"] input.text-white,
-.light-theme [class*="bg-slate-50"] select.text-white,
-.light-theme [class*="bg-slate-50"] textarea.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h1.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h2.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] h3.text-white,
@@ -56,30 +49,23 @@ body {
 .light-theme [class*="bg-[#ECF1FF]"] div.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] td.text-white,
 .light-theme [class*="bg-[#ECF1FF]"] th.text-white,
-.light-theme [class*="bg-[#ECF1FF]"] label.text-white,
-.light-theme [class*="bg-[#ECF1FF]"] input.text-white,
-.light-theme [class*="bg-[#ECF1FF]"] select.text-white,
-.light-theme [class*="bg-[#ECF1FF]"] textarea.text-white {
+.light-theme [class*="bg-[#ECF1FF]"] label.text-white {
   color: #002045 !important;
 }
 
 .light-theme [class*="bg-white"] .hover\:text-white:hover,
 .light-theme [class*="bg-slate-50"] .hover\:text-white:hover,
-.light-theme [class*="bg-[#ECF1FF]"] .hover\:text-white:hover,
-.light-theme [class*="bg-surface-dark"] .hover\:text-white:hover,
-.light-theme [class*="bg-background-dark"] .hover\:text-white:hover {
+.light-theme [class*="bg-[#ECF1FF]"] .hover\:text-white:hover {
   color: #1e293b !important;
 }
 
 .light-theme [class*="bg-white"] .group-hover\:text-white,
 .light-theme [class*="bg-slate-50"] .group-hover\:text-white,
-.light-theme [class*="bg-[#ECF1FF]"] .group-hover\:text-white,
-.light-theme [class*="bg-surface-dark"] .group-hover\:text-white,
-.light-theme [class*="bg-background-dark"] .group-hover\:text-white {
+.light-theme [class*="bg-[#ECF1FF]"] .group-hover\:text-white {
   color: #002045 !important;
 }
 
-/* Additional pass: many pages still use "surface/background dark" tokens on light mode */
+/* Light theme headings and text on dark cards */
 .light-theme [class*="bg-surface-dark"] h1.text-white,
 .light-theme [class*="bg-surface-dark"] h2.text-white,
 .light-theme [class*="bg-surface-dark"] h3.text-white,
@@ -90,9 +76,6 @@ body {
 .light-theme [class*="bg-surface-dark"] td.text-white,
 .light-theme [class*="bg-surface-dark"] th.text-white,
 .light-theme [class*="bg-surface-dark"] label.text-white,
-.light-theme [class*="bg-surface-dark"] input.text-white,
-.light-theme [class*="bg-surface-dark"] select.text-white,
-.light-theme [class*="bg-surface-dark"] textarea.text-white,
 .light-theme [class*="bg-background-dark"] h1.text-white,
 .light-theme [class*="bg-background-dark"] h2.text-white,
 .light-theme [class*="bg-background-dark"] h3.text-white,
@@ -102,67 +85,116 @@ body {
 .light-theme [class*="bg-background-dark"] div.text-white,
 .light-theme [class*="bg-background-dark"] td.text-white,
 .light-theme [class*="bg-background-dark"] th.text-white,
-.light-theme [class*="bg-background-dark"] label.text-white,
-.light-theme [class*="bg-background-dark"] input.text-white,
-.light-theme [class*="bg-background-dark"] select.text-white,
-.light-theme [class*="bg-background-dark"] textarea.text-white {
+.light-theme [class*="bg-background-dark"] label.text-white {
+  color: #ffffff !important;
+}
+
+/* Universal Input Field Visibility & High Contrast Rules */
+input, textarea, select {
+  font-family: inherit;
+}
+
+/* 1. Dark background inputs: Force bright text and caret ONLY when the input ITSELF has a dark background class */
+input[class*="bg-background-dark"],
+textarea[class*="bg-background-dark"],
+select[class*="bg-background-dark"],
+input[class*="bg-surface-dark"],
+textarea[class*="bg-surface-dark"],
+select[class*="bg-surface-dark"],
+input[class*="bg-slate-900"],
+textarea[class*="bg-slate-900"],
+select[class*="bg-slate-900"],
+input[class*="bg-slate-950"],
+textarea[class*="bg-slate-950"],
+select[class*="bg-slate-950"],
+input[class*="bg-[#0a0f1d]"],
+textarea[class*="bg-[#0a0f1d]"],
+select[class*="bg-[#0a0f1d]"],
+input[class*="bg-[#0F172A]"],
+textarea[class*="bg-[#0F172A]"],
+select[class*="bg-[#0F172A]"],
+input[class*="bg-[#0b1326]"],
+textarea[class*="bg-[#0b1326]"],
+select[class*="bg-[#0b1326]"],
+input[class*="bg-[#131b2e]"],
+textarea[class*="bg-[#131b2e]"],
+select[class*="bg-[#131b2e]"] {
+  color: #f8fafc !important;
+  caret-color: #38bdf8 !important;
+}
+
+/* 2. Light background inputs: Force dark text and caret when the input ITSELF has a light background class */
+input[class*="bg-white"],
+textarea[class*="bg-white"],
+select[class*="bg-white"],
+input[class*="bg-slate-50"],
+textarea[class*="bg-slate-50"],
+select[class*="bg-slate-50"],
+input[class*="bg-slate-100"],
+textarea[class*="bg-slate-100"],
+select[class*="bg-slate-100"],
+input[class*="bg-slate-200"],
+textarea[class*="bg-slate-200"],
+select[class*="bg-slate-200"],
+input[class*="bg-[#ECF1FF]"],
+textarea[class*="bg-[#ECF1FF]"],
+select[class*="bg-[#ECF1FF]"],
+input[class*="bg-blue-50"],
+textarea[class*="bg-blue-50"],
+select[class*="bg-blue-50"],
+input[class*="bg-slate-50/"],
+textarea[class*="bg-slate-50/"],
+select[class*="bg-slate-50/"],
+input[class*="bg-white/"],
+textarea[class*="bg-white/"],
+select[class*="bg-white/"] {
   color: #002045 !important;
+  caret-color: #0284c7 !important;
 }
 
-.light-theme input::placeholder,
-.light-theme textarea::placeholder {
-  color: #002045 !important;
-  opacity: 0.6;
+/* 3. Dropdown Options Visibility Guard */
+select option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }
 
-/* Global dark-surface form readability:
-   keep typed text and placeholders visible on dark cards, modals, and panels. */
-[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-background-dark"] textarea,
-[class*="bg-background-dark"] select,
-[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-surface-dark"] textarea,
-[class*="bg-surface-dark"] select,
-[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-slate-900"] textarea,
-[class*="bg-slate-900"] select,
-[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-slate-950"] textarea,
-[class*="bg-slate-950"] select,
-[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-[#0a0f1d]"] textarea,
-[class*="bg-[#0a0f1d]"] select,
-[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-[#0F172A]"] textarea,
-[class*="bg-[#0F172A]"] select,
-[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-[#0b1326]"] textarea,
-[class*="bg-[#0b1326]"] select,
-[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
-[class*="bg-[#131b2e]"] textarea,
-[class*="bg-[#131b2e]"] select {
-  color: #f1f5f9 !important;
-  caret-color: #f8fafc;
+/* 4. Placeholders Visibility */
+input[class*="bg-background-dark"]::placeholder,
+textarea[class*="bg-background-dark"]::placeholder,
+input[class*="bg-surface-dark"]::placeholder,
+textarea[class*="bg-surface-dark"]::placeholder,
+input[class*="bg-slate-900"]::placeholder,
+textarea[class*="bg-slate-900"]::placeholder {
+  color: #94a3b8 !important;
+  opacity: 0.8;
 }
 
-[class*="bg-background-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-background-dark"] textarea::placeholder,
-[class*="bg-surface-dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-surface-dark"] textarea::placeholder,
-[class*="bg-slate-900"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-slate-900"] textarea::placeholder,
-[class*="bg-slate-950"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-slate-950"] textarea::placeholder,
-[class*="bg-[#0a0f1d]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-[#0a0f1d]"] textarea::placeholder,
-[class*="bg-[#0F172A]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-[#0F172A]"] textarea::placeholder,
-[class*="bg-[#0b1326]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-[#0b1326]"] textarea::placeholder,
-[class*="bg-[#131b2e]"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"])::placeholder,
-[class*="bg-[#131b2e]"] textarea::placeholder {
-  color: #8ea4c9 !important;
-  opacity: 1;
+input[class*="bg-white"]::placeholder,
+textarea[class*="bg-white"]::placeholder,
+input[class*="bg-slate-50"]::placeholder,
+textarea[class*="bg-slate-50"]::placeholder,
+input[class*="bg-slate-100"]::placeholder,
+textarea[class*="bg-slate-100"]::placeholder,
+input[class*="bg-slate-200"]::placeholder,
+textarea[class*="bg-slate-200"]::placeholder,
+input[class*="bg-[#ECF1FF]"]::placeholder,
+textarea[class*="bg-[#ECF1FF]"]::placeholder {
+  color: #64748b !important;
+  opacity: 0.8;
+}
+
+/* 5. Browser Autofill Guard */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-text-fill-color: inherit !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* Keep button text readable on primary/semantic buttons */
@@ -324,4 +356,38 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 input[type="number"] {
   -moz-appearance: textfield;
+}
+
+/* Ultimate Form Field Contrast Guard across Light Theme (Overrides any trailing .text-white rules) */
+.light-theme input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.light-theme textarea,
+.light-theme select {
+  color: #002045 !important;
+  caret-color: #0284c7 !important;
+  -webkit-text-fill-color: #002045 !important;
+}
+
+.light-theme input::placeholder,
+.light-theme textarea::placeholder {
+  color: #64748b !important;
+  opacity: 0.8;
+  -webkit-text-fill-color: #64748b !important;
+}
+
+/* Explicit opt-in for dark cards inside light theme */
+.light-theme [class*="bg-slate-900"] input,
+.light-theme [class*="bg-slate-900"] textarea,
+.light-theme [class*="bg-slate-900"] select,
+.light-theme [class*="bg-slate-950"] input,
+.light-theme [class*="bg-slate-950"] textarea,
+.light-theme [class*="bg-slate-950"] select,
+.light-theme [class*="bg-[#0a0f1d]"] input,
+.light-theme [class*="bg-[#0a0f1d]"] textarea,
+.light-theme [class*="bg-[#0a0f1d]"] select,
+.light-theme [class*="bg-[#0F172A]"] input,
+.light-theme [class*="bg-[#0F172A]"] textarea,
+.light-theme [class*="bg-[#0F172A]"] select {
+  color: #f8fafc !important;
+  caret-color: #38bdf8 !important;
+  -webkit-text-fill-color: #f8fafc !important;
 }

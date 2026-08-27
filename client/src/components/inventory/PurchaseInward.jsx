@@ -148,7 +148,7 @@ export default function PurchaseInward() {
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Stock Location</label>
-                                                <select name="locationId" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary" required>
+                                                <select name="locationId" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary" required>
                                                     <option value="">Select storage bin/rack...</option>
                                                     {locations.map(loc => (
                                                         <option key={getEntityId(loc)} value={getEntityId(loc)}>{loc.name} ({loc.locationCode})</option>
@@ -157,7 +157,7 @@ export default function PurchaseInward() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Delivery Note #</label>
-                                                <input name="documentNote" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary" placeholder="Vendor Invoice/DC Number" required />
+                                                <input name="documentNote" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary" placeholder="Vendor Invoice/DC Number" required />
                                             </div>
                                         </div>
 
@@ -198,7 +198,7 @@ export default function PurchaseInward() {
                                                                     type="text" 
                                                                     name={`serials-${lineId}`}
                                                                     placeholder="e.g. SN1001, SN1002"
-                                                                    className="w-full bg-background-dark border border-amber-500/30 rounded-lg p-2 text-[#556070] text-sm outline-none focus:border-amber-500"
+                                                                    className="w-full bg-background-dark border border-amber-500/30 rounded-lg p-2 text-white text-sm outline-none focus:border-amber-500"
                                                                 />
                                                             </div>
                                                         )}
@@ -209,7 +209,7 @@ export default function PurchaseInward() {
 
                                         <div>
                                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1">Internal Remarks</label>
-                                            <textarea name="remarks" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-[#556070] outline-none focus:ring-1 focus:ring-primary h-20" placeholder="Condition of goods, etc..."></textarea>
+                                            <textarea name="remarks" className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:ring-1 focus:ring-primary h-20" placeholder="Condition of goods, etc..."></textarea>
                                         </div>
 
                                         <button 

@@ -549,7 +549,7 @@ export default function MasterDataManagement() {
                 <button
                     type="button"
                     onClick={() => setRows([...rows, buildSkuRow()])}
-                    className="text-xs font-bold text-primary hover:text-white transition-colors"
+                    className="text-xs font-bold text-primary hover:text-[#556070] transition-colors"
                 >
                     + Add SKU row
                 </button>
@@ -560,7 +560,7 @@ export default function MasterDataManagement() {
                         <div>
                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Vendor</label>
                             <select
-                                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                 value={row.vendorId}
                                 onChange={(e) => {
                                     const next = [...rows];
@@ -580,7 +580,7 @@ export default function MasterDataManagement() {
                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">SKU</label>
                             <input
                                 type="text"
-                                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                 placeholder="Vendor SKU or blank for local"
                                 value={row.sku}
                                 onChange={(e) => {
@@ -904,11 +904,11 @@ export default function MasterDataManagement() {
 
             {showModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-background-dark/80 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
-                    <div className="relative w-full max-w-2xl bg-surface-dark border border-border-dark rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-border-dark bg-gradient-surface flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white">Add New {activeTab === 'items' ? 'Item' : activeTab === 'classifications' ? 'Classification' : 'Location'}</h2>
-                            <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-white transition-colors">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-[#556070]">Add New {activeTab === 'items' ? 'Item' : activeTab === 'classifications' ? 'Classification' : 'Location'}</h2>
+                            <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-[#556070] transition-colors">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
@@ -919,7 +919,7 @@ export default function MasterDataManagement() {
                                     <div>
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Classification</label>
                                         <select
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             value={itemForm.classificationId}
                                             onChange={(e) => setItemForm({ ...itemForm, classificationId: e.target.value })}
                                             required
@@ -932,7 +932,7 @@ export default function MasterDataManagement() {
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Code</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             placeholder="e.g. CAP-0001"
                                             value={itemForm.itemCode}
                                             onChange={(e) => setItemForm({ ...itemForm, itemCode: e.target.value })}
@@ -943,7 +943,7 @@ export default function MasterDataManagement() {
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Name</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             placeholder="e.g. RJ45 Connectors"
                                             value={itemForm.name}
                                             onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })}
@@ -955,7 +955,7 @@ export default function MasterDataManagement() {
                                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Package</label>
                                             <input
                                                 type="text"
-                                                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                                className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                                 placeholder="0603, SOT-23, optional"
                                                 value={itemForm.package}
                                                 onChange={(e) => setItemForm({ ...itemForm, package: e.target.value })}
@@ -965,7 +965,7 @@ export default function MasterDataManagement() {
                                             <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">UOM</label>
                                             <input
                                                 type="text"
-                                                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                                className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                                 placeholder="Nos, Mtrs, etc."
                                                 value={itemForm.uom}
                                                 onChange={(e) => setItemForm({ ...itemForm, uom: e.target.value })}
@@ -976,7 +976,7 @@ export default function MasterDataManagement() {
                                     <div>
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Description</label>
                                         <textarea
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all h-20 resize-none"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all h-20 resize-none"
                                             value={itemForm.description}
                                             onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
                                         />
@@ -991,7 +991,7 @@ export default function MasterDataManagement() {
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Location Name</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             placeholder="e.g. Main Warehouse"
                                             value={locationForm.name}
                                             onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })}
@@ -1002,7 +1002,7 @@ export default function MasterDataManagement() {
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Location Code (Optional)</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             placeholder="e.g. WH-001"
                                             value={locationForm.locationCode}
                                             onChange={(e) => setLocationForm({ ...locationForm, locationCode: e.target.value })}
@@ -1012,7 +1012,7 @@ export default function MasterDataManagement() {
                                         <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Label / Tag</label>
                                         <input
                                             type="text"
-                                            className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                             placeholder="e.g. Storage Area A"
                                             value={locationForm.label}
                                             onChange={(e) => setLocationForm({ ...locationForm, label: e.target.value })}
@@ -1037,11 +1037,11 @@ export default function MasterDataManagement() {
 
             {showEditModal && editingItem && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-background-dark/80 backdrop-blur-sm" onClick={() => setShowEditModal(false)}></div>
-                    <div className="relative w-full max-w-2xl bg-surface-dark border border-border-dark rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                        <div className="p-6 border-b border-border-dark bg-gradient-surface flex justify-between items-center">
-                            <h2 className="text-xl font-bold text-white">Edit Item</h2>
-                            <button onClick={() => setShowEditModal(false)} className="text-text-secondary hover:text-white transition-colors">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowEditModal(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="p-6 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                            <h2 className="text-xl font-bold text-[#556070]">Edit Item</h2>
+                            <button onClick={() => setShowEditModal(false)} className="text-text-secondary hover:text-[#556070] transition-colors">
                                 <span className="material-symbols-outlined">close</span>
                             </button>
                         </div>
@@ -1050,7 +1050,7 @@ export default function MasterDataManagement() {
                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Code</label>
                                 <input
                                     type="text"
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                    className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                     value={editItemForm.itemCode}
                                     onChange={(e) => setEditItemForm({ ...editItemForm, itemCode: e.target.value })}
                                     required
@@ -1059,7 +1059,7 @@ export default function MasterDataManagement() {
                             <div>
                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Classification</label>
                                 <select
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                    className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                     value={editItemForm.classificationId}
                                     onChange={(e) => setEditItemForm({ ...editItemForm, classificationId: e.target.value })}
                                     required
@@ -1071,7 +1071,7 @@ export default function MasterDataManagement() {
                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Item Name</label>
                                 <input
                                     type="text"
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                    className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                     value={editItemForm.name}
                                     onChange={(e) => setEditItemForm({ ...editItemForm, name: e.target.value })}
                                     required
@@ -1082,7 +1082,7 @@ export default function MasterDataManagement() {
                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Package</label>
                                     <input
                                         type="text"
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                        className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                         value={editItemForm.package}
                                         onChange={(e) => setEditItemForm({ ...editItemForm, package: e.target.value })}
                                     />
@@ -1091,7 +1091,7 @@ export default function MasterDataManagement() {
                                     <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">UOM</label>
                                     <input
                                         type="text"
-                                        className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all"
+                                        className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all"
                                         value={editItemForm.uom}
                                         onChange={(e) => setEditItemForm({ ...editItemForm, uom: e.target.value })}
                                         required
@@ -1101,12 +1101,12 @@ export default function MasterDataManagement() {
                             <div>
                                 <label className="block text-[10px] font-bold text-text-secondary uppercase mb-1 tracking-widest">Description</label>
                                 <textarea
-                                    className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-2.5 text-white outline-none focus:border-primary transition-all h-20 resize-none"
+                                    className="w-full bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2.5 text-[#002045] outline-none focus:border-primary transition-all h-20 resize-none"
                                     value={editItemForm.description}
                                     onChange={(e) => setEditItemForm({ ...editItemForm, description: e.target.value })}
                                 />
                             </div>
-                            <label className="flex items-center gap-3 text-white text-sm font-medium">
+                            <label className="flex items-center gap-3 text-[#556070] text-sm font-medium">
                                 <input
                                     type="checkbox"
                                     checked={editItemForm.isActive}
