@@ -5,6 +5,13 @@ export function saveAuth(token, user) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
+export function updateCurrentUser(user) {
+  const auth = getAuth();
+  if (auth && auth.token && user) {
+    saveAuth(auth.token, user);
+  }
+}
+
 export function getAuth() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;

@@ -42,7 +42,9 @@ import ManagerItemMasterPage from './components/inventory/ManagerItemMasterPage.
 import StoreDashboard from './components/inventory/StoreDashboard.jsx';
 import PurchaseDashboard from './components/inventory/PurchaseDashboard.jsx';
 import PurchasingHub from './components/inventory/PurchasingHub.jsx';
-import { canAccessInventory, clearAuth, getCurrentUser, getToken, isTokenExpired } from './services/authService.js';
+import { useEffect } from 'react';
+import api from './services/api.js';
+import { canAccessInventory, clearAuth, getCurrentUser, getToken, isTokenExpired, updateCurrentUser } from './services/authService.js';
 
 const ROLE_ROUTE_MAP = {
   SUPER_ADMIN: '/super',
@@ -57,6 +59,17 @@ const ROLE_ROUTE_MAP = {
 };
 
 function App() {
+  useEffect(() => {
+    const token = getToken();
+    if (token && !isTokenExpired(token)) {
+      api.get('/auth/me')
+        .then((res) => {
+          if (res.data) updateCurrentUser(res.data);
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
