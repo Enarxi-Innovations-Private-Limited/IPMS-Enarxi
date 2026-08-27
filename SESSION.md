@@ -1,7 +1,7 @@
 # Session Log
 
 ## Last Updated
-2026-08-27T14:09:00.000+05:30
+2026-08-27T14:18:00.000+05:30
 
 ## Goal
 Fix global input field text visibility & contrast bugs across the entire project/inventory, add missing navigation, replicate hardware/employee team approval/rejection workflows in the Intern Portal, remove IT Team section, fix invisible white table cell text in light theme views, enforce task completion approval routing, integrate Read-Only Item Master into Employee and Intern portals, and implement real-time role sync for user accounts.
@@ -12,7 +12,7 @@ DONE
 ## Done This Session
 - Diagnosed root causes of invisible input & table text: light-theme specificity overrides in `index.css` forcing dark text on dark input backgrounds (`bg-background-dark`, `bg-surface-dark`), missing native `<select> option` popup styling, and hardcoded `text-white` on `<td>`/`<div>` elements inside light-theme table containers.
 - Updated `index.css` to enforce universal input visibility rules, bright text `#f8fafc` on dark input backgrounds, dark text `#002045` on light input backgrounds, crisp `<select> option` popup rendering (`#ffffff` background with `#0f172a` text), and Chrome autofill text protection.
-- Fixed table cell text contrast in `MasterDataManagement.jsx` (`Classifications`, `Items`, and `Locations` tabs), `EmployeeDashboard.jsx`, `EmployeeTasksPage.jsx`, and `InternTasksPage.jsx` by replacing `text-white` on names/titles with `text-[#556070]`.
+- Fixed text contrast on metric cards (`TOTAL`, `NOT STARTED`, `IN PROGRESS`, `COMPLETED`), search labels (`SEARCH`), status/project filters, and table cells in `EmployeeTasksPage.jsx`, `InternTasksPage.jsx`, `EmployeeDashboard.jsx`, and `MasterDataManagement.jsx` by converting white text to **crisp dark slate (`text-[#556070] font-bold`)** and dark numbers (`text-[#002045]`).
 - Implemented real-time auth user profile sync (`useEffect` in `App.jsx` calling `/api/auth/me` and `updateCurrentUser()`) so that whenever Super Admin changes a user's role (e.g. from `EMPLOYEE` to `INTERN`), the frontend automatically updates `localStorage` and routes the user to the correct portal (`/intern`) on reload without manual logout.
 - Expanded backend permission rules in `server/inventoryRoutes.js` to allow read-only GET access for `/inventory`, `/items`, `/classifications`, `/stock-locations`, `/vendors`, `/vendor-sku-mappings`, and `/bridge/*` endpoints for all authenticated roles (`EMPLOYEE`, `INTERN`, etc.), eliminating all 403 restriction toasts across all Item Master tabs.
 - Fixed layout resolution bug in `client/src/services/usePortalLayout.js` to return `EmployeeLayout` or `InternLayout` when accessed by Junior Engineer or Intern portals, ensuring the correct sidebar navigation menu renders.
@@ -21,7 +21,7 @@ DONE
 - Configured `MasterDataManagement.jsx` to support `isViewOnly={true}` mode, hiding edit/add/bulk upload controls for non-admin roles while retaining search & filter capabilities.
 - Added **Item Master** navigation links in `EmployeeLayout.jsx` and `InternLayout.jsx` pointing to `/junior-engineer/inventory/items` and `/intern/inventory/items`.
 - Completely removed `IT Team` card section, filter option, and department options from Add/Edit member modals in `SuperUserTeamsPage.jsx`.
-- Verified clean build execution (`npm --prefix client run build` passed in 3.21s with 0 errors).
+- Verified clean build execution (`npm --prefix client run build` passed in 3.06s with 0 errors).
 
 ## Decisions Made
 - Use global CSS rules in `index.css` for `<input>`, `<textarea>`, `<select>`, and `<td>` elements to guarantee high-contrast text visibility across light and dark theme wrappers.

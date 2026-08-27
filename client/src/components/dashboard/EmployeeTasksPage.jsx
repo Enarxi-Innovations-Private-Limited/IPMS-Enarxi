@@ -309,21 +309,22 @@ export default function EmployeeTasksPage() {
                     )}
 
                     {/* Search & Filters */}
-                    <div className="bg-surface-dark border border-border-dark rounded-xl p-4 mb-6">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 shadow-sm">
                         <div className="flex flex-col md:flex-row gap-4">
                             {/* Search Input */}
                             <div className="flex-1">
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#556070] mb-2">
                                     Search
                                 </label>
                                 <div className="relative">
-                                    <span className="absolute inset-y-0 left-3 flex items-center text-text-secondary">
+                                    <span className="absolute inset-y-0 left-3 flex items-center text-[#556070]">
                                         <span className="material-symbols-outlined text-xl">search</span>
                                     </span>
                                     <input
                                         type="text"
                                         placeholder="Search tasks..."
-                                        className="w-full pl-10 pr-4 py-2 bg-background-dark border border-border-dark rounded-lg text-white placeholder-text-secondary/50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        className="w-full pl-10 pr-4 py-2 bg-[#ECF1FF] border border-slate-300 rounded-lg text-[#002045] placeholder-[#556070]/60 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                        style={{ color: '#002045', caretColor: '#002045', WebkitTextFillColor: '#002045' }}
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
                                     />
@@ -331,27 +332,30 @@ export default function EmployeeTasksPage() {
                             </div>
                             {/* Status Filter */}
                             <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#556070] mb-2">
                                     Status
                                 </label>
                                 <select
-                                    className="bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    className="bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2 text-[#002045] text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    style={{ color: '#002045' }}
                                     value={statusFilter}
                                     onChange={(e) => setStatusFilter(e.target.value)}
                                 >
                                     <option value="ALL">All Status</option>
                                     <option value="NOT_STARTED">Not Started</option>
                                     <option value="IN_PROGRESS">In Progress</option>
+                                    <option value="WAITING_APPROVAL">Waiting Approval</option>
                                     <option value="COMPLETED">Completed</option>
                                 </select>
                             </div>
                             {/* Project Filter */}
                             <div>
-                                <label className="block text-xs font-medium uppercase tracking-wider text-text-secondary mb-2">
+                                <label className="block text-xs font-bold uppercase tracking-wider text-[#556070] mb-2">
                                     Project
                                 </label>
                                 <select
-                                    className="bg-background-dark border border-border-dark rounded-lg px-4 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    className="bg-[#ECF1FF] border border-slate-300 rounded-lg px-4 py-2 text-[#002045] text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
+                                    style={{ color: '#002045' }}
                                     value={projectFilter}
                                     onChange={(e) => setProjectFilter(e.target.value)}
                                 >
