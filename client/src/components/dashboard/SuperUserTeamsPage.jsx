@@ -294,8 +294,7 @@ export default function SuperUserTeamsPage() {
     // Separate team members by department (managers included in their respective teams)
     const softwareTeam = filteredMembers.filter((m) => m.department === 'SOFTWARE');
     const hardwareTeam = filteredMembers.filter((m) => m.department === 'HARDWARE');
-    const itTeam = filteredMembers.filter((m) => m.department === 'IT');
-    const unassignedTeam = filteredMembers.filter((m) => !m.department || (m.department !== 'SOFTWARE' && m.department !== 'HARDWARE' && m.department !== 'IT'));
+    const unassignedTeam = filteredMembers.filter((m) => !m.department || (m.department !== 'SOFTWARE' && m.department !== 'HARDWARE'));
 
     const formatTimeAgo = (timestamp) => {
         if (!timestamp) return 'Unknown';
@@ -483,7 +482,6 @@ export default function SuperUserTeamsPage() {
                                 <option value="ALL">All Departments</option>
                                 <option value="SOFTWARE">Software</option>
                                 <option value="HARDWARE">Hardware</option>
-                                <option value="IT">IT & Infrastructure</option>
                             </select>
                             <select
                                 className="px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer"
@@ -518,7 +516,6 @@ export default function SuperUserTeamsPage() {
                                 <>
                                     {renderTeamSection('Software Team', softwareTeam, 'code', 'text-blue-400')}
                                     {renderTeamSection('Hardware Team', hardwareTeam, 'memory', 'text-amber-400')}
-                                    {renderTeamSection('IT Team', itTeam, 'terminal', 'text-emerald-400')}
                                     {unassignedTeam.length > 0 && renderTeamSection('Unassigned / No Department', unassignedTeam, 'help_outline', 'text-gray-400')}
                                 </>
                             )}
@@ -614,7 +611,6 @@ export default function SuperUserTeamsPage() {
                                     <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={createForm.department} onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}>
                                         <option value="SOFTWARE">Software</option>
                                         <option value="HARDWARE">Hardware</option>
-                                        <option value="IT">IT & Infrastructure</option>
                                     </select>
                                 </div>
                             </div>
@@ -675,7 +671,6 @@ export default function SuperUserTeamsPage() {
                                     <select className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-[#556070] focus:ring-2 focus:ring-primary focus:border-transparent outline-none cursor-pointer" value={editForm.department} onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}>
                                         <option value="SOFTWARE">Software</option>
                                         <option value="HARDWARE">Hardware</option>
-                                        <option value="IT">IT & Infrastructure</option>
                                     </select>
                                 </div>
                             </div>
