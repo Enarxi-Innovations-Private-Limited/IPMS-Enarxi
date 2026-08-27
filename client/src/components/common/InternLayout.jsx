@@ -60,6 +60,7 @@ export default function InternLayout({ children, currentPage = 'dashboard' }) {
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/intern' },
     { id: 'projects', label: 'My Projects', icon: 'folder', path: '/intern/projects' },
     { id: 'tasks', label: 'My Tasks', icon: 'task_alt', path: '/intern/tasks' },
+    { id: 'purchase-items', label: 'Item Master', icon: 'inventory_2', path: '/intern/inventory/items' },
   ];
 
   return (

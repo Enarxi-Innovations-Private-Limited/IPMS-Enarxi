@@ -59,6 +59,7 @@ export default function EmployeeLayout({ children, currentPage = 'dashboard' }) 
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard', path: '/junior-engineer' },
     { id: 'projects', label: 'My Projects', icon: 'folder', path: '/junior-engineer/projects' },
     { id: 'tasks', label: 'My Tasks', icon: 'task_alt', path: '/junior-engineer/tasks' },
+    { id: 'purchase-items', label: 'Item Master', icon: 'inventory_2', path: '/junior-engineer/inventory/items' },
   ];
 
   return (

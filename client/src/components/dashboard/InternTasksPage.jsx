@@ -450,7 +450,7 @@ export default function InternTasksPage() {
                                                         >
                                                             <option value="NOT_STARTED">Not Started</option>
                                                             <option value="IN_PROGRESS">In Progress</option>
-                                                            <option value="WAITING_APPROVAL">📤 Ask for Approval</option>
+                                                            <option value="WAITING_APPROVAL">📤 Submit for Manager Approval</option>
                                                         </select>
                                                     )}
                                                 </td>

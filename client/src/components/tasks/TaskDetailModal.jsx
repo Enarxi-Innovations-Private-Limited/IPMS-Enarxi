@@ -185,21 +185,22 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
         setShowConfirmComplete(false);
         try {
             setLoading(true);
-            const res = await api.put(`/tasks/${taskId}`, { status: 'COMPLETED' });
+            const targetStatus = isManager ? 'COMPLETED' : 'WAITING_APPROVAL';
+            const res = await api.put(`/tasks/${taskId}/status`, { status: targetStatus });
 
-            const updatedTask = res.data;
+            const updatedTask = res.data?.task || { ...activeTask, status: targetStatus };
             setCurrentTask(updatedTask);
             if (onUpdate) onUpdate(updatedTask);
         } catch (err) {
             console.error(err);
-            setError(err.response?.data?.message || 'Failed to complete task');
+            setError(err.response?.data?.message || 'Failed to submit task for approval');
         } finally {
             setLoading(false);
         }
     };
 
     const isAssignee = currentUser && (currentUser.id === (activeTask.assigneeId?._id || activeTask.assigneeId));
-    const showCompleteButton = !activeTask.isFullProductStage && activeTask.status !== 'COMPLETED' && (isManager || isAssignee);
+    const showCompleteButton = !activeTask.isFullProductStage && activeTask.status !== 'COMPLETED' && activeTask.status !== 'WAITING_APPROVAL' && (isManager || isAssignee);
 
     return (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -565,10 +566,10 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                                 type="button"
                                 onClick={handleCompleteTask}
                                 disabled={loading}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-white font-bold transition-all shadow-md disabled:opacity-50 ${isManager ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}
                             >
-                                <span className="material-symbols-outlined text-lg">check_circle</span>
-                                Mark as Completed
+                                <span className="material-symbols-outlined text-lg">{isManager ? 'check_circle' : 'approval'}</span>
+                                {isManager ? 'Mark as Completed' : 'Submit for Manager Approval'}
                             </button>
                         )}
                         <button
@@ -586,12 +587,16 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirmComplete(false)}></div>
                     <div className="relative bg-surface-dark border border-border-dark rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4">
                         <div className="flex items-center gap-4 mb-6">
-                            <div className="size-12 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center shrink-0">
-                                <span className="material-symbols-outlined text-3xl">check_circle</span>
+                            <div className={`size-12 rounded-full flex items-center justify-center shrink-0 ${isManager ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-400'}`}>
+                                <span className="material-symbols-outlined text-3xl">{isManager ? 'check_circle' : 'hourglass_top'}</span>
                             </div>
                             <div>
-                                <h3 className="text-xl font-bold text-white">Complete Task?</h3>
-                                <p className="text-text-secondary mt-1 text-sm">Are you sure you want to mark this task as completed?</p>
+                                <h3 className="text-xl font-bold text-white">{isManager ? 'Complete Task?' : 'Submit for Manager Approval?'}</h3>
+                                <p className="text-text-secondary mt-1 text-sm">
+                                    {isManager
+                                        ? 'Are you sure you want to mark this task as completed?'
+                                        : 'Your work update will be submitted to your project manager for review and approval.'}
+                                </p>
                             </div>
                         </div>
                         <div className="flex gap-3 justify-end">
@@ -603,9 +608,9 @@ export default function TaskDetailModal({ task, onClose, onUpdate, users = [], c
                             </button>
                             <button
                                 onClick={confirmCompleteTask}
-                                className="px-5 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg shadow-green-900/40 transition-all text-sm"
+                                className={`px-5 py-2 rounded-xl text-white font-bold shadow-lg transition-all text-sm ${isManager ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-600 hover:bg-amber-700'}`}
                             >
-                                Confirm
+                                {isManager ? 'Confirm Complete' : 'Submit Approval'}
                             </button>
                         </div>
                     </div>

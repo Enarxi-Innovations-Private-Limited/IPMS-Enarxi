@@ -313,8 +313,8 @@ function BulkItemUploadModal({ isOpen, onClose, classifications, vendors, onUplo
     );
 }
 
-export default function MasterDataManagement() {
-    const Layout = usePortalLayout();
+export default function MasterDataManagement({ isViewOnly = false, layout: customLayout }) {
+    const Layout = usePortalLayout(customLayout);
     const { error: notifyError, success: notifySuccess } = useNotifier();
     const [activeTab, setActiveTab] = useState('items');
     const [items, setItems] = useState([]);
@@ -651,26 +651,39 @@ export default function MasterDataManagement() {
                 <div className="max-w-7xl mx-auto w-full">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-3xl font-bold text-white tracking-tight">Master Data Management</h1>
-                            <p className="text-text-secondary text-lg">Define components, warehouses, and vendor SKU mappings.</p>
+                            <h1 className="text-3xl font-bold text-white tracking-tight">
+                                {isViewOnly ? 'Item Master Registry' : 'Master Data Management'}
+                            </h1>
+                            <p className="text-text-secondary text-lg">
+                                {isViewOnly ? 'Browse components, categories, specifications, and vendor SKU mappings.' : 'Define components, warehouses, and vendor SKU mappings.'}
+                            </p>
                         </div>
-                        <div className="flex flex-wrap gap-3">
-                            {activeTab === 'items' && (
-                                <button
-                                    onClick={() => setShowBulkModal(true)}
-                                    className="bg-white border border-slate-300 text-[#16325c] px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
-                                >
-                                    <span className="material-symbols-outlined">upload_file</span>
-                                    Bulk Upload
-                                </button>
+                        <div className="flex flex-wrap gap-3 items-center">
+                            {isViewOnly ? (
+                                <span className="px-4 py-2 rounded-xl bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold flex items-center gap-2 text-sm shadow-sm">
+                                    <span className="material-symbols-outlined text-base">visibility</span>
+                                    Read-Only View
+                                </span>
+                            ) : (
+                                <>
+                                    {activeTab === 'items' && (
+                                        <button
+                                            onClick={() => setShowBulkModal(true)}
+                                            className="bg-white border border-slate-300 text-[#16325c] px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-sm"
+                                        >
+                                            <span className="material-symbols-outlined">upload_file</span>
+                                            Bulk Upload
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowModal(true)}
+                                        className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
+                                    >
+                                        <span className="material-symbols-outlined">add</span>
+                                        Add New {activeTab.slice(0, -1)}
+                                    </button>
+                                </>
                             )}
-                            <button
-                                onClick={() => setShowModal(true)}
-                                className="bg-primary text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-primary/20"
-                            >
-                                <span className="material-symbols-outlined">add</span>
-                                Add New {activeTab.slice(0, -1)}
-                            </button>
                         </div>
                     </div>
 
@@ -741,7 +754,7 @@ export default function MasterDataManagement() {
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">UOM</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Vendor SKUs</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Status</th>
-                                                <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Action</th>
+                                                {!isViewOnly && <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Action</th>}
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100 text-sm">
@@ -760,29 +773,31 @@ export default function MasterDataManagement() {
                                                             {item.isActive ? 'Active' : 'Inactive'}
                                                         </span>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex gap-2">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => openEditModal(item)}
-                                                                className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
-                                                            >
-                                                                Edit
-                                                            </button>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => initiateDeleteItem(item)}
-                                                                className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-xs font-bold"
-                                                            >
-                                                                Delete
-                                                            </button>
-                                                        </div>
-                                                    </td>
+                                                    {!isViewOnly && (
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex gap-2">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openEditModal(item)}
+                                                                    className="px-3 py-1.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-colors text-xs font-bold"
+                                                                >
+                                                                    Edit
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => initiateDeleteItem(item)}
+                                                                    className="px-3 py-1.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors text-xs font-bold"
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    )}
                                                 </tr>
                                             ))}
                                             {filteredItems.length === 0 && (
                                                 <tr>
-                                                    <td colSpan="7" className="px-6 py-12 text-center text-text-secondary italic">
+                                                    <td colSpan={isViewOnly ? "6" : "7"} className="px-6 py-12 text-center text-text-secondary italic">
                                                         No items match the filters.
                                                     </td>
                                                 </tr>

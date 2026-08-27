@@ -303,6 +303,15 @@ function App() {
       />
 
       <Route
+        path="/junior-engineer/inventory/items"
+        element={
+          <ProtectedRoute allowedRoles={['EMPLOYEE']}>
+            <MasterDataManagement isViewOnly={true} layout="employee" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/intern"
         element={
           <ProtectedRoute allowedRoles={['INTERN']}>
@@ -323,6 +332,14 @@ function App() {
         element={
           <ProtectedRoute allowedRoles={['INTERN']}>
             <InternTasksPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/intern/inventory/items"
+        element={
+          <ProtectedRoute allowedRoles={['INTERN']}>
+            <MasterDataManagement isViewOnly={true} layout="intern" />
           </ProtectedRoute>
         }
       />
