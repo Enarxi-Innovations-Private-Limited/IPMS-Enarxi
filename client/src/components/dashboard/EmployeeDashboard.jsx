@@ -640,16 +640,16 @@ export default function EmployeeDashboard() {
                 </div>
 
                 {/* Attachments Section */}
-                <div className="border border-border-dark rounded-xl bg-background-dark/20 overflow-hidden">
+                <div className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden">
                   <div
-                    className="px-4 py-3 bg-surface-dark/50 border-b border-border-dark flex items-center justify-between cursor-pointer"
+                    className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between cursor-pointer"
                     onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
                   >
-                    <h3 className="text-sm font-bold uppercase tracking-wider text-text-secondary flex items-center gap-2">
-                      <span className="material-symbols-outlined text-base">attach_file</span>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-[#002045] flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base text-blue-600">attach_file</span>
                       Attachments ({selectedProject.attachments?.length || 0})
                     </h3>
-                    <span className={`material-symbols-outlined text-text-secondary transition-transform ${isAttachmentsExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                    <span className={`material-symbols-outlined text-[#556070] transition-transform ${isAttachmentsExpanded ? 'rotate-180' : ''}`}>expand_more</span>
                   </div>
 
                   {isAttachmentsExpanded && (
@@ -657,44 +657,44 @@ export default function EmployeeDashboard() {
                       {/* List */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
                         {selectedProject.attachments?.map((file, idx) => (
-                          <div key={idx} className="flex items-center gap-3 p-3 bg-black/20 border border-border-dark rounded-lg hover:bg-black/30 transition-colors group">
-                            <div className="size-10 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+                          <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100/80 transition-colors group">
+                            <div className="size-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
                               <span className="material-symbols-outlined text-xl">description</span>
                             </div>
-                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-primary transition-colors">
-                              <p className="text-white text-sm font-medium truncate">{file.name}</p>
-                              <p className="text-text-secondary text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
+                            <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="min-w-0 flex-1 hover:text-blue-600 transition-colors">
+                              <p className="text-[#002045] text-sm font-medium truncate">{file.name}</p>
+                              <p className="text-[#556070] text-xs">{new Date(file.uploadedAt).toLocaleDateString()}</p>
                             </a>
                             <div className="flex items-center gap-1">
-                              <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-text-secondary hover:text-white p-2" title="Preview">
+                              <a href={`/api${file.url}`} target="_blank" rel="noreferrer" className="text-[#556070] hover:text-[#002045] p-2" title="Preview">
                                 <span className="material-symbols-outlined">visibility</span>
                               </a>
-                              <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-primary hover:text-white p-2" title="Download">
+                              <a href={`/api${file.url}`} download target="_blank" rel="noreferrer" className="text-blue-600 hover:text-blue-700 p-2" title="Download">
                                 <span className="material-symbols-outlined">download</span>
                               </a>
                             </div>
                           </div>
                         ))}
                         {(!selectedProject.attachments || selectedProject.attachments.length === 0) && (
-                          <div className="col-span-full py-4 text-center text-text-secondary text-sm">
+                          <div className="col-span-full py-4 text-center text-[#556070] text-sm">
                             No attachments yet.
                           </div>
                         )}
                       </div>
 
                       {/* Upload Form */}
-                      <div className="border-t border-border-dark pt-4">
-                        <h4 className="text-white text-sm font-medium mb-3">Upload New Document</h4>
+                      <div className="border-t border-slate-200 pt-4">
+                        <h4 className="text-[#002045] text-sm font-semibold mb-3">Upload New Document</h4>
                         <div className="flex gap-2 mb-3">
                           <input
                             type="text"
                             placeholder="Document Name (e.g., Project Plan v1)"
-                            className="flex-1 bg-background-dark border border-border-dark rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                            className="flex-1 bg-white border border-slate-300 rounded-lg px-3 py-2 text-[#002045] placeholder-[#556070] text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                             value={attachmentName}
                             onChange={(e) => setAttachmentName(e.target.value)}
                           />
                         </div>
-                        <label className={`block w-full border-2 border-dashed border-border-dark rounded-xl p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                        <label className={`block w-full border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50/50 transition-all group ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
                           <input
                             type="file"
                             multiple
@@ -703,8 +703,8 @@ export default function EmployeeDashboard() {
                             disabled={isUploading}
                           />
                           <div className="flex flex-col items-center gap-1">
-                            <span className="material-symbols-outlined text-text-secondary group-hover:text-primary text-2xl">upload_file</span>
-                            <p className="text-sm font-medium text-white">Click to select files</p>
+                            <span className="material-symbols-outlined text-[#556070] group-hover:text-blue-600 text-2xl">upload_file</span>
+                            <p className="text-sm font-medium text-[#002045]">Click to select files</p>
                           </div>
                         </label>
                       </div>
