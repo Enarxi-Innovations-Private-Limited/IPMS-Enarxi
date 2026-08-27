@@ -391,3 +391,11 @@ input[type="number"] {
   caret-color: #38bdf8 !important;
   -webkit-text-fill-color: #f8fafc !important;
 }
+
+/* Universal Table Cell Contrast Guard across Light Theme */
+.light-theme td.text-white,
+.light-theme td .text-white,
+.light-theme th.text-white,
+.light-theme tr.text-white {
+  color: #556070 !important;
+}

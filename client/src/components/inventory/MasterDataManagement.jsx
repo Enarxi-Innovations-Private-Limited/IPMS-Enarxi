@@ -702,14 +702,14 @@ export default function MasterDataManagement() {
                                             placeholder="Search by name, code, class, package, UOM, SKU..."
                                             value={itemSearch}
                                             onChange={(e) => setItemSearch(e.target.value)}
-                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-[#002045] placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
                                         />
                                     </div>
                                     <div className="w-full sm:w-48">
                                         <select
                                             value={itemClassFilter}
                                             onChange={(e) => setItemClassFilter(e.target.value)}
-                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 px-3 text-white outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-xl py-2 px-3 text-[#002045] outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
                                         >
                                             <option value="">All Classifications</option>
                                             {classifications.map((cls) => (
@@ -723,7 +723,7 @@ export default function MasterDataManagement() {
                                         <select
                                             value={itemStatusFilter}
                                             onChange={(e) => setItemStatusFilter(e.target.value)}
-                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 px-3 text-white outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-xl py-2 px-3 text-[#002045] outline-none focus:ring-1 focus:ring-primary focus:border-transparent transition-all text-sm"
                                         >
                                             <option value="all">All Status</option>
                                             <option value="active">Active</option>
@@ -733,7 +733,7 @@ export default function MasterDataManagement() {
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-background-dark/50">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
                                             <tr>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Item</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Class</th>
@@ -744,11 +744,11 @@ export default function MasterDataManagement() {
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Action</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-border-dark text-sm">
+                                        <tbody className="divide-y divide-slate-100 text-sm">
                                             {filteredItems.map((item) => (
                                                 <tr key={item._id || item.id} className="hover:bg-primary/5">
                                                     <td className="px-6 py-4">
-                                                        <div className="text-white font-medium">{item.name}</div>
+                                                        <div className="text-[#556070] font-medium">{item.name}</div>
                                                         <div className="text-primary font-mono text-xs">{item.itemCode}</div>
                                                     </td>
                                                     <td className="px-6 py-4 text-text-secondary">{getItemClassificationName(item)}</td>
@@ -756,7 +756,7 @@ export default function MasterDataManagement() {
                                                     <td className="px-6 py-4 text-text-secondary">{item.uom}</td>
                                                     <td className="px-6 py-4 text-text-secondary max-w-sm">{formatSkuMappings(item)}</td>
                                                     <td className="px-6 py-4 text-text-secondary">
-                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${item.isActive ? 'bg-emerald-500/20 text-emerald-600' : 'bg-red-500/20 text-red-500'}`}>
                                                             {item.isActive ? 'Active' : 'Inactive'}
                                                         </span>
                                                     </td>
@@ -794,7 +794,7 @@ export default function MasterDataManagement() {
                         ) : activeTab === 'classifications' ? (
                             <div>
                                 {/* Classifications Filter */}
-                                <div className="p-4 border-b border-border-dark bg-background-dark/30 flex items-center gap-4">
+                                <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4">
                                     <div className="relative flex-1 max-w-md">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
                                         <input
@@ -802,13 +802,13 @@ export default function MasterDataManagement() {
                                             placeholder="Search by name or prefix..."
                                             value={classSearch}
                                             onChange={(e) => setClassSearch(e.target.value)}
-                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-[#002045] placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
                                         />
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-background-dark/50">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
                                             <tr>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Prefix</th>
@@ -816,14 +816,14 @@ export default function MasterDataManagement() {
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Serial Tracking</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-border-dark text-sm">
+                                        <tbody className="divide-y divide-slate-100 text-sm">
                                             {filteredClassifications.map((cls) => (
                                                 <tr key={cls._id} className="hover:bg-primary/5">
-                                                    <td className="px-6 py-4 text-white font-medium">{cls.name}</td>
+                                                    <td className="px-6 py-4 text-[#556070] font-medium">{cls.name}</td>
                                                     <td className="px-6 py-4 text-primary font-bold">{cls.prefix}</td>
                                                     <td className="px-6 py-4 text-text-secondary">{cls.nextSequenceNumber}</td>
                                                     <td className="px-6 py-4 text-text-secondary">
-                                                        <span className={`material-symbols-outlined text-sm ${cls.tracksSerial ? 'text-emerald-400' : 'text-slate-600'}`}>
+                                                        <span className={`material-symbols-outlined text-sm ${cls.tracksSerial ? 'text-emerald-500' : 'text-slate-400'}`}>
                                                             {cls.tracksSerial ? 'check_circle' : 'cancel'}
                                                         </span>
                                                     </td>
@@ -843,7 +843,7 @@ export default function MasterDataManagement() {
                         ) : (
                             <div>
                                 {/* Locations Filter */}
-                                <div className="p-4 border-b border-border-dark bg-background-dark/30 flex items-center gap-4">
+                                <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center gap-4">
                                     <div className="relative flex-1 max-w-md">
                                         <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary text-sm opacity-50">search</span>
                                         <input
@@ -851,13 +851,13 @@ export default function MasterDataManagement() {
                                             placeholder="Search by name, code or label..."
                                             value={locationSearch}
                                             onChange={(e) => setLocationSearch(e.target.value)}
-                                            className="w-full bg-background-dark border border-border-dark rounded-xl py-2 pl-10 pr-4 text-white placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
+                                            className="w-full bg-[#ECF1FF] border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-[#002045] placeholder-text-secondary/50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none transition-all text-sm"
                                         />
                                     </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left">
-                                        <thead className="bg-background-dark/50">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
                                             <tr>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Location Code</th>
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Name</th>
@@ -865,11 +865,11 @@ export default function MasterDataManagement() {
                                                 <th className="px-6 py-4 text-xs font-bold uppercase text-text-secondary">Is Default</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-border-dark text-sm">
+                                        <tbody className="divide-y divide-slate-100 text-sm">
                                             {filteredLocations.map((loc) => (
                                                 <tr key={loc._id} className="hover:bg-primary/5">
                                                     <td className="px-6 py-4 text-primary font-bold">{loc.locationCode}</td>
-                                                    <td className="px-6 py-4 text-white font-medium">{loc.name}</td>
+                                                    <td className="px-6 py-4 text-[#556070] font-medium">{loc.name}</td>
                                                     <td className="px-6 py-4 text-text-secondary">{loc.label || 'N/A'}</td>
                                                     <td className="px-6 py-4 text-text-secondary">
                                                         {loc.isDefault && <span className="px-2 py-0.5 bg-primary/20 text-primary text-[10px] font-bold rounded-full">Primary</span>}
