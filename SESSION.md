@@ -1,33 +1,29 @@
 # Session Log
 
 ## Last Updated
-2026-08-27T14:18:00.000+05:30
+2026-08-27T14:29:30.000+05:30
 
 ## Goal
-Fix global input field text visibility & contrast bugs across the entire project/inventory, add missing navigation, replicate hardware/employee team approval/rejection workflows in the Intern Portal, remove IT Team section, fix invisible white table cell text in light theme views, enforce task completion approval routing, integrate Read-Only Item Master into Employee and Intern portals, and implement real-time role sync for user accounts.
+Fix invisible task titles on Kanban cards, washed-out column headers, washed-out stats cards, and color contrast issues across the Intern portal pages (`InternProjectsPage.jsx`, `InternDashboard.jsx`, `InternTasksPage.jsx`) and clean up Kanban card styles in `EmployeeProjectsPage.jsx` and global CSS in `index.css`.
 
 ## Status
 DONE
 
 ## Done This Session
-- Diagnosed root causes of invisible input & table text: light-theme specificity overrides in `index.css` forcing dark text on dark input backgrounds (`bg-background-dark`, `bg-surface-dark`), missing native `<select> option` popup styling, and hardcoded `text-white` on `<td>`/`<div>` elements inside light-theme table containers.
-- Updated `index.css` to enforce universal input visibility rules, bright text `#f8fafc` on dark input backgrounds, dark text `#002045` on light input backgrounds, crisp `<select> option` popup rendering (`#ffffff` background with `#0f172a` text), and Chrome autofill text protection.
-- Fixed text contrast on metric cards (`TOTAL`, `NOT STARTED`, `IN PROGRESS`, `COMPLETED`), search labels (`SEARCH`), status/project filters, and table cells in `EmployeeTasksPage.jsx`, `InternTasksPage.jsx`, `EmployeeDashboard.jsx`, and `MasterDataManagement.jsx` by converting white text to **crisp dark slate (`text-[#556070] font-bold`)** and dark numbers (`text-[#002045]`).
-- Implemented real-time auth user profile sync (`useEffect` in `App.jsx` calling `/api/auth/me` and `updateCurrentUser()`) so that whenever Super Admin changes a user's role (e.g. from `EMPLOYEE` to `INTERN`), the frontend automatically updates `localStorage` and routes the user to the correct portal (`/intern`) on reload without manual logout.
-- Expanded backend permission rules in `server/inventoryRoutes.js` to allow read-only GET access for `/inventory`, `/items`, `/classifications`, `/stock-locations`, `/vendors`, `/vendor-sku-mappings`, and `/bridge/*` endpoints for all authenticated roles (`EMPLOYEE`, `INTERN`, etc.), eliminating all 403 restriction toasts across all Item Master tabs.
-- Fixed layout resolution bug in `client/src/services/usePortalLayout.js` to return `EmployeeLayout` or `InternLayout` when accessed by Junior Engineer or Intern portals, ensuring the correct sidebar navigation menu renders.
-- Added universal `Table Cell Contrast Guard` in `index.css` forcing `.light-theme td.text-white` to render in crisp `#556070` dark slate.
-- Enforced strict task completion approval routing in `InternTasksPage.jsx`, `InternDashboard.jsx`, `EmployeeTasksPage.jsx`, and `TaskDetailModal.jsx` (routing status to `WAITING_APPROVAL` with clear UI badges and confirmation modals).
-- Configured `MasterDataManagement.jsx` to support `isViewOnly={true}` mode, hiding edit/add/bulk upload controls for non-admin roles while retaining search & filter capabilities.
-- Added **Item Master** navigation links in `EmployeeLayout.jsx` and `InternLayout.jsx` pointing to `/junior-engineer/inventory/items` and `/intern/inventory/items`.
-- Completely removed `IT Team` card section, filter option, and department options from Add/Edit member modals in `SuperUserTeamsPage.jsx`.
-- Verified clean build execution (`npm --prefix client run build` passed in 3.06s with 0 errors).
+- Diagnosed root causes of invisible task titles: `KanbanTaskCard` used `text-white` on `bg-white` cards with `dark:bg-surface-dark`, which triggered CSS selectors forcing task title text to `#ffffff` (white text on white card).
+- Updated `KanbanTaskCard` in `InternProjectsPage.jsx` and `EmployeeProjectsPage.jsx` to render task titles in crisp `#002045` bold text and removed conflicting `dark:bg-surface-dark` classes.
+- Updated `KanbanColumn` in `InternProjectsPage.jsx` and `EmployeeProjectsPage.jsx` to use clean light-theme column cards (`bg-slate-100/70 border border-slate-200`), `#002045` bold column titles ("New", "In Progress", "Ready for Review", "Approved / Closed"), and `#002045` bold task count badges.
+- Updated "My Tasks Board" and "Project Board" section headers to `bg-slate-50 border-b border-slate-200` with `#002045` bold text.
+- Converted dark stats cards and progress containers in `InternProjectsPage.jsx` and `EmployeeProjectsPage.jsx` to `bg-white border border-slate-200 shadow-sm` with `#002045` numbers and `#556070` labels.
+- Updated breadcrumbs, main headers, sub-descriptions, project cards, and empty state containers across `InternProjectsPage.jsx`, `InternDashboard.jsx`, and `InternTasksPage.jsx` to crisp `#002045` and `#556070` typography.
+- Added explicit light-theme CSS safeguards in `index.css` forcing `.light-theme [class*="bg-white"] h4` and `.light-theme [class*="bg-slate-100"] h3` to render in `#002045`.
+- Verified production build execution (`npm --prefix client run build` passed in 3.09s with 0 errors).
 
 ## Decisions Made
-- Use global CSS rules in `index.css` for `<input>`, `<textarea>`, `<select>`, and `<td>` elements to guarantee high-contrast text visibility across light and dark theme wrappers.
+- Replace dark surface container classes (`bg-surface-dark`, `bg-background-dark/30`) on light portal pages with clean light-theme surfaces (`bg-white`, `bg-slate-50`, `bg-slate-100/70`) and high-contrast `#002045` slate typography.
 
 ## Blockers
 - None.
 
 ## Next Step
-Deploy updated client build to production or stage server.
+Deploy updated client build to staging/production server (`tracker.enarxi.com`).

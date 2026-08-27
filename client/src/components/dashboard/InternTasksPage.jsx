@@ -307,38 +307,38 @@ export default function InternTasksPage() {
                         </div>
                     ) : (
                         /* Tasks List */
-                        <div className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                                <h2 className="text-lg font-bold text-[#002045] flex items-center gap-2">
                                     <span className="material-symbols-outlined text-primary">task_alt</span>
                                     Tasks ({filteredTasks.length})
                                 </h2>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full">
-                                    <thead className="bg-background-dark/50">
+                                    <thead className="bg-slate-50 border-b border-slate-200">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Title
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Project
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Status
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Update Status
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Work Updates
                                             </th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
+                                            <th className="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider text-[#556070]">
                                                 Queries
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-border-dark">
+                                    <tbody className="divide-y divide-slate-200">
                                         {filteredTasks.map((t) => (
                                             <tr key={t.id} className="hover:bg-background-dark/30 transition-colors">
                                                 <td className="px-6 py-4 cursor-pointer" onClick={() => setViewTask(t)}>

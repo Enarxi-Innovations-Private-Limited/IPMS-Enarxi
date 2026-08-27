@@ -268,6 +268,14 @@ select:-webkit-autofill:focus {
   color: #ffffff !important;
 }
 
+/* Explicit Light-Theme Kanban Card & Board Typography Safeguard */
+.light-theme [class*="bg-white"] h4,
+.light-theme [class*="bg-slate-100"] h3,
+.light-theme [class*="bg-slate-50"] h2,
+.light-theme [class*="bg-slate-50"] h3 {
+  color: #002045 !important;
+}
+
 /* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar { width: 6px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }

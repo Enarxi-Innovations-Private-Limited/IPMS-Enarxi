@@ -35,13 +35,13 @@ const KanbanTaskCard = ({ task, onClick }) => {
             {...listeners}
             {...attributes}
             onClick={onClick}
-            className={`bg-white dark:bg-surface-dark p-3 rounded shadow-sm border border-border-dark ${getBorderColor(task.status)} border-l-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow mb-3`}
+            className={`bg-white border border-slate-200 shadow-sm rounded-lg p-3 ${getBorderColor(task.status)} border-l-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow mb-3`}
         >
             <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] uppercase font-bold text-text-secondary tracking-wider">TASK</span>
-                <span className="text-[10px] text-text-secondary">#{task.id.slice(-4)}</span>
+                <span className="text-[10px] uppercase font-bold text-[#556070] tracking-wider">TASK</span>
+                <span className="text-[10px] text-[#556070] font-medium">#{task.id.slice(-4)}</span>
             </div>
-            <h4 className="text-white font-medium text-sm mb-3 line-clamp-2">{task.title}</h4>
+            <h4 className="text-[#002045] font-bold text-sm mb-3 line-clamp-2">{task.title}</h4>
             <div className="flex justify-between items-center">
                 <div className="size-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-bold">
                     ME
@@ -58,10 +58,10 @@ const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
     });
 
     return (
-        <div ref={setNodeRef} className={`flex-1 min-w-[280px] bg-background-dark/30 rounded-xl p-4 border border-border-dark/50 flex flex-col ${isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}>
+        <div ref={setNodeRef} className={`flex-1 min-w-[280px] bg-slate-100/70 rounded-xl p-4 border border-slate-200 flex flex-col ${isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}>
             <div className={`border-t-4 ${color} pt-3 mb-4 flex justify-between items-center`}>
-                <h3 className="font-bold text-white text-base">{title}</h3>
-                <span className="bg-white/10 text-text-secondary text-xs px-2 py-0.5 rounded-full">{tasks.length}</span>
+                <h3 className="font-bold text-[#002045] text-base">{title}</h3>
+                <span className="bg-slate-200 text-[#002045] text-xs font-bold px-2.5 py-0.5 rounded-full">{tasks.length}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2 min-h-[100px]">
@@ -69,7 +69,7 @@ const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
                     <KanbanTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
                 ))}
                 {tasks.length === 0 && (
-                    <div className="text-center py-8 text-text-secondary text-xs italic">
+                    <div className="text-center py-8 text-[#556070] text-xs italic">
                         No tasks
                     </div>
                 )}
@@ -419,23 +419,23 @@ export default function InternProjectsPage() {
                                 <li>
                                     <button
                                         onClick={() => navigate('/intern')}
-                                        className="text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                        className="text-[#556070] hover:text-[#002045] text-sm font-medium transition-colors"
                                     >
                                         Dashboard
                                     </button>
                                 </li>
                                 <li className="flex items-center">
-                                    <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
+                                    <span className="material-symbols-outlined text-[#556070] text-base">chevron_right</span>
                                     <button
                                         onClick={() => setSelectedProject(null)}
-                                        className="ml-2 text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                        className="ml-2 text-[#556070] hover:text-[#002045] text-sm font-medium transition-colors"
                                     >
                                         My Projects
                                     </button>
                                 </li>
                                 <li className="flex items-center">
-                                    <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                    <span className="ml-2 text-white text-sm font-medium">{selectedProject.projectCode || 'No ID'}</span>
+                                    <span className="material-symbols-outlined text-[#556070] text-base">chevron_right</span>
+                                    <span className="ml-2 text-[#002045] text-sm font-bold">{selectedProject.projectCode || 'No ID'}</span>
                                 </li>
                             </ol>
                         </nav>
@@ -444,25 +444,25 @@ export default function InternProjectsPage() {
                         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                             <div>
                                 <div className="flex items-center gap-3 mb-2">
-                                    <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                                    <h1 className="text-3xl md:text-4xl font-bold text-[#002045] tracking-tight">
                                         {selectedProject.projectCode || 'No ID'}
                                     </h1>
                                     <span
-                                        className={`px-3 py-1 text-sm font-medium rounded-full ${selectedProject.status === 'ACTIVE'
-                                            ? 'bg-green-500/20 text-green-400'
-                                            : 'bg-blue-500/20 text-blue-400'
+                                        className={`px-3 py-1 text-sm font-bold rounded-full ${selectedProject.status === 'ACTIVE'
+                                            ? 'bg-green-500/20 text-green-700'
+                                            : 'bg-blue-500/20 text-blue-700'
                                             }`}
                                     >
                                         {selectedProject.status}
                                     </span>
                                 </div>
-                                <p className="text-text-secondary text-lg">
+                                <p className="text-[#556070] text-lg font-medium">
                                     {selectedProject.description || 'No description provided'}
                                 </p>
                             </div>
                             <button
                                 onClick={() => setSelectedProject(null)}
-                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-text-secondary font-semibold hover:bg-slate-100 bg-white transition-colors"
+                                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-[#556070] font-semibold hover:bg-slate-100 bg-white transition-colors shadow-sm"
                             >
                                 <span className="material-symbols-outlined text-lg">arrow_back</span>
                                 Back to Projects
@@ -471,46 +471,46 @@ export default function InternProjectsPage() {
 
                         {/* My Tasks Stats */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">My Tasks</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">My Tasks</h3>
                                     <span className="material-symbols-outlined text-primary">task_alt</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.total}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.total}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completed</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">Completed</h3>
                                     <span className="material-symbols-outlined text-green-500">check_circle</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.completed}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.completed}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">In Progress</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">In Progress</h3>
                                     <span className="material-symbols-outlined text-blue-500">pending</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.inProgress}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.inProgress}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completion</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">Completion</h3>
                                     <span className="material-symbols-outlined text-amber-500">analytics</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.completion}%</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.completion}%</p>
                             </div>
                         </div>
 
                         {/* Progress Bar */}
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl mb-8">
-                            <h3 className="text-white font-semibold mb-4">My Progress</h3>
-                            <div className="h-4 bg-background-dark rounded-full overflow-hidden">
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-8">
+                            <h3 className="text-[#002045] font-bold mb-4">My Progress</h3>
+                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-gradient-primary transition-all duration-500"
                                     style={{ width: `${stats.completion}%` }}
                                 ></div>
                             </div>
-                            <div className="flex justify-between mt-2 text-sm text-text-secondary">
+                            <div className="flex justify-between mt-2 text-sm text-[#556070] font-medium">
                                 <span>{stats.completed} of {stats.total} tasks completed</span>
                                 <span>{stats.completion}%</span>
                             </div>
@@ -518,10 +518,10 @@ export default function InternProjectsPage() {
 
                         {/* Desktop Kanban Board */}
                         <div
-                            className={`hidden md:flex bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-col ${projectTasks.length > 0 ? 'min-h-[320px] max-h-[70vh]' : 'min-h-[220px] max-h-[50vh]'}`}
+                            className={`hidden md:flex bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex-col ${projectTasks.length > 0 ? 'min-h-[320px] max-h-[70vh]' : 'min-h-[220px] max-h-[50vh]'}`}
                         >
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+                                <h2 className="text-lg font-bold text-[#002045] flex items-center gap-2">
                                     <span className="material-symbols-outlined text-primary">view_kanban</span>
                                     My Tasks Board
                                 </h2>
@@ -748,14 +748,14 @@ export default function InternProjectsPage() {
                             <li>
                                 <button
                                     onClick={() => navigate('/intern')}
-                                    className="text-text-secondary hover:text-white text-sm font-medium transition-colors"
+                                    className="text-[#556070] hover:text-[#002045] text-sm font-medium transition-colors"
                                 >
                                     Dashboard
                                 </button>
                             </li>
                             <li className="flex items-center">
-                                <span className="material-symbols-outlined text-text-secondary text-base">chevron_right</span>
-                                <span className="ml-2 text-white text-sm font-medium">My Projects</span>
+                                <span className="material-symbols-outlined text-[#556070] text-base">chevron_right</span>
+                                <span className="ml-2 text-[#002045] text-sm font-bold">My Projects</span>
                             </li>
                         </ol>
                     </nav>
@@ -763,19 +763,19 @@ export default function InternProjectsPage() {
                     {/* Header */}
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight mb-2">My Projects</h1>
-                            <p className="text-text-secondary text-lg">View your assigned projects and track progress.</p>
+                            <h1 className="text-3xl md:text-4xl font-bold text-[#002045] tracking-tight mb-2">My Projects</h1>
+                            <p className="text-[#556070] text-lg font-medium">View your assigned projects and track progress.</p>
                         </div>
                     </div>
 
                     {loading && (
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-8 text-center">
-                            <p className="text-text-secondary">Loading projects...</p>
+                        <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-8 text-center">
+                            <p className="text-[#556070]">Loading projects...</p>
                         </div>
                     )}
 
                     {error && (
-                        <div className="bg-red-500/10 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg mb-6">
+                        <div className="bg-red-500/10 border border-red-500/50 text-red-500 px-4 py-3 rounded-lg mb-6">
                             {error}
                         </div>
                     )}
@@ -788,36 +788,36 @@ export default function InternProjectsPage() {
                                     <div
                                         key={project.id}
                                         onClick={() => setSelectedProject(project)}
-                                        className="bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden hover:border-primary/50 hover:shadow-primary/10 transition-all cursor-pointer group"
+                                        className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden hover:border-primary/50 hover:shadow-md transition-all cursor-pointer group"
                                     >
                                         <div className="p-6">
                                             <div className="flex items-center justify-between mb-3">
                                                 <span
-                                                    className={`px-2 py-1 text-xs font-medium rounded-full ${project.status === 'ACTIVE'
-                                                        ? 'bg-green-500/20 text-green-400'
-                                                        : 'bg-blue-500/20 text-blue-400'
+                                                    className={`px-2.5 py-1 text-xs font-bold rounded-full ${project.status === 'ACTIVE'
+                                                        ? 'bg-green-500/20 text-green-700'
+                                                        : 'bg-blue-500/20 text-blue-700'
                                                         }`}
                                                 >
                                                     {project.status}
                                                 </span>
-                                                <span className="material-symbols-outlined text-text-secondary group-hover:text-primary transition-colors">
+                                                <span className="material-symbols-outlined text-[#556070] group-hover:text-primary transition-colors">
                                                     arrow_forward
                                                 </span>
                                             </div>
-                                            <h3 className="text-primary font-bold text-lg mb-2 group-hover:text-white transition-colors font-mono">
+                                            <h3 className="text-primary font-bold text-lg mb-2 group-hover:text-primary/80 transition-colors font-mono">
                                                 {project.projectCode || 'No ID'}
                                             </h3>
-                                            <p className="text-text-secondary text-sm line-clamp-2 mb-4">
+                                            <p className="text-[#556070] text-sm line-clamp-2 mb-4">
                                                 {project.description || 'No description'}
                                             </p>
 
                                             {/* Progress Bar */}
                                             <div className="mb-3">
-                                                <div className="flex justify-between text-xs text-text-secondary mb-1">
+                                                <div className="flex justify-between text-xs text-[#556070] font-semibold mb-1">
                                                     <span>My Progress</span>
                                                     <span>{stats.completion}%</span>
                                                 </div>
-                                                <div className="h-2 bg-background-dark rounded-full overflow-hidden">
+                                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                                                     <div
                                                         className="h-full bg-gradient-primary transition-all"
                                                         style={{ width: `${stats.completion}%` }}
@@ -826,7 +826,7 @@ export default function InternProjectsPage() {
                                             </div>
 
                                             {/* Stats */}
-                                            <div className="flex items-center gap-4 text-xs text-text-secondary">
+                                            <div className="flex items-center gap-4 text-xs text-[#556070] font-semibold">
                                                 <span className="flex items-center gap-1">
                                                     <span className="material-symbols-outlined text-sm">task_alt</span>
                                                     {stats.total} tasks
@@ -842,9 +842,9 @@ export default function InternProjectsPage() {
                             })}
 
                             {projects.length === 0 && (
-                                <div className="col-span-full bg-surface-dark border border-border-dark rounded-xl p-12 text-center">
-                                    <span className="material-symbols-outlined text-4xl text-text-secondary mb-4">folder_off</span>
-                                    <p className="text-text-secondary">No projects assigned yet.</p>
+                                <div className="col-span-full bg-white border border-slate-200 shadow-sm rounded-xl p-12 text-center">
+                                    <span className="material-symbols-outlined text-4xl text-[#556070] mb-4">folder_off</span>
+                                    <p className="text-[#556070]">No projects assigned yet.</p>
                                 </div>
                             )}
                         </div>

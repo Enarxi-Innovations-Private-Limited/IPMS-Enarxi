@@ -226,9 +226,9 @@ export default function InternDashboard() {
               </div>
 
               {/* Projects Section */}
-              <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden mb-8">
-                <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden mb-8">
+                <div className="px-6 py-4 border-b border-slate-200 bg-slate-50">
+                  <h2 className="text-lg font-bold text-[#002045] flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">folder</span>
                     My Projects
                   </h2>
@@ -240,27 +240,27 @@ export default function InternDashboard() {
                         <div
                           key={p.id}
                           onClick={() => navigate(`/intern/projects?projectId=${p.id}`)}
-                          className="bg-slate-50 border border-border-dark rounded-lg p-4 hover:bg-background-dark transition-colors cursor-pointer group"
+                          className="bg-slate-50 border border-slate-200 rounded-lg p-4 hover:bg-slate-100 transition-colors cursor-pointer group"
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-primary font-bold font-mono group-hover:text-blue-400 transition-colors">{p.projectCode || 'No ID'}</h3>
+                            <h3 className="text-primary font-bold font-mono group-hover:text-primary/80 transition-colors">{p.projectCode || 'No ID'}</h3>
                             <span
-                              className={`px-2 py-1 text-xs font-medium rounded-full ${p.status === 'ACTIVE'
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-blue-500/20 text-blue-400'
+                              className={`px-2.5 py-1 text-xs font-bold rounded-full ${p.status === 'ACTIVE'
+                                ? 'bg-green-500/20 text-green-700'
+                                : 'bg-blue-500/20 text-blue-700'
                                 }`}
                             >
                               {p.status}
                             </span>
                           </div>
                           <div className="flex items-center justify-between mt-2">
-                            <p className="text-text-secondary text-sm line-clamp-2 flex-1 mr-2">{p.description || 'No description'}</p>
+                            <p className="text-[#556070] text-sm line-clamp-2 flex-1 mr-2">{p.description || 'No description'}</p>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 navigate(`/intern/projects?projectId=${p.id}`);
                               }}
-                              className="p-1.5 rounded-lg bg-surface-dark border border-border-dark text-text-secondary hover:text-white hover:bg-background-dark transition-colors"
+                              className="p-1.5 rounded-lg bg-white border border-slate-200 text-[#556070] hover:text-[#002045] hover:bg-slate-100 transition-colors shadow-sm"
                               title="View Details"
                             >
                               <span className="material-symbols-outlined text-sm">visibility</span>
@@ -270,15 +270,15 @@ export default function InternDashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-text-secondary text-center py-8">No assigned projects yet.</p>
+                    <p className="text-[#556070] text-center py-8">No assigned projects yet.</p>
                   )}
                 </div>
               </div>
 
               {/* Tasks Table */}
-              <div className="bg-white border border-slate-200 shadow-sm rounded-xl shadow-xl overflow-hidden flex-1 flex flex-col min-h-0">
-                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-border-dark bg-gradient-surface">
-                  <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden flex-1 flex flex-col min-h-0">
+                <div className="px-4 py-3 md:px-6 md:py-4 border-b border-slate-200 bg-slate-50">
+                  <h2 className="text-lg font-bold text-[#002045] flex items-center gap-2">
                     <span className="material-symbols-outlined text-primary">task_alt</span>
                     My Tasks
                   </h2>

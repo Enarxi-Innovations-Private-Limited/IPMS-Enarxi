@@ -35,16 +35,15 @@ const KanbanTaskCard = ({ task, onClick }) => {
             {...listeners}
             {...attributes}
             onClick={onClick}
-            className={`bg-white dark:bg-surface-dark p-3 rounded shadow-sm border border-border-dark ${getBorderColor(task.status)} border-l-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow mb-3`}
+            className={`bg-white border border-slate-200 shadow-sm rounded-lg p-3 ${getBorderColor(task.status)} border-l-4 cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow mb-3`}
         >
             <div className="flex justify-between items-start mb-2">
-                <span className="text-[10px] uppercase font-bold text-text-secondary tracking-wider">TASK</span>
-                <span className="text-[10px] text-text-secondary">#{task.id.slice(-4)}</span>
+                <span className="text-[10px] uppercase font-bold text-[#556070] tracking-wider">TASK</span>
+                <span className="text-[10px] text-[#556070] font-medium">#{task.id.slice(-4)}</span>
             </div>
-            <h4 className="text-white font-medium text-sm mb-3 line-clamp-2">{task.title}</h4>
+            <h4 className="text-[#002045] font-bold text-sm mb-3 line-clamp-2">{task.title}</h4>
             <div className="flex justify-between items-center">
-                {/* Placeholder for Avatar if needed, using user initial or generic */}
-                <div className="size-6 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center text-[10px] text-white font-bold">
+                <div className="size-6 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-[10px] text-white font-bold">
                     ME
                 </div>
             </div>
@@ -59,10 +58,10 @@ const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
     });
 
     return (
-        <div ref={setNodeRef} className={`flex-1 min-w-[280px] bg-background-dark/30 rounded-xl p-4 border border-border-dark/50 flex flex-col ${isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}>
+        <div ref={setNodeRef} className={`flex-1 min-w-[280px] bg-slate-100/70 rounded-xl p-4 border border-slate-200 flex flex-col ${isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''}`}>
             <div className={`border-t-4 ${color} pt-3 mb-4 flex justify-between items-center`}>
-                <h3 className="font-bold text-white text-base">{title}</h3>
-                <span className="bg-white/10 text-text-secondary text-xs px-2 py-0.5 rounded-full">{tasks.length}</span>
+                <h3 className="font-bold text-[#002045] text-base">{title}</h3>
+                <span className="bg-slate-200 text-[#002045] text-xs font-bold px-2.5 py-0.5 rounded-full">{tasks.length}</span>
             </div>
 
             <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2 min-h-[100px]">
@@ -70,7 +69,7 @@ const KanbanColumn = ({ id, title, tasks, status, color, onTaskClick }) => {
                     <KanbanTaskCard key={task.id} task={task} onClick={() => onTaskClick(task)} />
                 ))}
                 {tasks.length === 0 && (
-                    <div className="text-center py-8 text-text-secondary text-xs italic">
+                    <div className="text-center py-8 text-[#556070] text-xs italic">
                         No tasks
                     </div>
                 )}
@@ -471,46 +470,46 @@ export default function EmployeeProjectsPage() {
 
                         {/* Progress Stats */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Total Tasks</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">Total Tasks</h3>
                                     <span className="material-symbols-outlined text-primary">task_alt</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.total}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.total}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completed</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">Completed</h3>
                                     <span className="material-symbols-outlined text-green-500">check_circle</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.completed}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.completed}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">In Progress</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">In Progress</h3>
                                     <span className="material-symbols-outlined text-blue-500">pending</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.inProgress}</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.inProgress}</p>
                             </div>
-                            <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl">
+                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-text-secondary text-sm font-medium uppercase tracking-wider">Completion</h3>
+                                    <h3 className="text-[#556070] text-xs font-bold uppercase tracking-wider">Completion</h3>
                                     <span className="material-symbols-outlined text-amber-500">analytics</span>
                                 </div>
-                                <p className="text-3xl font-bold text-white">{stats.completion}%</p>
+                                <p className="text-3xl font-bold text-[#002045]">{stats.completion}%</p>
                             </div>
                         </div>
 
                         {/* Progress Bar */}
-                        <div className="bg-surface-dark border border-border-dark rounded-xl p-6 shadow-xl mb-8">
-                            <h3 className="text-white font-semibold mb-4">Project Progress</h3>
-                            <div className="h-4 bg-background-dark rounded-full overflow-hidden">
+                        <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-8">
+                            <h3 className="text-[#002045] font-bold mb-4">Project Progress</h3>
+                            <div className="h-4 bg-slate-100 rounded-full overflow-hidden">
                                 <div
                                     className="h-full bg-gradient-primary transition-all duration-500"
                                     style={{ width: `${stats.completion}%` }}
                                 ></div>
                             </div>
-                            <div className="flex justify-between mt-2 text-sm text-text-secondary">
+                            <div className="flex justify-between mt-2 text-sm text-[#556070] font-medium">
                                 <span>{stats.completed} of {stats.total} tasks completed</span>
                                 <span>{stats.completion}%</span>
                             </div>
@@ -518,10 +517,10 @@ export default function EmployeeProjectsPage() {
 
                         {/* Desktop Kanban Board */}
                         <div
-                            className={`hidden md:flex bg-surface-dark border border-border-dark rounded-xl shadow-xl overflow-hidden flex-col ${projectTasks.length > 0 ? 'min-h-[320px] max-h-[70vh]' : 'min-h-[220px] max-h-[50vh]'}`}
+                            className={`hidden md:flex bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex-col ${projectTasks.length > 0 ? 'min-h-[320px] max-h-[70vh]' : 'min-h-[220px] max-h-[50vh]'}`}
                         >
-                            <div className="px-6 py-4 border-b border-border-dark bg-gradient-surface shrink-0">
-                                <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+                                <h2 className="text-lg font-bold text-[#002045] flex items-center gap-2">
                                     <span className="material-symbols-outlined text-primary">view_kanban</span>
                                     Project Board
                                 </h2>
