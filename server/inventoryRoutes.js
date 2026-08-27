@@ -710,10 +710,14 @@ function canUserAccessInventory(user) {
 }
 
 router.use((req, res, next) => {
-    // Read-only GET access for item master, classifications, locations, and vendors is allowed for all authenticated users
+    // Read-only GET access for item master, classifications, locations, vendors, and bridge routes is allowed for all authenticated users
     if (req.method === 'GET') {
-        const allowedReadPaths = ['/items', '/classifications', '/locations', '/vendors', '/stock-overview'];
-        if (allowedReadPaths.some(p => req.path.startsWith(p))) {
+        const allowedReadPaths = [
+            '/items', '/classifications', '/locations', '/stock-locations', 
+            '/vendors', '/vendor-sku-mappings', '/stock-overview', '/inventory',
+            '/bridge/classifications', '/bridge/stock-locations', '/bridge/vendors', '/bridge/projects'
+        ];
+        if (allowedReadPaths.some(p => req.path === p || req.path.startsWith(p + '/') || req.path.startsWith(p + '?'))) {
             return next();
         }
     }
